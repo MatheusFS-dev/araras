@@ -29,9 +29,6 @@ This is a python module that provides a set of tools for working with machine le
 - [⚙️ Installation Instructions](#️-installation-instructions)
   - [📌 Prerequisites](#-prerequisites)
   - [🪜 Steps](#-steps)
-- [🚀 Usage](#-usage)
-  - [▶️ Example Command](#️-example-command)
-  - [📤 Expected Output](#-expected-output)
 - [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
 - [🤝 Collaborators](#-collaborators)
@@ -73,25 +70,6 @@ To set up the development environment, follow these steps:
    ```
 
 2. **Import the modules as you need**
-
-  Now just import the modules you need in your code.
-
-
-## 🚀 Usage
-
-### ▶️ Example Command
-
-```bash
-python main.py --help
-```
-
-### 📤 Expected Output
-
-```text
-Usage: main.py [OPTIONS]
-Options:
-  --help  Show this message and exit.
-```
 
 ## 🤝 Contributing
 
