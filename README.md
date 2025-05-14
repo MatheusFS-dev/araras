@@ -1,4 +1,6 @@
-![header](https://capsule-render.vercel.app/api?height=190&type=waving&color=6272a4&section=header&text=ARARAS&fontColor=f8f8f2&fontSize=40)
+<div align="center">
+  <img src="images/banner.png" alt="Banner Image" />
+</div>
 
 
 <div align="center" style="margin: -10px 0; margin-top: -45px">
