@@ -1,7 +1,7 @@
 from typing import *
 from dataclasses import dataclass
-from tensorflow.keras import layers
-from araras.hyperparameters import HParams
+from tensorflow.keras import layers, initializers
+from araras.keras.hparams import HParams
 
 
 @dataclass
@@ -94,6 +94,8 @@ def build_dnn(
     max_units: int,
     min_units: int,
     units_step: int,
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
     min_dropout_rate: float = 0.0,
     max_dropout_rate: float = 0.5,
     dropout_rate_step: float = 0.1,
@@ -103,7 +105,7 @@ def build_dnn(
     regularizer_positions: Optional[List[int]] = None,
     trial_skip_connections: bool = False,
     share_activation: bool = False,
-    name_prefix: str = "dnn_const",
+    name_prefix: str = "dnn",
 ) -> layers.Layer:
     """
     Builds a fully connected deep neural network with optional features like dropout,
@@ -130,6 +132,8 @@ def build_dnn(
         max_units (int): Maximum number of units per Dense layer.
         min_units (int): Minimum number of units per Dense layer.
         units_step (int): Step size for unit range sampling.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
         min_dropout_rate (float): Minimum dropout rate.
         max_dropout_rate (float): Maximum dropout rate.
         dropout_rate_step (float): Step size for dropout rate sampling.
@@ -171,6 +175,8 @@ def build_dnn(
         x = layers.Dense(
             units=units,
             activation=activation,
+            kernel_initializer=kernel_initializer,
+            bias_initializer=bias_initializer,
             kernel_regularizer=kernel_reg,
             bias_regularizer=bias_reg,
             activity_regularizer=act_reg,

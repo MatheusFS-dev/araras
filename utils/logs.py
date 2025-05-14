@@ -4,19 +4,52 @@ including CPU, RAM, GPU, CUDA, and TensorFlow memory statistics. The logging is 
 at regular intervals and can be customized based on user requirements.
 
 Functions:
+    - log_exception_to_file: Logs exception details and traceback to a file.
     - log_resources: Logs selected system and ML resources at regular time intervals.
 
 Usage:
     Import the module and call the `log_resources` function with the desired parameters
-    to start logging resource usage.
+    to start logging resource usage. Use `log_exception_to_file` to log exceptions.
+
+Example:
+    log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)
+    log_exception_to_file("ErrorLog", "logs", Exception("Sample error"))
 """
 
 import os
 import time
 import psutil
+import traceback
 import subprocess
 import tensorflow as tf
 from threading import Thread
+
+def log_exception_to_file(title: str, logs_dir: str, error: Exception) -> None:
+    """
+    Write the exception message and full traceback to a log file.
+
+    Logic:
+        -> Create a directory for logs if it doesn't exist
+        -> Write the exception message and traceback to a log file
+        -> The log file is named after the title provided
+        -> The log file is stored in the specified logs directory
+
+    Args:
+        title (str): Title for the log file.
+        logs_dir (str): Directory where the log file will be stored.
+        error (Exception): The exception object to log.
+
+    Returns:
+        None
+
+    Example:
+        log_exception_to_file("MyProcess", "logs", Exception("An error occurred"))
+    """
+    os.makedirs(logs_dir, exist_ok=True)
+    file_path = os.path.join(logs_dir, f"{title}.log")
+    with open(file_path, "w") as f:
+        f.write(f"{title} encountered an error: {error}\n\nTraceback:\n")
+        traceback.print_exc(file=f)
 
 
 def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:

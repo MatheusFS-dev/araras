@@ -65,6 +65,14 @@ class HParams:
     regularizer_choices: List[str]
     optimizer_choices: List[str]
     scaler_choices: List[str]
+    
+    l1_value: float = 1e-2
+    l2_value: float = 1e-2
+    orthogonal_factor: float = 0.01
+    orthogonal_mode: str = "rows"
+    
+    min_lr: float = 1e-5
+    max_lr: float = 1e-2
 
     def get_activation(self, trial: optuna.Trial, name: str) -> str:
         """
@@ -84,10 +92,6 @@ class HParams:
         self,
         trial: optuna.Trial,
         name: str,
-        l1_value: float = 1e-2,
-        l2_value: float = 1e-2,
-        orthogonal_factor: float = 0.01,
-        orthogonal_mode: str = "rows",
     ) -> Optional[tf.keras.regularizers.Regularizer]:
         """
         Samples and maps a string regularizer to a TensorFlow regularizer object.
@@ -95,10 +99,6 @@ class HParams:
         Args:
             trial (optuna.Trial): The Optuna trial object.
             name (str): Unique identifier for the regularizer parameter.
-            l1_value (float): Value for L1 regularization (default: 1e-2).
-            l2_value (float): Value for L2 regularization (default: 1e-2).
-            orthogonal_factor (float): Factor for OrthogonalRegularizer (default: 0.01).
-            orthogonal_mode (str): Mode for OrthogonalRegularizer (default: "rows").
 
         Returns:
             Optional[tf.keras.regularizers.Regularizer]: A TensorFlow regularizer or None.
@@ -113,14 +113,14 @@ class HParams:
         if choice == "none":
             return None
         elif choice == "l1":
-            return tf.keras.regularizers.L1(l1_value)
+            return tf.keras.regularizers.L1(l1_value=self.l1_value)
         elif choice == "l2":
-            return tf.keras.regularizers.L2(l2_value)
+            return tf.keras.regularizers.L2(l2_value=self.l2_value)
         elif choice == "l1l2":
-            return tf.keras.regularizers.L1L2(l1_value, l2_value)
+            return tf.keras.regularizers.L1L2(l1_value=self.l1_value, l2_value=self.l2_value)
         elif choice == "orthogonal":
             #! Only works for rank-2 tensors
-            return tf.keras.regularizers.OrthogonalRegularizer(factor=orthogonal_factor, mode=orthogonal_mode)
+            return tf.keras.regularizers.OrthogonalRegularizer(factor=self.orthogonal_factor, mode=self.orthogonal_mode)
 
         # Raise error for unknown regularizer option
         raise ValueError(f"Unknown regularizer {choice}")
@@ -128,16 +128,12 @@ class HParams:
     def get_optimizer(
         self,
         trial: optuna.Trial,
-        min_lr: float = 1e-5,
-        max_lr: float = 1e-2,
     ) -> tf.keras.optimizers.Optimizer:
         """
         Samples an optimizer type and learning rate, returning a configured optimizer instance.
 
         Args:
             trial (optuna.Trial): The Optuna trial object.
-            min_lr (float): Minimum learning rate for sampling (default: 1e-5).
-            max_lr (float): Maximum learning rate for sampling (default: 1e-2).
 
         Returns:
             tf.keras.optimizers.Optimizer: A configured TensorFlow optimizer instance.
@@ -146,7 +142,7 @@ class HParams:
         optim = trial.suggest_categorical("optimizer", self.optimizer_choices)
 
         # Suggests a log-scaled learning rate between min_lr and max_lr
-        lr = trial.suggest_float("lr", min_lr, max_lr, log=True)
+        lr = trial.suggest_float("lr", self.min_lr, self.max_lr, log=True)
 
         # Maps optimizer name to the corresponding TensorFlow class
         mapping = {

@@ -1,12 +1,10 @@
 """
-Utility functions for analyzing and saving Optuna study results.
+Utility functions for analyzing Optuna study results.
 
 Functions:
-    - save_trial_params_to_file: Saves trial parameters and metadata to a text file.
     - analyze_study: Analyzes an Optuna study, generating summary tables and visualizations.
 
 Example usage:
-    save_trial_params_to_file("trial1.txt", {"lr": 0.01}, trial_id="1", loss="0.15")
     analyze_study(study=my_study, fig_dir="figures", table_dir="tables", top_frac=0.2)
 """
 
@@ -15,39 +13,8 @@ import math
 import numpy as np
 import pandas as pd
 from typing import *
-from IPython.display import display, HTML
 import optuna
 import matplotlib.pyplot as plt
-
-
-def save_trial_params_to_file(filepath: str, params: dict[str, float], **kwargs: str) -> None:
-    """
-    Save Optuna trial parameters and associated metadata to a text file.
-
-    Logic:
-        -> Open file for writing
-        -> Write key-value metadata (from kwargs)
-        -> Write trial parameters section with indentation
-
-    Args:
-        filepath (str): Path where the parameter file should be saved.
-        params (dict[str, float]): Dictionary of trial hyperparameters.
-        **kwargs (str): Additional information such as trial ID, rank, or loss.
-
-    Returns:
-        None
-
-    Example:
-        save_trial_params_to_file("trial1.txt", {"lr": 0.01}, trial_id="1", loss="0.15")
-    """
-    with open(filepath, "w") as file:
-        # Write metadata key-value pairs first
-        file.writelines(f"{k}: {v}\n" for k, v in kwargs.items())
-
-        # Write trial hyperparameters
-        file.write("Parameters:\n")
-        file.writelines(f"  {k}: {v}\n" for k, v in params.items())
-
 
 def analyze_study(
     study: optuna.Study,
@@ -65,7 +32,6 @@ def analyze_study(
         -> Categorize parameters (numeric or categorical)
         -> Create summary statistics for all, top-N, and bottom-N trials
         -> Save these tables to CSV files
-        -> Display summaries in Jupyter/IPython
         -> Plot histograms and bar charts of parameters
 
     Args:
@@ -80,6 +46,8 @@ def analyze_study(
     Example:
         analyze_study(study=my_study, fig_dir="figures", table_dir="tables", top_frac=0.2)
     """
+    print("\n\nAnalyzing study...")
+    
     os.makedirs(fig_dir, exist_ok=True)  # Ensure figure output directory exists
     if table_dir is None:
         table_dir = fig_dir  # Use same directory if no table_dir provided
@@ -161,22 +129,6 @@ def analyze_study(
             os.path.join(table_dir, f"{label}_categorical_frequencies.csv"), index=False
         )
 
-    # Display tables in IPython
-    display(HTML("<h3>Overall Numeric Hyperparameter Summary</h3>"))
-    display(describe_numeric(df, numeric_cols))
-    display(HTML("<h3>Overall Categorical Frequencies</h3>"))
-    display(freq_table(df, categorical_cols))
-
-    display(HTML(f"<h3>Top {int(top_frac*100)}% Numeric Summary (lowest loss)</h3>"))
-    display(describe_numeric(best, numeric_cols))
-    display(HTML(f"<h3>Top {int(top_frac*100)}% Categorical Frequencies</h3>"))
-    display(freq_table(best, categorical_cols))
-
-    display(HTML(f"<h3>Bottom {int(top_frac*100)}% Numeric Summary (highest loss)</h3>"))
-    display(describe_numeric(worst_df, numeric_cols))
-    display(HTML(f"<h3>Bottom {int(top_frac*100)}% Categorical Frequencies</h3>"))
-    display(freq_table(worst_df, categorical_cols))
-
     # Step 5: Create visualizations
     max_rows = 4
     total_plots = len(numeric_cols) + len(categorical_cols)
@@ -202,7 +154,7 @@ def analyze_study(
     # Plot numeric parameter histograms
     for i, col in enumerate(numeric_cols):
         ax = axes_flat[i]
-        ax.hist(df[col], bins=30, edgecolor="black", color="black")
+        ax.hist(df[col], bins=100, edgecolor="black", color="black")
         ax.set_title(col)
         ax.set_xlabel(col)
         ax.set_ylabel("Frequency")
@@ -227,3 +179,5 @@ def analyze_study(
     fig.tight_layout()
     fig.savefig(os.path.join(fig_dir, "hyperparameter_distributions.png"), dpi=300)
     plt.close(fig)
+    
+    print(f"Analysis complete. Figures saved to {fig_dir} and tables saved to {table_dir}.\n")
