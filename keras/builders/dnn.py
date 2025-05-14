@@ -101,7 +101,9 @@ def build_dnn(
     dropout_rate_step: float = 0.1,
     dropout_positions: Optional[List[int]] = None,
     trial_batch_norm: bool = False,
-    trial_regularizers: bool = False,
+    trial_kernel_reg: bool = False,
+    trial_bias_reg: bool = False,
+    trial_activity_reg: bool = False,
     regularizer_positions: Optional[List[int]] = None,
     trial_skip_connections: bool = False,
     share_activation: bool = False,
@@ -139,7 +141,9 @@ def build_dnn(
         dropout_rate_step (float): Step size for dropout rate sampling.
         dropout_positions (Optional[List[int]]): Specific layer indices for dropout to be applied. E.g. [0, 1]
         trial_batch_norm (bool): If True, batch normalization is considered.
-        trial_regularizers (bool): If True, kernel/bias/activity regularizers are applied.
+        trial_kernel_reg (bool): If True, kernel regularization is considered.
+        trial_bias_reg (bool): If True, bias regularization is considered.
+        trial_activity_reg (bool): If True, activity regularization is considered.
         regularizer_positions (Optional[List[int]]): Specific layer indices for regularizers to be applied. E.g. [0, 1]
         trial_skip_connections (bool): If True, residual connections are considered.
         share_activation (bool): If True, all layers use the same activation function.
@@ -154,7 +158,7 @@ def build_dnn(
     shared_act = None
     if share_activation:
         # If activations are shared, fetch the shared activation function
-        shared_act = hparams.get_activation(trial, f"{name_prefix}_shared_act")
+        shared_act = hparams.get_activation(trial, f"{name_prefix}_activation")
 
     for i in range(max_layers):
         # Sample number of units for this layer using Optuna
@@ -164,11 +168,14 @@ def build_dnn(
         activation = shared_act or hparams.get_activation(trial, f"{name_prefix}_activation_{i}")
 
         # only sample regularizers if trial_regularizers and position matches
-        if trial_regularizers and (regularizer_positions is None or i in regularizer_positions):
-            kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg_{i}")
-            bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg_{i}")
-            act_reg = hparams.get_regularizer(trial, f"{name_prefix}_activity_reg_{i}")
-        else:
+        kernel_reg = (
+            hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg_{i}") if trial_kernel_reg else None
+        )
+        bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg_{i}") if trial_bias_reg else None
+        act_reg = (
+            hparams.get_regularizer(trial, f"{name_prefix}_activity_reg_{i}") if trial_activity_reg else None
+        )
+        if regularizer_positions is not None and i not in regularizer_positions:
             kernel_reg = bias_reg = act_reg = None
 
         # Add a Dense (fully connected) layer
@@ -182,7 +189,7 @@ def build_dnn(
             activity_regularizer=act_reg,
             name=f"{name_prefix}_layer_{i}",
         )(x)
-    
+
         # Optionally add Batch Normalization layer if enabled and sampled as True
         if trial_batch_norm and trial.suggest_categorical(f"{name_prefix}_bn_{i}", [True, False]):
             x = layers.BatchNormalization(name=f"{name_prefix}_bn_{i}")(x)
