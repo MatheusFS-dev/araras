@@ -65,12 +65,12 @@ class HParams:
     regularizer_choices: List[str]
     optimizer_choices: List[str]
     scaler_choices: List[str]
-    
+
     l1_value: float = 1e-2
     l2_value: float = 1e-2
     orthogonal_factor: float = 0.01
     orthogonal_mode: str = "rows"
-    
+
     min_lr: float = 1e-5
     max_lr: float = 1e-2
 
@@ -85,6 +85,11 @@ class HParams:
         Returns:
             str: The selected activation function.
         """
+
+        # If length of is 1, return the the only option (So, no trial)
+        if len(self.activation_choices) == 1:
+            return self.activation_choices[0]
+
         # Selects an activation function from the candidate list using Optuna's categorical sampler
         return trial.suggest_categorical(name, self.activation_choices)
 
@@ -106,8 +111,13 @@ class HParams:
         Raises:
             ValueError: If the sampled regularizer name is unknown.
         """
-        # Suggests a regularizer choice from the candidate list
-        choice = trial.suggest_categorical(name, self.regularizer_choices)
+        
+        # If length of is 1, return the the only option (So, no trial)
+        if len(self.regularizer_choices) == 1:
+            choice = self.regularizer_choices[0]
+        else:
+            # Suggests a regularizer choice from the candidate list
+            choice = trial.suggest_categorical(name, self.regularizer_choices)
 
         # Maps choice string to corresponding TensorFlow regularizer object
         if choice == "none":
@@ -138,8 +148,12 @@ class HParams:
         Returns:
             tf.keras.optimizers.Optimizer: A configured TensorFlow optimizer instance.
         """
-        # Suggests an optimizer type from the list
-        optim = trial.suggest_categorical("optimizer", self.optimizer_choices)
+        # If length of is 1, return the the only option (So, no trial)
+        if len(self.optimizer_choices) == 1:
+            optim = self.optimizer_choices[0]
+        else:
+            # Suggests an optimizer type from the list
+            optim = trial.suggest_categorical("optimizer", self.optimizer_choices)
 
         # Suggests a log-scaled learning rate between min_lr and max_lr
         lr = trial.suggest_float("lr", self.min_lr, self.max_lr, log=True)
@@ -171,8 +185,12 @@ class HParams:
         Raises:
             ValueError: If the selected scaler name is not recognized.
         """
-        # Suggests a scaler choice from the list
-        choice = trial.suggest_categorical("scaler", self.scaler_choices)
+        # If length of is 1, return the the only option (So, no trial)
+        if len(self.scaler_choices) == 1:
+            choice = self.scaler_choices[0]
+        else:
+            # Suggests a scaler choice from the list
+            choice = trial.suggest_categorical("scaler", self.scaler_choices)
 
         # Maps each string option to its corresponding scaler object with parameters
         if choice == "StandardScaler":
