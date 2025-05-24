@@ -73,6 +73,8 @@ class HParams:
 
     min_lr: float = 1e-5
     max_lr: float = 1e-2
+    
+    lr_value: float = None # Can be set for fixed learning rate
 
     def get_activation(self, trial: optuna.Trial, name: str) -> str:
         """
@@ -155,8 +157,11 @@ class HParams:
             # Suggests an optimizer type from the list
             optim = trial.suggest_categorical("optimizer", self.optimizer_choices)
 
-        # Suggests a log-scaled learning rate between min_lr and max_lr
-        lr = trial.suggest_float("lr", self.min_lr, self.max_lr, log=True)
+        # If a fixed learning rate is set, use it; otherwise, sample a log-scaled learning rate
+        if self.lr_value is not None:
+            lr = self.lr_value
+        else:
+            lr = trial.suggest_float("lr", self.min_lr, self.max_lr, log=True)
 
         # Maps optimizer name to the corresponding TensorFlow class
         mapping = {

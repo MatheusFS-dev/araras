@@ -287,8 +287,10 @@ def build_cnn2d(
     filters_step: int,
     max_kernel_size: int,
     min_kernel_size: int,
-    min_pool_size: int,
-    max_pool_size: int,
+    min_pool_size_dim1: int,
+    max_pool_size_dim1: int,
+    min_pool_size_dim2: int,
+    max_pool_size_dim2: int,
     data_format: str = "channels_last",
     padding: str = "same",
     strides: Tuple[int, int] = (1, 1),
@@ -330,8 +332,10 @@ def build_cnn2d(
         filters_step (int): Step size for filters.
         max_kernel_size (int): Max size of kernel dimension.
         min_kernel_size (int): Min size of kernel dimension.
-        min_pool_size (int): Minimum pooling window size.
-        max_pool_size (int): Maximum pooling window size.
+        min_pool_size_dim1 (int): Min pooling size for dimension 1.
+        max_pool_size_dim1 (int): Max pooling size for dimension 1.
+        min_pool_size_dim2 (int): Min pooling size for dimension 2.
+        max_pool_size_dim2 (int): Max pooling size for dimension 2.
         data_format (str): Tensor format (channels_last or channels_first).
         padding (str): Padding strategy.
         strides (Tuple[int, int]): Convolution stride.
@@ -360,8 +364,8 @@ def build_cnn2d(
     for i in range(max_layers):
         # Suggest hyperparameters for the current layer
         filters = trial.suggest_int(f"{name_prefix}_filters_{i}", min_filters, max_filters, step=filters_step)
-        pool_dim1 = trial.suggest_int(f"{name_prefix}_pool_dim1_{i}", min_pool_size, max_pool_size)
-        pool_dim2 = trial.suggest_int(f"{name_prefix}_pool_dim2_{i}", min_pool_size, max_pool_size)
+        pool_dim1 = trial.suggest_int(f"{name_prefix}_pool_dim1_{i}", min_pool_size_dim1, max_pool_size_dim1)
+        pool_dim2 = trial.suggest_int(f"{name_prefix}_pool_dim2_{i}", min_pool_size_dim2, max_pool_size_dim2)
         pool_size = (pool_dim1, pool_dim2)
 
         kernel_dim1 = trial.suggest_int(f"{name_prefix}_kernel_dim1_{i}", min_kernel_size, max_kernel_size)
@@ -483,8 +487,12 @@ def build_cnn3d(
     filters_step: int,
     max_kernel_size: int,
     min_kernel_size: int,
-    min_pool_size: int,
-    max_pool_size: int,
+    min_pool_size_dim1: int,
+    max_pool_size_dim1: int,
+    min_pool_size_dim2: int,
+    max_pool_size_dim2: int,
+    min_pool_size_dim3: int,
+    max_pool_size_dim3: int,
     data_format: str = "channels_last",
     padding: str = "same",
     strides: Tuple[int, int, int] = (1, 1, 1),
@@ -527,8 +535,12 @@ def build_cnn3d(
         filters_step (int): Step size for filters.
         max_kernel_size (int): Maximum kernel dimension.
         min_kernel_size (int): Minimum kernel dimension.
-        min_pool_size (int): Minimum pooling size.
-        max_pool_size (int): Maximum pooling size.
+        min_pool_size_dim1 (int): Minimum pooling size for dimension 1.
+        max_pool_size_dim1 (int): Maximum pooling size for dimension 1.
+        min_pool_size_dim2 (int): Minimum pooling size for dimension 2.
+        max_pool_size_dim2 (int): Maximum pooling size for dimension 2.
+        min_pool_size_dim3 (int): Minimum pooling size for dimension 3.
+        max_pool_size_dim3 (int): Maximum pooling size for dimension 3.
         data_format (str): Format of input tensor.
         padding (str): Padding strategy.
         strides (Tuple[int, int, int]): Strides for convolution.
@@ -558,9 +570,9 @@ def build_cnn3d(
         filters = trial.suggest_int(f"{name_prefix}_filters_{i}", min_filters, max_filters, step=filters_step)
 
         # Sample pooling dimensions
-        pd1 = trial.suggest_int(f"{name_prefix}_pool_dim1_{i}", min_pool_size, max_pool_size)
-        pd2 = trial.suggest_int(f"{name_prefix}_pool_dim2_{i}", min_pool_size, max_pool_size)
-        pd3 = trial.suggest_int(f"{name_prefix}_pool_dim3_{i}", min_pool_size, max_pool_size)
+        pd1 = trial.suggest_int(f"{name_prefix}_pool_dim1_{i}", min_pool_size_dim1, max_pool_size_dim1)
+        pd2 = trial.suggest_int(f"{name_prefix}_pool_dim2_{i}", min_pool_size_dim2, max_pool_size_dim2)
+        pd3 = trial.suggest_int(f"{name_prefix}_pool_dim3_{i}", min_pool_size_dim3, max_pool_size_dim3)
         pool_size = (pd1, pd2, pd3)
 
         # Sample kernel dimensions
