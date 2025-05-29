@@ -11,7 +11,9 @@ Example usage:
     macs = get_macs(model, batch_size=32)
 """
 
+from typing import *
 import tensorflow as tf
+from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
@@ -31,44 +33,27 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
 
     Returns:
         int: The total number of floating-point operations (FLOPs) for one forward pass.
-
-    Raises:
-        ValueError: If the model does not have a valid input shape.
     """
 
-    # Retrieve the input shape of the model
-    ishape = model.input_shape
+    # 1) Build one TensorSpec per input tensor
+    specs = []
+    for inp in model.inputs:
+        # K.int_shape(inp) → (None, d1, d2, …)
+        dims = K.int_shape(inp)[1:]  # drop the None batch dim
+        specs.append(tf.TensorSpec([batch_size, *dims], dtype=inp.dtype))
 
-    # Validate input shape; ensure it has more than one dimension (batch + data)
-    if not ishape or len(ishape) < 2:
-        raise ValueError("Model must have a valid input_shape")
+    # 2) Define a wrapper whose args exactly match model.inputs
+    @tf.function(input_signature=specs)
+    def _forward_fn(*args):
+        # args is a tuple of Tensors, one per input.
+        # Pass them to the model as a list:
+        return model(list(args), training=False)
 
-    # Exclude the batch size from the input shape
-    shape = tuple(ishape)[1:]
-
-    # Display the inferred input shape (excluding batch dimension)
-    print("Inferred input shape (excl. batch):", shape)
-
-    # Define a TensorFlow TensorSpec with the given batch size and input shape
-    spec = tf.TensorSpec([batch_size, *shape], dtype=model.inputs[0].dtype)
-
-    # Wrap the model's call method in a tf.function for graph tracing
-    forward_fn = tf.function(model.call, input_signature=[spec])
-
-    # Obtain the concrete function (compiled graph) from the tf.function
-    concrete = forward_fn.get_concrete_function()
-
-    # Extract the computational graph from the concrete function
-    graph = concrete.graph
-
-    # Set profiling options to count floating-point operations
+    # 3) Grab the concrete graph and profile it
+    concrete = _forward_fn.get_concrete_function()
     opts = ProfileOptionBuilder.float_operation()
-
-    # Profile the graph to compute FLOPs
-    graph_info = profile(graph, options=opts)
-
-    # Return the total number of floating-point operations
-    return graph_info.total_float_ops
+    info = profile(concrete.graph, options=opts)
+    return info.total_float_ops
 
 
 def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
@@ -86,42 +71,6 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
 
     Returns:
         int: The estimated number of MACs for one forward pass.
-
-    Raises:
-        ValueError: If the model does not have a valid input shape.
     """
 
-    # Retrieve the input shape of the model
-    ishape = model.input_shape
-
-    # Validate input shape; ensure it has more than one dimension (batch + data)
-    if not ishape or len(ishape) < 2:
-        raise ValueError("Model must have a valid input_shape")
-
-    # Exclude the batch size from the input shape
-    shape = tuple(ishape)[1:]
-
-    # Display the inferred input shape (excluding batch dimension)
-    print("Inferred input shape (excl. batch):", shape)
-
-    # Define a TensorFlow TensorSpec with the given batch size and input shape
-    spec = tf.TensorSpec([batch_size, *shape], dtype=model.inputs[0].dtype)
-
-    # Wrap the model's call method in a tf.function for graph tracing
-    forward_fn = tf.function(model.call, input_signature=[spec])
-
-    # Obtain the concrete function (compiled graph) from the tf.function
-    concrete = forward_fn.get_concrete_function()
-
-    # Extract the computational graph from the concrete function
-    graph = concrete.graph
-
-    # Set profiling options to count floating-point operations
-    opts = ProfileOptionBuilder.float_operation()
-
-    # Profile the graph to compute FLOPs
-    graph_info = profile(graph, options=opts)
-
-    # Compute MACs by assuming 1 MAC = 2 FLOPs
-    flops = graph_info.total_float_ops
-    return flops // 2
+    return get_flops(model, batch_size) // 2
