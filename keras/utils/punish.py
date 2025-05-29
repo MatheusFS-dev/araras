@@ -14,8 +14,7 @@ Example usage:
 """
 
 import tensorflow as tf
-from tensorflow.python.profiler.model_analyzer import profile
-from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
+from araras.keras.utils.profiler import get_flops
 from typing import Literal
 
 
@@ -54,23 +53,7 @@ def compute_flops_penalized_loss(
     if operation not in ("add", "subtract"):
         raise ValueError("`operation` must be either 'add' or 'subtract'.")
 
-    # Ensure model has a valid input shape
-    input_shape = model.input_shape
-    if not input_shape or len(input_shape) < 2:
-        raise ValueError("Model `input_shape` must be defined and have at least 2 dimensions.")
-
-    # Define a traced function for a single-sample inference
-    forward_fn = tf.function(
-        model.call,
-        input_signature=[tf.TensorSpec(shape=(1,) + tuple(input_shape[1:]), dtype=tf.float32)],
-    )
-
-    # Extract the computation graph
-    graph = forward_fn.get_concrete_function().graph
-
-    # Run profiler to get total floating-point operations (FLOPs)
-    graph_info = profile(graph, options=ProfileOptionBuilder.float_operation())
-    total_flops = graph_info.total_float_ops  # Integer count of FLOPs
+    total_flops = get_flops(model)
 
     # Compute penalty and return adjusted loss
     penalty = flops_penalty_factor * total_flops
