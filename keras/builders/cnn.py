@@ -3,6 +3,7 @@ This module provides a function to build convolutional neural network (CNN) bloc
 
 Functions:
     - build_cnn1d: Builds a 1D convolutional layer with optional hyperparameter tuning and regularization.
+    - build_dense_as_conv1d: Simulates a Dense layer using a Conv1D layer with specific configurations.
 
 Usage example:
     from araras.keras.builders.cnn import build_cnn1d
@@ -33,13 +34,14 @@ def build_cnn1d(
     kernel_size_range: Union[int, tuple[int, int]],
     filters_step: int = 10,
     kernel_size_step: int = 1,
-    use_batch_norm: bool = False,
+    use_batch_norm: bool = True,
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
     strides: int = 1,
     dilation_rate: int = 1,
     groups: int = 1,
+    use_bias: bool = False,
     padding: str = "same",
     data_format: str = "channels_last",
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
@@ -68,6 +70,7 @@ def build_cnn1d(
         strides (int): Stride size for the convolution.
         dilation_rate (int): Dilation rate for convolution.
         groups (int): Number of filter groups.
+        use_bias (bool): Whether to use a bias term in the convolution. If using batch norm, this can be set to False.
         padding (str): Padding method ('valid' or 'same').
         data_format (str): Data format, either 'channels_last' or 'channels_first'.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
@@ -115,6 +118,7 @@ def build_cnn1d(
         strides=strides,
         dilation_rate=dilation_rate,
         groups=groups,
+        use_bias=use_bias,
         kernel_initializer=kernel_initializer,
         bias_initializer=bias_initializer,
         kernel_regularizer=kernel_reg,
@@ -135,3 +139,56 @@ def build_cnn1d(
 
     # Return the final transformed Keras layer
     return x
+
+
+def build_dense_as_conv1d(
+    trial: Any,
+    hparams: HParams,
+    x: layers.Layer,
+    L: int,
+    units: int,
+    trial_kernel_reg: bool = False,
+    trial_bias_reg: bool = False,
+    trial_activity_reg: bool = False,
+    name_prefix: str = "dense_as_conv1d",
+) -> layers.Layer:
+    """
+    Simulate a Dense(L->units) layer by a Conv1D with:
+      - kernel_size = L
+      - filters = units
+      - stride = 1
+      - padding = 'valid'
+      - use_bias = True
+      - no batch-norm, no tuning of regularizers
+
+    Args:
+        trial: Optuna trial (unused for static config)
+        hparams: HParams for retrieving the activation function
+        x: Input Keras layer of shape (batch_size, L, C_in)
+        L: int, length of the input sequence (number of timesteps or features per sample)
+            This corresponds exactly to the input dimension of a Dense layer.
+        units: int, number of output units (neurons) of the equivalent Dense layer. 
+            The Conv1D will use this many filters so the output dimensionality matches Dense(units).
+        trial_kernel_reg: bool, whether to tune and apply a kernel regularizer
+        trial_bias_reg: bool, whether to tune and apply a bias regularizer
+        trial_activity_reg: bool, whether to tune and apply an activity regularizer
+        name_prefix: str, prefix for the layer name
+        
+    Returns:
+      layers.Layer: A Keras layer with output shape (batch_size, 1, units), equivalent to Dense(units).
+    """
+    return build_cnn1d(
+        trial,
+        hparams,
+        x,
+        filters_range=units,
+        kernel_size_range=L,
+        strides=1,
+        padding="valid",
+        use_bias=True,
+        use_batch_norm=False,
+        name_prefix=name_prefix,
+        trial_kernel_reg=trial_kernel_reg,
+        trial_bias_reg=trial_bias_reg,
+        trial_activity_reg=trial_activity_reg,
+    )

@@ -42,9 +42,10 @@ def build_tcnn1d(
     padding: str = "same",
     strides: int = 1,
     dilation_rate: int = 1,
+    use_bias: bool = False,
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
-    use_batch_norm: bool = False,
+    use_batch_norm: bool = True,
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
@@ -68,6 +69,7 @@ def build_tcnn1d(
         padding (str): Type of padding to use in the convolution (e.g., "same" or "valid").
         strides (int): Stride length of the convolution.
         dilation_rate (int): Dilation rate for dilated convolution.
+        use_bias (bool): Whether to include a bias term in the Conv1DTranspose layer.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
         bias_initializer (initializers.Initializer): Initializer for bias values.
         use_batch_norm (bool): Whether to apply batch normalization.
@@ -113,6 +115,7 @@ def build_tcnn1d(
         filters=filters,  # Number of output filters
         kernel_size=kernel_size,  # Width of the 1D convolution window
         activation=None,  # Activation applied separately below
+        use_bias=use_bias,  # Whether to include a bias term
         padding=padding,  # Padding type for convolution output
         data_format=data_format,  # Format of the input data
         strides=strides,  # Step size of the convolution

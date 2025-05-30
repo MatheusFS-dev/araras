@@ -40,6 +40,7 @@ def build_lstm(
     dropout_rate_step: float = 0.1,
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
+    use_bias: bool = True,
     use_batch_norm: bool = False,
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
@@ -63,6 +64,7 @@ def build_lstm(
         dropout_rate_step (float): Step size for tuning dropout rate.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
         bias_initializer (initializers.Initializer): Initializer for biases.
+        use_bias (bool): Whether to include a bias term in the LSTM layer.
         use_batch_norm (bool): Whether to apply batch normalization after LSTM.
         trial_kernel_reg (bool): Whether to apply/tune a kernel regularizer.
         trial_bias_reg (bool): Whether to apply/tune a bias regularizer.
@@ -112,6 +114,7 @@ def build_lstm(
     x = layers.LSTM(
         units=units,  # Number of hidden units in the LSTM cell
         activation=None,  # Activation applied separately below
+        use_bias=use_bias,  # Whether to use a bias term in the LSTM
         kernel_initializer=kernel_initializer,  # Weight initializer
         bias_initializer=bias_initializer,  # Bias initializer
         kernel_regularizer=kernel_reg,  # Optional regularizer for kernel

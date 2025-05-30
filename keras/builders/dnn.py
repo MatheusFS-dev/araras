@@ -39,6 +39,7 @@ def build_dnn(
     dropout_rate_step: float,
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
+    use_bias: bool = True,
     use_batch_norm: bool = False,
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
@@ -62,6 +63,7 @@ def build_dnn(
         dropout_rate_step (float): Step size for dropout rate tuning.
         kernel_initializer (initializers.Initializer): Initializer for Dense layer weights.
         bias_initializer (initializers.Initializer): Initializer for Dense layer biases.
+        use_bias (bool): Whether to include a bias term in the Dense layer.
         use_batch_norm (bool): Whether to include a batch normalization layer.
         trial_kernel_reg (bool): Whether to tune and apply a kernel regularizer.
         trial_bias_reg (bool): Whether to tune and apply a bias regularizer.
@@ -106,6 +108,7 @@ def build_dnn(
     x = layers.Dense(
         units=units,  # Number of units as determined above
         activation=None,  # Activation applied separately below
+        use_bias=use_bias,  # Whether to include a bias term
         kernel_initializer=kernel_initializer,  # Initializer for the weights
         bias_initializer=bias_initializer,  # Initializer for the biases
         kernel_regularizer=kernel_reg,  # Optional kernel regularizer
