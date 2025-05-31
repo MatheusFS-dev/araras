@@ -145,46 +145,56 @@ def build_dense_as_conv1d(
     trial: Any,
     hparams: HParams,
     x: layers.Layer,
-    L: int,
     units: int,
+    padding: str = "valid",
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
     name_prefix: str = "dense_as_conv1d",
 ) -> layers.Layer:
     """
-    Simulate a Dense(L->units) layer by a Conv1D with:
-      - kernel_size = L
-      - filters = units
-      - stride = 1
-      - padding = 'valid'
-      - use_bias = True
-      - no batch-norm, no tuning of regularizers
+    Simulate a Dense layer using a Conv1D with kernel_size=1.
 
+    This function builds a 1D convolutional layer that, when applied to a 3D input
+    of shape (batch_size, length, features_in), produces an output of shape
+    (batch_size, length, units).
+
+    Note:
+        If your goal is to emulate a classic Dense(units) on a flat vector of shape
+        (batch_size, features_in), you must first reshape that vector to (batch_size, 1, features_in)
+        and then apply this function. After Conv1D, you should call Flatten() to collapse
+        back to (batch_size, units). Without reshaping, Conv1D will raise a shape mismatch
+        on 2D inputs.
+    
     Args:
-        trial: Optuna trial (unused for static config)
-        hparams: HParams for retrieving the activation function
-        x: Input Keras layer of shape (batch_size, L, C_in)
-        L: int, length of the input sequence (number of timesteps or features per sample)
-            This corresponds exactly to the input dimension of a Dense layer.
-        units: int, number of output units (neurons) of the equivalent Dense layer. 
-            The Conv1D will use this many filters so the output dimensionality matches Dense(units).
-        trial_kernel_reg: bool, whether to tune and apply a kernel regularizer
-        trial_bias_reg: bool, whether to tune and apply a bias regularizer
-        trial_activity_reg: bool, whether to tune and apply an activity regularizer
-        name_prefix: str, prefix for the layer name
-        
+        trial (Any): An Optuna trial object used for hyperparameter optimization.
+        hparams (HParams): A utility object to provide regularizers and activations.
+        x (layers.Layer): The input Keras layer, expected to be of shape (batch_size, length, features_in).
+        units (int): The number of output units for the Dense layer.
+        padding (str): Padding method ('valid' or 'same').
+        trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
+        trial_bias_reg (bool): Whether to tune and apply bias regularization.
+        trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        name_prefix (str): Prefix for layer names.
+
     Returns:
-      layers.Layer: A Keras layer with output shape (batch_size, 1, units), equivalent to Dense(units).
+        layers.Layer: A Keras layer with output shape (batch_size, 1, units), equivalent to Dense(units).
+
+    References:
+        https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer
+
+        https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers
+
+        https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks
     """
     return build_cnn1d(
         trial,
         hparams,
         x,
         filters_range=units,
-        kernel_size_range=L,
-        strides=1,
-        padding="valid",
+        kernel_size_range=1,
+        strides=1,  
+        padding=padding,
         use_bias=True,
         use_batch_norm=False,
         name_prefix=name_prefix,
