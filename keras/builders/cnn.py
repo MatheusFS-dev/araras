@@ -145,7 +145,8 @@ def build_dense_as_conv1d(
     trial: Any,
     hparams: HParams,
     x: layers.Layer,
-    units: int,
+    filters_range: int,
+    filters_step: int = 10,
     padding: str = "valid",
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
@@ -165,12 +166,13 @@ def build_dense_as_conv1d(
         and then apply this function. After Conv1D, you should call Flatten() to collapse
         back to (batch_size, units). Without reshaping, Conv1D will raise a shape mismatch
         on 2D inputs.
-    
+
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
         hparams (HParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer, expected to be of shape (batch_size, length, features_in).
-        units (int): The number of output units for the Dense layer.
+        filters_range (int): The number of output filters for the Conv1D layer.
+        filters_step (int): Step size for tuning the number of filters.
         padding (str): Padding method ('valid' or 'same').
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
@@ -191,9 +193,10 @@ def build_dense_as_conv1d(
         trial,
         hparams,
         x,
-        filters_range=units,
+        filters_range=filters_range,
+        filters_step=filters_step,
         kernel_size_range=1,
-        strides=1,  
+        strides=1,
         padding=padding,
         use_bias=True,
         use_batch_norm=False,
