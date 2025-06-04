@@ -73,7 +73,7 @@ class HParams:
 
     min_lr: float = 1e-5
     max_lr: float = 1e-2
-    
+
     lr_value: float = None # Can be set for fixed learning rate
 
     def get_activation(self, trial: optuna.Trial, name: str) -> str:
@@ -113,7 +113,7 @@ class HParams:
         Raises:
             ValueError: If the sampled regularizer name is unknown.
         """
-        
+
         # If length of is 1, return the the only option (So, no trial)
         if len(self.regularizer_choices) == 1:
             choice = self.regularizer_choices[0]
@@ -165,13 +165,19 @@ class HParams:
 
         # Maps optimizer name to the corresponding TensorFlow class
         mapping = {
-            "Adam": tf.keras.optimizers.Adam,
-            "AdamW": tf.keras.optimizers.AdamW,
             "SGD": tf.keras.optimizers.SGD,
             "RMSprop": tf.keras.optimizers.RMSprop,
+            "Adam": tf.keras.optimizers.Adam,
+            "AdamW": tf.keras.optimizers.AdamW,
+            "Adadelta": tf.keras.optimizers.Adadelta,
+            "Adagrad": tf.keras.optimizers.Adagrad,
+            "Adamax": tf.keras.optimizers.Adamax,
+            "Adafactor": tf.keras.optimizers.Adafactor,
             "Nadam": tf.keras.optimizers.Nadam,
+            "Ftrl": tf.keras.optimizers.Ftrl,
             "Lion": tf.keras.optimizers.Lion,
-            # … can be extended with more optimizers
+            "Lamb": tf.keras.optimizers.Lamb,
+            "LossScaleOptimizer": tf.keras.mixed_precision.LossScaleOptimizer,
         }
 
         # Returns the selected optimizer initialized with the sampled learning rate
