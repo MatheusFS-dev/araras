@@ -36,7 +36,7 @@ def build_dnn(
     units_range: Union[int, tuple[int, int]],
     units_step: int,
     dropout_rate_range: Union[float, tuple[float, float]],
-    dropout_rate_step: float,
+    dropout_rate_step: float = 0.1,
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
     use_bias: bool = True,
