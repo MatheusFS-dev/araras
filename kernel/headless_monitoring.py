@@ -8,8 +8,6 @@ Functions:
     - _send_alert_email: Sends an email alert when the monitored process crashes or terminates.
 
 Example usage:
-    from araras.kernel.monitoring import start_monitor, stop_monitor
-
     # Start monitoring a process with PID 1234
     monitor_process = start_monitor(1234)
 
