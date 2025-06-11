@@ -55,7 +55,6 @@ def create_directories(table_dir: str) -> Dict[str, str]:
         "table_best": os.path.join(table_dir, "best"),
         "table_worst": os.path.join(table_dir, "worst"),
         "table_overall": os.path.join(table_dir, "overall"),
-        "table_others": os.path.join(table_dir, "others"),
     }
 
     # Create each directory, allowing existing directories to remain unchanged
@@ -320,159 +319,218 @@ def plot_hyperparameter_distributions(
     df: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str]
 ) -> None:
     """
-    Generate and save distribution plots for numeric and categorical hyperparameters.
-    
+    Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
+
     Args:
         df (pd.DataFrame): DataFrame containing hyperparameter data
         numeric_cols (List[str]): List of numeric column names
         categorical_cols (List[str]): List of categorical column names
         dirs (Dict[str, str]): Dictionary of directory paths for saving plots
     """
-    total_plots = len(numeric_cols) + len(categorical_cols)
 
-    if total_plots == 0:
-        print("No parameters found for distribution plotting.")
-        return
+    # ———————————————————————— Numeric Parameters Figure ——————————————————————— #
+    if numeric_cols:
+        print(f"Creating numeric parameters distribution plot ({len(numeric_cols)} parameters)...")
 
-    # Create single column layout with larger figures
-    fig, axes = plt.subplots(total_plots, 1, figsize=(12, 5 * total_plots))
+        # Calculate grid dimensions with max 4 columns
+        max_cols = 4
+        n_plots = len(numeric_cols)
+        n_cols = min(n_plots, max_cols)
+        n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
-    # Handle single plot case
-    if total_plots == 1:
-        axes = [axes]
+        # Create grid layout for numeric parameters
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
 
-    plot_idx = 0
+        # Handle different array shapes
+        if n_plots == 1:
+            axes = np.array([axes])
+        elif n_rows == 1:
+            axes = axes.reshape(1, -1)
+        elif n_cols == 1:
+            axes = axes.reshape(-1, 1)
 
-    # Enhanced numeric parameter plots
-    for col in numeric_cols:
-        ax = axes[plot_idx]
+        # Plot each numeric parameter
+        for plot_idx, col in enumerate(numeric_cols):
+            row = plot_idx // max_cols
+            col_idx = plot_idx % max_cols
+            ax = axes[row, col_idx]
 
-        values = df[col].dropna()
+            values = df[col].dropna()
 
-        # Main histogram
-        n, bins, patches = ax.hist(
-            values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
-        )
-
-        kde = gaussian_kde(values)
-        x_range = np.linspace(values.min(), values.max(), 200)
-        kde_values = kde(x_range)
-        ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
-
-        # Statistics
-        mean_val = values.mean()
-        median_val = values.median()
-        std_val = values.std()
-
-        # Format values using format_numeric_value
-        mean_formatted = format_numeric_value(mean_val)
-        median_formatted = format_numeric_value(median_val)
-
-        # Add vertical lines with formatted labels
-        ax.axvline(
-            mean_val, color="red", linestyle="--", linewidth=2, alpha=0.8, label=f"Mean: {mean_formatted}"
-        )
-        ax.axvline(
-            median_val,
-            color="green",
-            linestyle="-",
-            linewidth=2,
-            alpha=0.8,
-            label=f"Median: {median_formatted}",
-        )
-
-        # Formatting
-        ax.set_title(f"{col}", fontsize=16, fontweight="bold")
-        ax.set_xlabel(col, fontsize=12)
-        ax.set_ylabel("Density", fontsize=12)
-        ax.legend(loc="upper right", fontsize=10)
-        ax.grid(True, alpha=0.3)
-
-        # Format all statistics
-        std_formatted = format_numeric_value(std_val)
-
-        stats_text = f"Mean: {mean_formatted}\n"
-        stats_text += f"Std: {std_formatted}\n"
-        stats_text += f"Median: {median_formatted}"
-
-        ax.text(
-            0.02,
-            0.98,
-            stats_text,
-            transform=ax.transAxes,
-            verticalalignment="top",
-            horizontalalignment="left",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
-            fontsize=9,
-            fontfamily="monospace",
-        )
-
-        plot_idx += 1
-
-    # Enhanced categorical parameter plots
-    for col in categorical_cols:
-        ax = axes[plot_idx]
-
-        # Calculate category frequencies
-        counts = df[col].value_counts()
-        percentages = counts / counts.sum() * 100
-
-        # Create enhanced bar chart
-        bars = ax.bar(
-            range(len(counts)),
-            counts.values,
-            color=plt.cm.Set3(np.linspace(0, 1, len(counts))),
-            alpha=0.8,
-            edgecolor="black",
-            linewidth=1,
-        )
-
-        # Customize x-axis labels
-        ax.set_xticks(range(len(counts)))
-        ax.set_xticklabels(counts.index.astype(str), rotation=45, ha="right")
-
-        # Add value and percentage labels on bars with more space
-        max_count = max(counts.values)
-        label_offset = max_count * 0.05  # Increased spacing from 0.01 to 0.05
-
-        for i, (bar, count, pct) in enumerate(zip(bars, counts.values, percentages.values)):
-            height = bar.get_height()
-
-            # Format the count value using format_numeric_value
-            count_formatted = format_numeric_value(count)
-            pct_formatted = format_numeric_value(pct)
-
-            ax.text(
-                bar.get_x() + bar.get_width() / 2.0,
-                height + label_offset,
-                f"{count_formatted}\n({pct_formatted}%)",
-                ha="center",
-                va="bottom",
-                fontweight="bold",
-                fontsize=9,
+            # Main histogram
+            n, bins, patches = ax.hist(
+                values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
             )
 
-        # Adjust y-axis to accommodate labels with extra space
-        ax.set_ylim(0, max_count * 1.15)  # Increased from typical auto-scaling
+            # KDE curve
+            kde = gaussian_kde(values)
+            x_range = np.linspace(values.min(), values.max(), 200)
+            kde_values = kde(x_range)
+            ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
 
-        # Formatting
-        ax.set_title(f"{col}", fontsize=16, fontweight="bold")
-        ax.set_xlabel(col, fontsize=12)
-        ax.set_ylabel("Count", fontsize=12)
-        ax.grid(True, alpha=0.3, axis="y")
+            # Statistics
+            mean_val = values.mean()
+            median_val = values.median()
+            std_val = values.std()
 
-        plot_idx += 1
+            # Format values using format_numeric_value
+            mean_formatted = format_numeric_value(mean_val)
+            median_formatted = format_numeric_value(median_val)
+            std_formatted = format_numeric_value(std_val)
 
-    # Adjust layout with extra spacing
-    plt.tight_layout(pad=4.0)
+            # Add vertical lines with formatted labels
+            ax.axvline(
+                mean_val, color="red", linestyle="--", linewidth=2, alpha=0.8, label=f"Mean: {mean_formatted}"
+            )
+            ax.axvline(
+                median_val,
+                color="green",
+                linestyle="-",
+                linewidth=2,
+                alpha=0.8,
+                label=f"Median: {median_formatted}",
+            )
 
-    # Save figure
-    plt.savefig(
-        os.path.join(dirs["figs"], "params_distributions.png"),
-        dpi=300,
-        bbox_inches="tight",
-    )
-    plt.close(fig)
+            # Formatting
+            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            ax.set_xlabel(col, fontsize=10)
+            ax.set_ylabel("Density", fontsize=10)
+            ax.legend(loc="upper right", fontsize=8)
+            ax.grid(True, alpha=0.3)
+
+            # Statistics text box
+            stats_text = f"Mean: {mean_formatted}\n"
+            stats_text += f"Std: {std_formatted}\n"
+            stats_text += f"Median: {median_formatted}"
+
+            ax.text(
+                0.02,
+                0.98,
+                stats_text,
+                transform=ax.transAxes,
+                verticalalignment="top",
+                horizontalalignment="left",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
+                fontsize=8,
+                fontfamily="monospace",
+            )
+
+        # Hide unused subplots if needed
+        for idx in range(n_plots, n_rows * n_cols):
+            row = idx // max_cols
+            col_idx = idx % max_cols
+            axes[row, col_idx].set_visible(False)
+
+        # Adjust layout and save
+        plt.suptitle("Numeric Parameters Distributions", fontsize=16, fontweight="bold", y=0.98)
+        plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
+
+        plt.savefig(
+            os.path.join(dirs["figs"], "params_numeric_distributions.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        print("No numeric parameters found for distribution plotting.")
+
+    # ——————————————————————— Categorical Parameters Figure ————————————————————— #
+    if categorical_cols:
+        print(f"Creating categorical parameters distribution plot ({len(categorical_cols)} parameters)...")
+
+        # Calculate grid dimensions with max 4 columns
+        max_cols = 4
+        n_plots = len(categorical_cols)
+        n_cols = min(n_plots, max_cols)
+        n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
+
+        # Create grid layout for categorical parameters
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+
+        # Handle different array shapes
+        if n_plots == 1:
+            axes = np.array([axes])
+        elif n_rows == 1:
+            axes = axes.reshape(1, -1)
+        elif n_cols == 1:
+            axes = axes.reshape(-1, 1)
+
+        # Plot each categorical parameter
+        for plot_idx, col in enumerate(categorical_cols):
+            row = plot_idx // max_cols
+            col_idx = plot_idx % max_cols
+            ax = axes[row, col_idx]
+
+            # Calculate category frequencies
+            counts = df[col].value_counts()
+            percentages = counts / counts.sum() * 100
+
+            # Create enhanced bar chart
+            bars = ax.bar(
+                range(len(counts)),
+                counts.values,
+                color=plt.cm.Set3(np.linspace(0, 1, len(counts))),
+                alpha=0.8,
+                edgecolor="black",
+                linewidth=1,
+            )
+
+            # Customize x-axis labels
+            ax.set_xticks(range(len(counts)))
+            ax.set_xticklabels(counts.index.astype(str), rotation=45, ha="right")
+
+            # Add value and percentage labels on bars
+            max_count = max(counts.values)
+            label_offset = max_count * 0.05
+
+            for i, (bar, count, pct) in enumerate(zip(bars, counts.values, percentages.values)):
+                height = bar.get_height()
+
+                # Format the count value using format_numeric_value
+                count_formatted = format_numeric_value(count)
+                pct_formatted = format_numeric_value(pct)
+
+                ax.text(
+                    bar.get_x() + bar.get_width() / 2.0,
+                    height + label_offset,
+                    f"{count_formatted}\n({pct_formatted}%)",
+                    ha="center",
+                    va="bottom",
+                    fontweight="bold",
+                    fontsize=8,
+                )
+
+            # Adjust y-axis to accommodate labels
+            ax.set_ylim(0, max_count * 1.15)
+
+            # Formatting
+            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            ax.set_xlabel(col, fontsize=10)
+            ax.set_ylabel("Count", fontsize=10)
+            ax.grid(True, alpha=0.3, axis="y")
+
+        # Hide unused subplots if needed
+        for idx in range(n_plots, n_rows * n_cols):
+            row = idx // max_cols
+            col_idx = idx % max_cols
+            axes[row, col_idx].set_visible(False)
+
+        # Adjust layout and save
+        plt.suptitle("Categorical Parameters Distributions", fontsize=16, fontweight="bold", y=0.98)
+        plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
+
+        plt.savefig(
+            os.path.join(dirs["figs"], "params_categorical_distributions.png"),
+            dpi=300,
+            bbox_inches="tight",
+        )
+        plt.close(fig)
+    else:
+        print("No categorical parameters found for distribution plotting.")
+
+    # Print summary
+    if not numeric_cols and not categorical_cols:
+        print("No parameters found for distribution plotting.")
 
 
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
@@ -497,9 +555,6 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     df_imp = pd.DataFrame(list(importances.items()), columns=["Parameter", "Importance"]).sort_values(
         "Importance", ascending=False
     )
-    
-    # Save importance rankings as CSV table
-    df_imp.to_csv(os.path.join(dirs["table_others"], "param_importances.csv"), index=False)
 
     # Create bar chart visualization
     plt.figure(figsize=(6, 4))
@@ -511,7 +566,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     plt.title("Hyperparameter Importances")  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
-    plt.savefig(os.path.join(dirs["figs"], "param_importances.png"), dpi=300)
+    plt.savefig(os.path.join(dirs["figs"], "params_importances.png"), dpi=300)
     plt.close()  # Close figure to free memory
 
 
@@ -561,7 +616,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.title("Spearman Correlation")  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "spearman_correlation.png"), dpi=300)
+    fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.png"), dpi=300)
     plt.close()  # Close figure to free memory
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
@@ -622,30 +677,19 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.tight_layout()
 
     # Save parameter-loss correlation bar chart with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "param_study_value_correlations.png"), dpi=300)
+    fig.savefig(os.path.join(dirs["figs"], "params_study_value_correlations.png"), dpi=300)
     plt.close()  # Close figure to free memory
-
-    # Create DataFrame with parameter-study value correlations for easy reference
-    corr_df = pd.DataFrame(
-        {
-            "Parameter": param_loss_corr.index,
-            "Correlation_with_Study_Value": param_loss_corr.values,
-        }
-    ).round(6)
-
-    # Save correlation data as CSV for further analysis
-    corr_df.to_csv(os.path.join(dirs["table_others"], "param_study_value_correlations.csv"), index=False)
 
 
 def plot_parameter_boxplots(
-    df: pd.DataFrame, best: pd.DataFrame, worst: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]
+    df: pd.DataFrame,
+    best: pd.DataFrame,
+    worst: pd.DataFrame,
+    numeric_cols: List[str],
+    dirs: Dict[str, str],
 ) -> None:
     """
-    Create a single comprehensive boxplot comparison for all numeric parameters across trial subsets.
-
-    This function generates a single plot with subplots comparing parameter distributions
-    between overall, best-performing, and worst-performing trials to
-    identify parameter ranges associated with better optimization performance.
+    Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
 
     Args:
         df (pd.DataFrame): Complete dataset with all trials
@@ -655,47 +699,73 @@ def plot_parameter_boxplots(
         dirs (Dict[str, str]): Directory paths for saving outputs
 
     Returns:
-        None: Saves single comprehensive boxplot file for all parameters
+        None: Saves separate boxplot files for numeric parameters
     """
-    if not numeric_cols:
-        print("No numeric parameters to analyze")
-        return
 
-    # Create the single comprehensive plot
-    fig, axes = plt.subplots(len(numeric_cols), 1, figsize=(12, 4 * len(numeric_cols)))
+    # ———————————————————————— Numeric Parameters Boxplots ——————————————————————— #
+    if numeric_cols:
+        print(f"Creating numeric parameters boxplots ({len(numeric_cols)} parameters)...")
 
-    # Handle single parameter case
-    if len(numeric_cols) == 1:
-        axes = [axes]
+        # Calculate grid dimensions with max 4 columns
+        max_cols = 4
+        n_plots = len(numeric_cols)
+        n_cols = min(n_plots, max_cols)
+        n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
-    # Create boxplot for each numeric parameter
-    for i, col in enumerate(numeric_cols):
-        ax = axes[i]
+        # Create grid layout for numeric parameters
+        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
 
-        # Prepare data for boxplot: overall, best, worst trial subsets
-        data = [df[col], best[col], worst[col]]
-        labels = ["All trials", "Best trials", "Worst trials"]
+        # Handle different array shapes
+        if n_plots == 1:
+            axes = np.array([axes])
+        elif n_rows == 1:
+            axes = axes.reshape(1, -1)
+        elif n_cols == 1:
+            axes = axes.reshape(-1, 1)
 
-        # Create boxplot with filled boxes for better visibility
-        box_plot = ax.boxplot(data, labels=labels, patch_artist=True)
+        # Create boxplot for each numeric parameter
+        for plot_idx, col in enumerate(numeric_cols):
+            row = plot_idx // max_cols
+            col_idx = plot_idx % max_cols
+            ax = axes[row, col_idx]
 
-        # Color the boxes for better distinction
-        colors = ["lightgray", "lightgreen", "lightcoral"]
-        for patch, color in zip(box_plot["boxes"], colors):
-            patch.set_facecolor(color)
-            patch.set_alpha(0.7)
+            # Prepare data for boxplot: overall, best, worst trial subsets
+            data = [df[col], best[col], worst[col]]
+            labels = ["All trials", "Best trials", "Worst trials"]
 
-        # Styling
-        ax.set_title(f"{col}", fontsize=14, fontweight="bold")
-        ax.set_ylabel(col, fontsize=12)
-        ax.grid(True, alpha=0.3, axis="y")
+            # Create boxplot with filled boxes for better visibility
+            box_plot = ax.boxplot(data, labels=labels, patch_artist=True)
 
-    plt.tight_layout()
+            # Color the boxes for better distinction
+            colors = ["lightgray", "lightgreen", "lightcoral"]
+            for patch, color in zip(box_plot["boxes"], colors):
+                patch.set_facecolor(color)
+                patch.set_alpha(0.7)
 
-    # Save the single comprehensive boxplot
-    save_path = os.path.join(dirs["figs"], "param_boxplots.png")
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
-    plt.close()  # Close figure to free memory
+            # Styling
+            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            ax.set_ylabel(col, fontsize=10)
+            ax.grid(True, alpha=0.3, axis="y")
+
+            # Rotate x-axis labels for better readability
+            ax.tick_params(axis="x", rotation=45)
+
+        # Hide unused subplots if needed
+        for idx in range(n_plots, n_rows * n_cols):
+            row = idx // max_cols
+            col_idx = idx % max_cols
+            axes[row, col_idx].set_visible(False)
+
+        # Adjust layout and save
+        plt.suptitle("Numeric Parameters Boxplots Comparison", fontsize=16, fontweight="bold", y=0.98)
+        plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
+
+        # Save the numeric parameters boxplot
+        save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.png")
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(fig)
+    else:
+        print("No numeric parameters found for boxplot analysis.")
 
 
 def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
@@ -720,55 +790,162 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
 
     stats = []
 
-    # Create the single comprehensive plot
-    fig, axes = plt.subplots(len(numeric_cols), 1, figsize=(12, 4 * len(numeric_cols)))
+    # Calculate grid dimensions with max 4 columns
+    max_cols = 4
+    n_plots = len(numeric_cols)
+    n_cols = min(n_plots, max_cols)
+    n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
-    # Handle single parameter case
-    if len(numeric_cols) == 1:
-        axes = [axes]
+    # Create grid layout
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+
+    # Handle different array shapes
+    if n_plots == 1:
+        axes = np.array([axes])
+    elif n_rows == 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1:
+        axes = axes.reshape(-1, 1)
 
     # Analyze trend for each numeric parameter
-    for i, col in enumerate(numeric_cols):
-        ax = axes[i]
+    for plot_idx, col in enumerate(numeric_cols):
+        row = plot_idx // max_cols
+        col_idx = plot_idx % max_cols
+        ax = axes[row, col_idx]
 
         # Extract parameter values and corresponding loss values
         x = df[col].values
         y = df["loss"].values
 
-        # Fit linear trend line using least squares
-        slope, intercept = np.polyfit(x, y, 1)
+        # Remove any infinite or NaN values
+        mask = np.isfinite(x) & np.isfinite(y)
+        x_clean = x[mask]
+        y_clean = y[mask]
 
-        # Calculate correlation coefficient
-        r = np.corrcoef(x, y)[0, 1]  # Pearson correlation coefficient
+        # Check if we have enough valid data points
+        if len(x_clean) < 2:
+            print(f"Warning: Not enough valid data points for parameter '{col}'. Skipping trend analysis.")
+            ax.text(
+                0.5,
+                0.5,
+                f"Insufficient data\nfor {col}",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=12,
+                bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.5),
+            )
+            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            stats.append(
+                {"Parameter": col, "Slope": np.nan, "Correlation": np.nan, "Status": "Insufficient data"}
+            )
+            continue
+
+        # Check for constant values (no variance)
+        if np.var(x_clean) == 0 or np.var(y_clean) == 0:
+            print(f"Warning: Parameter '{col}' or loss has no variance. Skipping trend analysis.")
+            ax.text(
+                0.5,
+                0.5,
+                f"No variance in\n{col} or loss",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=12,
+                bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.5),
+            )
+            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            stats.append({"Parameter": col, "Slope": 0.0, "Correlation": 0.0, "Status": "No variance"})
+            continue
+
+        try:
+            # Try to fit linear trend line using least squares
+            slope, intercept = np.polyfit(x_clean, y_clean, 1)
+
+            # Calculate correlation coefficient
+            r = np.corrcoef(x_clean, y_clean)[0, 1]
+
+            # Check if correlation is valid
+            if np.isnan(r):
+                r = 0.0
+
+            fit_status = "Success"
+
+        except (np.linalg.LinAlgError, ValueError) as e:
+            print(f"Warning: Could not fit trend line for parameter '{col}': {e}")
+            # Set default values
+            slope = 0.0
+            intercept = np.mean(y_clean) if len(y_clean) > 0 else 0.0
+            r = 0.0
+            fit_status = "Failed - using defaults"
 
         # Store statistics for this parameter
-        stats.append({"Parameter": col, "Slope": slope, "Correlation": r})
+        stats.append(
+            {
+                "Parameter": col,
+                "Slope": slope,
+                "Correlation": r,
+                "Status": fit_status,
+                "Data_Points": len(x_clean),
+                "X_Range": f"[{x_clean.min():.3f}, {x_clean.max():.3f}]" if len(x_clean) > 0 else "N/A",
+                "Y_Range": f"[{y_clean.min():.3f}, {y_clean.max():.3f}]" if len(y_clean) > 0 else "N/A",
+            }
+        )
 
-        # Generate points for plotting fitted line
-        xs = np.linspace(x.min(), x.max(), 100)
-        ys = slope * xs + intercept
+        # Create scatter plot first
+        ax.scatter(x_clean, y_clean, s=10, edgecolor="black", linewidth=0.2, alpha=0.6)
+
+        # Generate points for plotting fitted line CORRECTLY
+        if len(x_clean) > 1 and np.var(x_clean) > 0 and abs(slope) > 1e-12:
+            # Use the actual data range for x values
+            x_min, x_max = x_clean.min(), x_clean.max()
+
+            # Calculate corresponding y values using the fitted line equation: y = slope * x + intercept
+            y_at_x_min = slope * x_min + intercept
+            y_at_x_max = slope * x_max + intercept
+
+            # Plot the line using only the endpoints to ensure correct visualization
+            ax.plot([x_min, x_max], [y_at_x_min, y_at_x_max], linewidth=2, color="red", alpha=0.8)
+
+            # Verify the slope calculation is correct by checking the line's visual slope
+            # Visual slope = (y_max - y_min) / (x_max - x_min) should equal our calculated slope
+            visual_slope = (y_at_x_max - y_at_x_min) / (x_max - x_min)
+
+            # Debug print to verify consistency (remove in production)
+            if abs(visual_slope - slope) > 1e-10:
+                print(
+                    f"Warning: Slope mismatch for {col}. Calculated: {slope:.6f}, Visual: {visual_slope:.6f}"
+                )
+        else:
+            # For flat line case (slope ≈ 0)
+            y_flat = intercept
+            ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
 
         # Determine trend direction for legend
-        if slope > 0:
-            trend_legend = "Tends to higher parameter values"
+        if abs(slope) < 1e-6:
+            trend_legend = "No clear trend"
+        elif slope > 0:
+            trend_legend = "Higher parameter → HIGHER Study Value"
         else:
-            trend_legend = "Tends to lower parameter values"
+            trend_legend = "Higher parameter → LOWER Study Value"
 
-        # Create scatter plot with trend line
-        # Plot individual trials as small points with black edges
-        ax.scatter(x, y, s=10, edgecolor="black", linewidth=0.2, alpha=0.6)
-        # Plot fitted linear trend line
-        ax.plot(xs, ys, linewidth=2, color="red", label=trend_legend)
-
-        ax.set_xlabel(col, fontsize=12)
-        ax.set_ylabel("Study Value", fontsize=12)
+        ax.set_xlabel(col, fontsize=10)
+        ax.set_ylabel("Study Value", fontsize=10)
         ax.set_title(f"{col}", fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
-        ax.legend(loc="best", fontsize=10)
+
+        # Add legend with trend information
+        if abs(slope) > 1e-6:
+            ax.plot([], [], linewidth=2, color="red", label=trend_legend)  # Dummy plot for legend
+        else:
+            ax.plot([], [], linewidth=2, color="gray", label=trend_legend)  # Dummy plot for legend
+        ax.legend(loc="best", fontsize=8)
 
         # Add text box with statistics
-        stats_text = f"Slope: {slope:.4f}\n"
+        stats_text = f"Slope: {slope:.6f}\n"  # Show more decimal places for slope
         stats_text += f"Correlation: {r:.4f}"
+        if fit_status != "Success":
+            stats_text += f"\nStatus: {fit_status}"
 
         ax.text(
             0.02,
@@ -778,14 +955,22 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
             verticalalignment="top",
             horizontalalignment="left",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-            fontsize=9,
+            fontsize=8,
             fontfamily="monospace",
         )
 
-    plt.tight_layout()
+    # Hide unused subplots if needed
+    for idx in range(n_plots, n_rows * n_cols):
+        row = idx // max_cols
+        col_idx = idx % max_cols
+        axes[row, col_idx].set_visible(False)
 
-    # Save the single comprehensive trend plot
-    save_path = os.path.join(dirs["figs"], "param_trends.png")
+    # Adjust layout and save
+    plt.suptitle("Parameter-Study Value Trend Analysis", fontsize=16, fontweight="bold", y=0.98)
+    plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
+
+    # Save the comprehensive trend plot
+    save_path = os.path.join(dirs["figs"], "params_trends.png")
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()  # Close figure to free memory
 
@@ -813,129 +998,245 @@ def plot_optimal_ranges_analysis(
         print("No numeric parameters to analyze")
         return
 
-    # Calculate optimal ranges for each parameter
+    # Process all parameters, even those with insufficient data
     ranges_data = []
+
     for col in numeric_cols:
-        best_values = best[col]
-        all_values = df[col]
+        best_values = best[col].dropna()  # Remove NaN values
+        all_values = df[col].dropna()  # Remove NaN values
 
-        ranges_data.append(
-            {
-                "parameter": col,
-                "conservative_min": best_values.quantile(0.25),
-                "conservative_max": best_values.quantile(0.75),
-                "aggressive_min": best_values.quantile(0.05),
-                "aggressive_max": best_values.quantile(0.95),
-                "best_median": best_values.median(),
-                "all_values": all_values,
-                "best_values": best_values,
-            }
-        )
+        # Always add the parameter, but mark status for plotting
+        param_data = {
+            "parameter": col,
+            "all_values": all_values,
+            "best_values": best_values,
+            "plottable": True,
+            "error_message": None,
+        }
 
-    # Create the single comprehensive plot
-    fig, axes = plt.subplots(len(numeric_cols), 1, figsize=(12, 4 * len(numeric_cols)))
+        # Check if we have enough valid data points
+        if len(best_values) < 2:
+            param_data["plottable"] = False
+            param_data["error_message"] = f"Insufficient data in best trials\n({len(best_values)} points)"
+        elif len(all_values) < 2:
+            param_data["plottable"] = False
+            param_data["error_message"] = f"Insufficient data in all trials\n({len(all_values)} points)"
+        elif best_values.nunique() <= 1:
+            param_data["plottable"] = False
+            param_data["error_message"] = "No variance in best trials\n(all values identical)"
+        else:
+            # Calculate ranges only if data is valid
+            param_data.update(
+                {
+                    "conservative_min": best_values.quantile(0.25),
+                    "conservative_max": best_values.quantile(0.75),
+                    "aggressive_min": best_values.quantile(0.05),
+                    "aggressive_max": best_values.quantile(0.95),
+                    "best_median": best_values.median(),
+                }
+            )
 
-    # Handle single parameter case
-    if len(numeric_cols) == 1:
-        axes = [axes]
+        ranges_data.append(param_data)
 
-    for i, data in enumerate(ranges_data):
-        ax = axes[i]
+    # Calculate grid dimensions with max 4 columns
+    max_cols = 4
+    n_plots = len(numeric_cols)  # Use all parameters, not just valid ones
+    n_cols = min(n_plots, max_cols)
+    n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
+
+    # Create grid layout
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+
+    # Handle different array shapes
+    if n_plots == 1:
+        axes = np.array([axes])
+    elif n_rows == 1:
+        axes = axes.reshape(1, -1)
+    elif n_cols == 1:
+        axes = axes.reshape(-1, 1)
+
+    plottable_count = 0
+    for plot_idx, data in enumerate(ranges_data):
+        row = plot_idx // max_cols
+        col_idx = plot_idx % max_cols
+        ax = axes[row, col_idx]
+
         col = data["parameter"]
 
-        # Plot histograms
-        ax.hist(
-            data["all_values"],
-            bins=50,
-            alpha=0.3,
-            color="gray",
-            label="All trials",
-            density=True,
-            edgecolor="black",
-            linewidth=0.5,
-        )
-        ax.hist(
-            data["best_values"],
-            bins=30,
-            alpha=0.7,
-            color="green",
-            label="Best trials",
-            density=True,
-            edgecolor="darkgreen",
-            linewidth=0.8,
-        )
+        if not data["plottable"]:
+            # Create blank graph with error message
+            ax.text(
+                0.5,
+                0.5,
+                f"Parameter: {col}\n\n"
+                f"Analysis not possible\n\n"
+                f"Reason:\n{data['error_message']}\n\n"
+                f"Data points:\n"
+                f"All trials: {len(data['all_values'])}\n"
+                f"Best trials: {len(data['best_values'])}",
+                ha="center",
+                va="center",
+                transform=ax.transAxes,
+                fontsize=10,
+                bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.8),
+                linespacing=1.5,
+            )
+            ax.set_title(f"{col} (No Analysis)", fontsize=14, fontweight="bold", color="red")
+            ax.set_xlabel(col, fontsize=10)
+            ax.set_ylabel("Analysis not available", fontsize=10)
+            ax.grid(True, alpha=0.3)
 
-        # Add range indicators
-        # Conservative range (25th-75th percentile of best trials)
-        ax.axvline(
-            data["conservative_min"],
-            color="red",
-            linestyle="--",
-            alpha=0.8,
-            linewidth=2,
-            label="Conservative range (25%-75%)",
-        )
-        ax.axvline(data["conservative_max"], color="red", linestyle="--", alpha=0.8, linewidth=2)
+            # Remove ticks for cleaner look
+            ax.set_xticks([])
+            ax.set_yticks([])
 
-        # Aggressive range (5th-95th percentile of best trials)
-        ax.axvline(
-            data["aggressive_min"],
-            color="blue",
-            linestyle=":",
-            alpha=0.8,
-            linewidth=2,
-            label="Aggressive range (5%-95%)",
-        )
-        ax.axvline(data["aggressive_max"], color="blue", linestyle=":", alpha=0.8, linewidth=2)
+        else:
+            # Plot normal analysis
+            plottable_count += 1
+            try:
+                # Plot histograms with error handling
+                ax.hist(
+                    data["all_values"],
+                    bins=min(50, max(10, len(data["all_values"]) // 2)),  # Adaptive bin count with minimum
+                    alpha=0.3,
+                    color="gray",
+                    label="All trials",
+                    density=True,
+                    edgecolor="black",
+                    linewidth=0.5,
+                )
+                ax.hist(
+                    data["best_values"],
+                    bins=min(30, max(10, len(data["best_values"]) // 2)),  # Adaptive bin count with minimum
+                    alpha=0.7,
+                    color="green",
+                    label="Best trials",
+                    density=True,
+                    edgecolor="darkgreen",
+                    linewidth=0.8,
+                )
 
-        # Best median
-        ax.axvline(
-            data["best_median"],
-            color="black",
-            linestyle="-",
-            alpha=0.9,
-            linewidth=2,
-            label="Best trials median",
-        )
+                # Add range indicators only if values are finite
+                if np.isfinite(data["conservative_min"]) and np.isfinite(data["conservative_max"]):
+                    ax.axvline(
+                        data["conservative_min"],
+                        color="red",
+                        linestyle="--",
+                        alpha=0.8,
+                        linewidth=2,
+                        label="25%-75%",
+                    )
+                    ax.axvline(data["conservative_max"], color="red", linestyle="--", alpha=0.8, linewidth=2)
 
-        # Add shaded regions for optimal ranges
-        ax.axvspan(
-            data["conservative_min"], data["conservative_max"], alpha=0.1, color="red", label="_nolegend_"
-        )
-        ax.axvspan(
-            data["aggressive_min"], data["aggressive_max"], alpha=0.05, color="blue", label="_nolegend_"
-        )
+                    # Add shaded region for conservative range
+                    ax.axvspan(
+                        data["conservative_min"],
+                        data["conservative_max"],
+                        alpha=0.1,
+                        color="red",
+                        label="_nolegend_",
+                    )
 
-        # Formatting
-        ax.set_title(f"{col}", fontsize=14, fontweight="bold")
-        ax.set_xlabel(col, fontsize=12)
-        ax.set_ylabel("Density", fontsize=12)
-        ax.grid(True, alpha=0.3)
-        ax.legend(loc="upper right", fontsize=10)
+                if np.isfinite(data["aggressive_min"]) and np.isfinite(data["aggressive_max"]):
+                    ax.axvline(
+                        data["aggressive_min"],
+                        color="blue",
+                        linestyle=":",
+                        alpha=0.8,
+                        linewidth=2,
+                        label="5%-95%",
+                    )
+                    ax.axvline(data["aggressive_max"], color="blue", linestyle=":", alpha=0.8, linewidth=2)
 
-        # Add text box with statistics
-        stats_text = f"Conservative: [{data['conservative_min']:.3f}, {data['conservative_max']:.3f}]\n"
-        stats_text += f"Aggressive: [{data['aggressive_min']:.3f}, {data['aggressive_max']:.3f}]\n"
-        stats_text += f"Best Median: {data['best_median']:.3f}"
+                    # Add shaded region for aggressive range
+                    ax.axvspan(
+                        data["aggressive_min"],
+                        data["aggressive_max"],
+                        alpha=0.05,
+                        color="blue",
+                        label="_nolegend_",
+                    )
 
-        ax.text(
-            0.02,
-            0.98,
-            stats_text,
-            transform=ax.transAxes,
-            verticalalignment="top",
-            horizontalalignment="left",
-            bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-            fontsize=9,
-            fontfamily="monospace",
-        )
+                # Best median
+                if np.isfinite(data["best_median"]):
+                    ax.axvline(
+                        data["best_median"],
+                        color="black",
+                        linestyle="-",
+                        alpha=0.9,
+                        linewidth=2,
+                        label="Median (best)",
+                    )
 
-    plt.tight_layout()
+                # Formatting
+                ax.set_title(f"{col}", fontsize=14, fontweight="bold", color="green")
+                ax.set_xlabel(col, fontsize=10)
+                ax.set_ylabel("Density", fontsize=10)
+                ax.grid(True, alpha=0.3)
+                ax.legend(loc="upper right", fontsize=8)
 
-    # Save the single comprehensive plot to figs directory
-    save_path = os.path.join(dirs["figs"], "param_optimal_ranges.png")
+                # Add text box with statistics - format values safely
+                def safe_format(value):
+                    return format_numeric_value(value) if np.isfinite(value) else "N/A"
+
+                stats_text = f"25%-75% : [{safe_format(data['conservative_min'])}, {safe_format(data['conservative_max'])}]\n"
+                stats_text += f"5%-95% : [{safe_format(data['aggressive_min'])}, {safe_format(data['aggressive_max'])}]"
+
+                ax.text(
+                    0.02,
+                    0.98,
+                    stats_text,
+                    transform=ax.transAxes,
+                    verticalalignment="top",
+                    horizontalalignment="left",
+                    bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+                    fontsize=8,
+                    fontfamily="monospace",
+                )
+
+            except Exception as e:
+                print(f"Error plotting parameter '{col}': {e}")
+                # Create an error plot but still show the parameter
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"Parameter: {col}\n\n"
+                    f"Plotting error occurred\n\n"
+                    f"Error details:\n{str(e)[:100]}...",
+                    ha="center",
+                    va="center",
+                    transform=ax.transAxes,
+                    fontsize=10,
+                    bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.8),
+                    linespacing=1.5,
+                )
+                ax.set_title(f"{col} (Error)", fontsize=14, fontweight="bold", color="red")
+                ax.set_xlabel(col, fontsize=10)
+                ax.set_ylabel("Error occurred", fontsize=10)
+                ax.grid(True, alpha=0.3)
+                ax.set_xticks([])
+                ax.set_yticks([])
+
+    # Hide unused subplots if needed
+    for idx in range(n_plots, n_rows * n_cols):
+        row = idx // max_cols
+        col_idx = idx % max_cols
+        axes[row, col_idx].set_visible(False)
+
+    # Adjust layout and save
+    plt.suptitle(
+        f"Parameter Optimal Ranges Analysis ({plottable_count}/{len(numeric_cols)} parameters analyzed)",
+        fontsize=16,
+        fontweight="bold",
+        y=0.98,
+    )
+    plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
+
+    # Save the comprehensive plot
+    save_path = os.path.join(dirs["figs"], "params_optimal_ranges.png")
     plt.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close()
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                    Main Function for the Analysis Pipeline                   #
@@ -996,7 +1297,7 @@ def analyze_study(
     plot_spearman_correlation(df, numeric_cols, dirs)
     print("Creating boxplots for parameter distributions...")
     plot_parameter_boxplots(df, best, worst, numeric_cols, dirs)
-    print("Performing trend analysis for parameter-loss relationships...")
+    print("Performing trend analysis...")
     plot_trend_analysis(df, numeric_cols, dirs)
     print("Creating optimal ranges analysis...")
     plot_optimal_ranges_analysis(df, best, numeric_cols, dirs)
