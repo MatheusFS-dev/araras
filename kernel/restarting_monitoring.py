@@ -332,11 +332,12 @@ class ChildProcessCleanup:
         except psutil.NoSuchProcess:
             return 0
 
+
 # ——————————————————————————— Notifications Manager —————————————————————————— #
 class EmailNotificationManager:
     """Handles email notifications for restart events with configurable paths."""
 
-    __slots__ = ("recipients_file", "credentials_file", "email_enabled")  # Memory optimization
+    __slots__ = ("recipients_file", "credentials_file", "email_enabled")
 
     def __init__(self, recipients_file: Optional[str] = None, credentials_file: Optional[str] = None):
         """Initialize email manager with configurable paths.
@@ -424,14 +425,11 @@ class EmailNotificationManager:
         except Exception as e:
             print(f"Failed to send restart failure email: {e}")
 
-    def send_task_completion_alert(
-        self, title: str
-    ) -> None:
+    def send_task_completion_alert(self, title: str) -> None:
         """Send task completion notification.
 
         Args:
             title: Process title
-            
         """
         if not self.email_enabled:
             return
@@ -440,12 +438,85 @@ class EmailNotificationManager:
             notify_training_success(
                 recipients_file=self.recipients_file,
                 credentials_file=self.credentials_file,
-                subject=f"🎉 {title} Training Complete",
+                subject=f"Training Complete: {title}",
             )
             print("Task completion email alert sent")
 
         except Exception as e:
             print(f"Failed to send task completion email: {e}")
+
+
+# ——————————————————————————— Notebook Converter ———————————————————————————— #
+class NotebookConverter:
+    """Efficient notebook to Python conversion with minimal memory overhead."""
+
+    @staticmethod
+    def convert_notebook_to_python(notebook_path: Path) -> Path:
+        """Convert Jupyter notebook to Python file with same name.
+
+        Args:
+            notebook_path: Path to .ipynb file
+
+        Returns:
+            Path to generated .py file
+
+        Raises:
+            ImportError: If notebook dependencies missing
+            ValueError: If notebook conversion fails
+        """
+        try:
+            import nbformat
+        except ImportError as e:
+            raise ImportError("Missing notebook dependencies. " "Please install: pip install nbformat") from e
+
+        # Target Python file path (same directory, same name, .py extension)
+        python_path = notebook_path.with_suffix(".py")
+
+        try:
+            # Load notebook with minimal memory footprint
+            with open(notebook_path, "r", encoding="utf-8") as f:
+                notebook = nbformat.read(f, as_version=4)
+
+            # Extract code cells efficiently
+            python_lines = [
+                "#!/usr/bin/env python",
+                "# -*- coding: utf-8 -*-",
+                f"# Converted from: {notebook_path.name}",
+                f'# Generated on: {time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())}',
+                "",
+            ]
+
+            # Process cells with memory-efficient iteration
+            for cell_idx, cell in enumerate(notebook.cells):
+                if cell.cell_type == "code" and cell.source.strip():
+                    # Add cell separator for debugging
+                    python_lines.append(f"# Cell {cell_idx + 1}")
+
+                    # Clean and add source code
+                    source_lines = cell.source.strip().split("\n")
+                    python_lines.extend(source_lines)
+                    python_lines.append("")  # Empty line between cells
+
+            # Write to Python file atomically
+            temp_path = python_path.with_suffix(".py.tmp")
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(python_lines))
+
+                # Atomic rename for consistency
+                temp_path.replace(python_path)
+
+            except Exception:
+                # Cleanup temp file on error
+                if temp_path.exists():
+                    temp_path.unlink()
+                raise
+
+            print(f"Converted notebook to: {python_path}")
+            return python_path
+
+        except Exception as e:
+            raise ValueError(f"Failed to convert notebook {notebook_path}: {e}") from e
 
 
 # ————————————————————————————— File Type Handler ———————————————————————————— #
@@ -455,7 +526,7 @@ class FileTypeHandler:
     # Class-level cache for performance optimization (bounded to prevent memory growth)
     _file_type_cache: Dict[str, str] = {}
     _command_cache: Dict[str, List[str]] = {}
-    _CACHE_LIMIT = 100  # Constant for cache size limit
+    _CACHE_LIMIT = 100
 
     @classmethod
     def get_file_type(cls, file_path: Path) -> str:
@@ -517,9 +588,8 @@ class FileTypeHandler:
             command = [sys.executable, "-u", str(file_path), success_flag_file]
 
         elif file_type == "notebook":
-            # Create wrapper script for notebook execution
-            wrapper_script = cls._create_notebook_wrapper(file_path, success_flag_file)
-            command = [sys.executable, "-u", wrapper_script]
+            # This should never be reached after conversion, but keeping for safety
+            raise ValueError(f"Notebook files should be converted to Python first: {file_path}")
 
         else:
             raise ValueError(f"Unsupported file type: {file_type} for {file_path}")
@@ -529,71 +599,6 @@ class FileTypeHandler:
             cls._command_cache[cache_key] = command.copy()
 
         return command, file_type
-
-    @classmethod
-    def _create_notebook_wrapper(cls, notebook_path: Path, success_flag_file: str) -> str:
-        """Create a Python wrapper script for notebook execution.
-
-        Args:
-            notebook_path: Path to notebook file
-            success_flag_file: Path to success flag file
-
-        Returns:
-            Path to created wrapper script
-        """
-        # Create temporary wrapper script
-        wrapper_fd, wrapper_path = tempfile.mkstemp(suffix="_notebook_wrapper.py")
-
-        # Efficient notebook execution wrapper using nbformat and exec
-        wrapper_content = f'''
-import json
-import sys
-from pathlib import Path
-
-def execute_notebook():
-    """Execute notebook cells and handle success flag."""
-    try:
-        import nbformat
-        from nbconvert.preprocessors import ExecutePreprocessor
-        
-        # Load notebook
-        with open(r"{notebook_path}", 'r', encoding='utf-8') as f:
-            nb = nbformat.read(f, as_version=4)
-        
-        # Configure execution preprocessor
-        ep = ExecutePreprocessor(
-            timeout=None,  # No timeout for long-running cells
-            kernel_name='python3',
-            allow_errors=False  # Stop on first error
-        )
-        
-        # Execute notebook in current working directory
-        ep.preprocess(nb, {{'metadata': {{'path': r"{notebook_path.parent}"}}}})
-        
-        # Write success flag on completion
-        Path(r"{success_flag_file}").write_text("SUCCESS")
-        print("Notebook executed successfully")
-        
-    except ImportError as e:
-        print(f"Missing dependencies: {{e}}")
-        print("Please install: pip install nbformat nbconvert jupyter")
-        sys.exit(1)
-    except Exception as e:
-        print(f"Notebook execution failed: {{e}}")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    execute_notebook()
-'''
-
-        with os.fdopen(wrapper_fd, "w") as f:
-            f.write(wrapper_content)
-
-        # Set executable permissions on Unix systems
-        if os.name != "nt":
-            os.chmod(wrapper_path, 0o755)
-
-        return wrapper_path
 
     @classmethod
     def validate_file(cls, file_path: str) -> Path:
@@ -624,22 +629,12 @@ if __name__ == "__main__":
 
         return path_obj.resolve()
 
-    @classmethod
-    def cleanup_wrapper_scripts(cls) -> None:
-        """Clean up temporary wrapper scripts created for notebook execution."""
-        # Find and remove temporary wrapper scripts in batch operation
-        temp_dir = Path(tempfile.gettempdir())
-        for wrapper_file in temp_dir.glob("*_notebook_wrapper.py"):
-            try:
-                wrapper_file.unlink()
-            except OSError:
-                pass  # Ignore cleanup errors
 
 # ————————————————————————————— Terminal Launcher ———————————————————————————— #
 class SimpleTerminalLauncher:
     """Minimal terminal launcher for cross-platform execution."""
 
-    __slots__ = ("system",)  # Memory optimization
+    __slots__ = ("system",)
 
     def __init__(self):
         """Initialize launcher with OS detection."""
@@ -687,9 +682,10 @@ class SimpleTerminalLauncher:
         process.pid_file = pid_file
         return process
 
+
 # —————————————————————————————— Restart Manager ————————————————————————————— #
 class FlagBasedRestartManager:
-    """Enhanced restart manager with comprehensive email notifications."""
+    """Enhanced restart manager with comprehensive email notifications and file cleanup."""
 
     __slots__ = (
         "max_restarts",
@@ -699,12 +695,13 @@ class FlagBasedRestartManager:
         "current_terminal_process",
         "current_target_pid",
         "monitor_info",
-        "wrapper_scripts",
         "email_manager",
         "process_title",
         "recipients_file",
         "credentials_file",
         "child_cleanup",
+        "converted_python_file",
+        "original_was_notebook",
     )
 
     def __init__(
@@ -731,7 +728,10 @@ class FlagBasedRestartManager:
         self.current_terminal_process: Optional[subprocess.Popen] = None
         self.current_target_pid: Optional[int] = None
         self.monitor_info: Optional[Dict[str, Any]] = None
-        self.wrapper_scripts: List[str] = []
+
+        # File cleanup tracking
+        self.converted_python_file: Optional[Path] = None
+        self.original_was_notebook: bool = False
 
         # Email configuration
         self.recipients_file = recipients_file or "./json/recipients.json"
@@ -760,6 +760,18 @@ class FlagBasedRestartManager:
         validated_path = FileTypeHandler.validate_file(file_path)
         file_type = FileTypeHandler.get_file_type(validated_path)
 
+        # Convert notebook to Python if needed
+        if file_type == "notebook":
+            print(f"Converting notebook to Python: {validated_path.name}")
+            try:
+                self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
+                self.original_was_notebook = True
+                validated_path = self.converted_python_file
+                file_type = "python"
+            except Exception as e:
+                print(f"Notebook conversion failed: {e}")
+                raise
+
         working_dir = str(validated_path.parent)
         self.process_title = title or validated_path.stem
         flag_path = Path(success_flag_file).resolve()
@@ -783,7 +795,7 @@ class FlagBasedRestartManager:
                 start_time = time.time()
 
                 try:
-                    # Launch process with file type awareness
+                    # Launch process
                     target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     print(f"Process started: PID {target_pid}")
 
@@ -845,14 +857,14 @@ class FlagBasedRestartManager:
             )
         finally:
             self._cleanup_all()
-            self._cleanup_wrapper_scripts()
+            self._cleanup_converted_file()
             print(f"Total restarts: {self.restart_count}")
 
     def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
-        """Launch target process with file type awareness.
+        """Launch target process.
 
         Args:
-            file_path: Validated path to file
+            file_path: Validated path to Python file
             working_dir: Working directory
             success_flag_file: Success flag file path
 
@@ -862,14 +874,8 @@ class FlagBasedRestartManager:
         Raises:
             OSError: If PID discovery fails
         """
-        # Build command based on file type
+        # Build command for Python file
         command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
-
-        # Track wrapper scripts for cleanup
-        if execution_type == "notebook" and len(command) > 2:
-            wrapper_script = command[2]  # Third element is wrapper script path
-            self.wrapper_scripts.append(wrapper_script)
-            print(f"Executing notebook via wrapper: {Path(wrapper_script).name}")
 
         launcher = SimpleTerminalLauncher()
         self.current_terminal_process = launcher.launch(command, working_dir)
@@ -982,7 +988,7 @@ class FlagBasedRestartManager:
             except Exception as e:
                 print(f"Child cleanup failed (non-fatal): {e}")
 
-            # Exponential backoff
+            # Exponential backoff with cap at 30 seconds
             delay = min(self.restart_delay * (1.2 ** (self.restart_count - 1)), 30.0)
             print(f"Restarting in {delay:.1f}s ({self.restart_count}/{self.max_restarts})")
             self._sleep(delay)
@@ -1027,15 +1033,22 @@ class FlagBasedRestartManager:
 
             self.current_terminal_process = None
 
-    def _cleanup_wrapper_scripts(self) -> None:
-        """Clean up notebook wrapper scripts to prevent disk clutter."""
-        for wrapper_script in self.wrapper_scripts:
+    def _cleanup_converted_file(self) -> None:
+        """Delete converted Python file if original was a notebook.
+
+        Only deletes the file if it was converted from a notebook during this session.
+        Direct .py files are never deleted.
+        """
+        if self.original_was_notebook and self.converted_python_file:
             try:
-                if os.path.exists(wrapper_script):
-                    os.unlink(wrapper_script)
-            except:
-                pass
-        self.wrapper_scripts.clear()
+                if self.converted_python_file.exists():
+                    self.converted_python_file.unlink()
+                    print(f"Cleaned up converted file: {self.converted_python_file}")
+            except Exception as e:
+                print(f"Warning: Failed to cleanup converted file {self.converted_python_file}: {e}")
+            finally:
+                self.converted_python_file = None
+                self.original_was_notebook = False
 
     def _sleep(self, duration: float) -> None:
         """Interruptible sleep with minimal CPU usage.
@@ -1189,7 +1202,7 @@ def run_auto_restart(
     recipients_file: Optional[str] = None,
     credentials_file: Optional[str] = None,
 ) -> None:
-    """Main function with enhanced email notification support and configurable email paths.
+    """Main function with notebook conversion, file cleanup, and enhanced email notification support.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
@@ -1216,10 +1229,10 @@ def run_auto_restart(
         # Check notebook dependencies if needed
         if file_type == "notebook":
             try:
-                import nbformat, nbconvert, jupyter
+                import nbformat
             except ImportError as e:
                 raise ImportError(
-                    "Missing notebook dependencies. " "Please install: pip install nbformat nbconvert jupyter"
+                    "Missing notebook dependencies. " "Please install: pip install nbformat"
                 ) from e
 
         # Create enhanced restart manager with configurable email paths
