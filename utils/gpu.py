@@ -13,9 +13,78 @@ Example Usage:
 
 import tensorflow as tf
 import subprocess
+from IPython.display import clear_output
 
 
-def get_gpu_info() -> None:
+# ANSI color codes
+RESET = "\033[0m"
+BOLD = "\033[1m"
+BLUE = "\033[34m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+CYAN = "\033[36m"
+
+
+def _print_nvidia_smi_info() -> None:
+    """
+    Prints GPU memory information using nvidia-smi command.
+
+    This provides total GPU memory and current usage from the system level,
+    which is more comprehensive than TensorFlow's view.
+
+    Logic:
+        -> Execute nvidia-smi command with specific query format
+        -> Parse output to extract memory information
+        -> Handle cases where nvidia-smi is not available
+
+    Returns:
+        None
+    """
+    try:
+        # Query GPU memory using nvidia-smi
+        result = subprocess.run(
+            [
+                "nvidia-smi",
+                "--query-gpu=name,memory.total,memory.used,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+
+        if result.returncode == 0:
+            print(f"\n{BOLD}{BLUE}System-level GPU Memory (nvidia-smi):{RESET}")
+            lines = result.stdout.strip().split("\n")
+
+            for i, line in enumerate(lines):
+                # Parse CSV output: name, total, used, free (all in MB)
+                parts = [part.strip() for part in line.split(",")]
+                if len(parts) >= 4:
+                    name, total_mb, used_mb, free_mb = parts[:4]
+
+                    # Convert MB to GB
+                    total_gb = float(total_mb) / 1024
+                    used_gb = float(used_mb) / 1024
+                    free_gb = float(free_mb) / 1024
+                    utilization = (used_gb / total_gb) * 100
+
+                    print(f"GPU {i} ({name}):")
+                    print(f"Total Memory: {total_gb:.2f} GB")
+                    # Used in red
+                    print(f"{RED}Used Memory: {used_gb:.2f} GB ({utilization:.1f}%) {RESET}")
+                    # Free in green
+                    print(f"{GREEN}Free Memory: {free_gb:.2f} GB{RESET}")
+
+    except (subprocess.TimeoutExpired, subprocess.CalledProcessError, FileNotFoundError):
+        # Warning in red
+        print(f"\n{RED}nvidia-smi not available or failed to execute{RESET}")
+    except Exception as e:
+        # Error in red
+        print(f"\n{RED}Error querying nvidia-smi: {e}{RESET}")
+
+
+def get_gpu_info(clear: bool = True) -> None:
     """
     Prints detailed TensorFlow and GPU configuration information.
 
@@ -25,14 +94,9 @@ def get_gpu_info() -> None:
       - Detected CUDA and cuDNN versions (if applicable)
       - Availability and names of physical GPU devices
 
-    Logic:
-        -> Print TensorFlow version
-        -> Check if CUDA is supported by the TensorFlow build
-           -> If so, print CUDA and cuDNN version info
-           -> If not, note CPU-only support
-        -> List physical GPU devices
-           -> If found, print count, names, and default GPU
-           -> If none, indicate CPU-only usage
+    Args:
+        clear (bool): Whether to clear the output before printing information.
+                      Defaults to True.
 
     Raises:
         ImportError: If TensorFlow is not installed (implicit by tf import)
@@ -43,37 +107,47 @@ def get_gpu_info() -> None:
     Example:
         get_gpu_info()
     """
-    # Print the installed version of TensorFlow
+    if clear:
+        clear_output(wait=True)
+
+    # Main banner in bold blue
+    banner = "# ———————————————————————————— TensorFlow-GPU Info ——————————————————————————— #"
+    print(f"\n\n{BOLD}{BLUE}{banner}{RESET}")
+
+    # TensorFlow version
     print(f"TensorFlow Version: {tf.__version__}")
 
-    # Check if TensorFlow was compiled with CUDA (GPU) support
     if tf.test.is_built_with_cuda():
-        # Retrieve low-level build information about the TensorFlow installation
+        # Positive message in green
+        print(f"{GREEN}CUDA support detected{RESET}")
         build_info = tf.sysconfig.get_build_info()
-
-        print("CUDA support detected")
-
-        # Extract and print CUDA version; fallback to "Unknown" if not available
-        print(f"  CUDA Version: {build_info.get('cuda_version', 'Unknown')}")
-
-        # Extract and print cuDNN version; fallback to "Unknown" if not available
-        print(f"  cuDNN Version: {build_info.get('cudnn_version', 'Unknown')}")
+        print(f"CUDA Version: {build_info.get('cuda_version', 'Unknown')}")
+        print(f"cuDNN Version: {build_info.get('cudnn_version', 'Unknown')}")
     else:
-        # Indicate that only CPU execution is available
-        print("No CUDA support (CPU only)")
+        # Warning in red
+        print(f"{RED}No CUDA support (CPU only){RESET}")
 
-    # Retrieve a list of physical GPU devices accessible by TensorFlow
     gpus = tf.config.list_physical_devices("GPU")
 
     if gpus:
-        # If GPUs are found, print their count and names
         print(f"\nGPUs Detected ({len(gpus)}): {[gpu.name for gpu in gpus]}")
-
-        # Print the default GPU TensorFlow would use (if configured)
-        print(f"Default GPU device: {tf.test.gpu_device_name()}")
+        print(f"\nDefault GPU device: {tf.test.gpu_device_name()}")
     else:
-        # Indicate that no GPUs are accessible and fallback is to CPU
-        print("No GPUs found (CPU execution)")
+        # Warning in red
+        print(f"{RED}No GPUs found (CPU execution){RESET}")
+
+    print(
+        f"{BOLD}{BLUE}# ———————————————————————————————————————————————————————————————————————————— #{RESET}\n\n"
+    )
+
+    # System-level memory section
+    print(
+        f"{BOLD}{BLUE}# ————————————————— System-level GPU Memory Info (nvidia-smi) ———————————————— #{RESET}"
+    )
+    _print_nvidia_smi_info()
+    print(
+        f"{BOLD}{BLUE}# ———————————————————————————————————————————————————————————————————————————— #{RESET}\n\n"
+    )
 
 
 def check_memory_model(model: tf.keras.Model, gpu_index: int = 0, param_dtype: str = "float32") -> bool:
