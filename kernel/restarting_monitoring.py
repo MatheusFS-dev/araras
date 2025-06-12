@@ -22,7 +22,7 @@ from typing import *
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # Local imports
-from araras.email.utils import send_email
+from araras.email.utils import send_email, notify_training_success
 
 
 # —————————————————————————————— HTML templates —————————————————————————————— #
@@ -424,6 +424,30 @@ class EmailNotificationManager:
         except Exception as e:
             print(f"Failed to send restart failure email: {e}")
 
+    def send_task_completion_alert(
+        self, title: str
+    ) -> None:
+        """Send task completion notification.
+
+        Args:
+            title: Process title
+            
+        """
+        if not self.email_enabled:
+            return
+
+        try:
+            notify_training_success(
+                recipients_file=self.recipients_file,
+                credentials_file=self.credentials_file,
+                subject=f"🎉 {title} Training Complete",
+            )
+            print("Task completion email alert sent")
+
+        except Exception as e:
+            print(f"Failed to send task completion email: {e}")
+
+
 # ————————————————————————————— File Type Handler ———————————————————————————— #
 class FileTypeHandler:
     """Efficient file type detection and command generation with caching."""
@@ -789,6 +813,7 @@ class FlagBasedRestartManager:
                     # Smart decision logic based on completion reason
                     if completion_reason == "success_flag":
                         print("Process completed successfully")
+                        self.email_manager.send_task_completion_alert(self.process_title)
                         break
                     elif completion_reason == "crashed":
                         print("Process crashed, will restart")
