@@ -1,7 +1,12 @@
 """
-Flag-based auto-restart launcher with minimal overhead.
-Supports both .py and .ipynb files with direct Jupyter execution.
-Monitors completion flags instead of exit codes for reliable restart decisions.
+This module provides a restarting monitoring system for processes with email alert capabilities.
+It monitors a process for crashes, restarts it if necessary, and sends email notifications.
+
+Usage example:
+    run_auto_restart(
+        file_path="my_script.py",
+        title="My Critical Process",
+    )
 """
 
 import os
@@ -13,36 +18,81 @@ import subprocess
 import psutil
 import platform
 from pathlib import Path
-from typing import Optional, Dict, Any, List, Tuple
+from typing import *
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# Local imports
+from araras.email.utils import send_email
 
 
-# Minimal HTML template for crash alerts only
-HTML_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#d9534f">Process Crash Alert</h2><p>Process "<strong>{title}</strong>" (PID <strong>{pid}</strong>) has crashed.</p><p>Time: {timestamp}</p></div></body></html>"""
+# —————————————————————————————— HTML templates —————————————————————————————— #
+CRASH_ALERT_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#d9534f">Process Crash Alert</h2><p>Process "<strong>{title}</strong>" (PID <strong>{pid}</strong>) has crashed.</p><p>Time: {timestamp}</p><p>Restart Count: {restart_count}</p></div></body></html>"""
 
-# Minimal monitoring script focused on crash detection only
+SUCCESS_RESTART_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#5cb85c">Successful Restart</h2><p>Process "<strong>{title}</strong>" has been successfully restarted.</p><p>Time: {timestamp}</p><p>Previous PID: {old_pid}</p><p>New PID: {new_pid}</p><p>Restart Count: {restart_count}</p></div></body></html>"""
+
+FAILED_RESTART_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#f0ad4e">Restart Failed</h2><p>Process "<strong>{title}</strong>" failed to restart after maximum attempts.</p><p>Time: {timestamp}</p><p>Final Restart Count: {restart_count}</p><p>Error: {error}</p></div></body></html>"""
+
+# —————————————— Monitoring script with email alert capabilities ————————————— #
 MONITOR_SCRIPT = """import os,sys,time,psutil,json
 sys.path.insert(0,r"{cwd}")
 
 with open(r"{pid_file}", "w") as f:
     f.write(str(os.getpid()))
 
-def send_crash_alert(pid, title, recipients, credentials):
+def send_email_alert(alert_type, data, recipients, credentials):
+    \"\"\"Send email alert based on type.\"\"\"
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
-    print(f"CRASH ALERT: {{title}} (PID {{pid}}) at {{timestamp}}")
     
     try:
         from araras.email.utils import send_email
-        send_email(
-            f"{{title}} (PID {{pid}}) crashed", 
-            "{html}".format(title=title, pid=pid, timestamp=timestamp),
-            recipients, credentials, "html"
-        )
-        print("Crash alert email sent")
+        
+        if alert_type == "crash":
+            subject = f"CRASH ALERT: {{data['title']}} (PID {{data['pid']}})"
+            html_content = "{crash_template}".format(
+                title=data['title'], 
+                pid=data['pid'], 
+                timestamp=timestamp,
+                restart_count=data.get('restart_count', 0)
+            )
+        elif alert_type == "success_restart":
+            subject = f"RESTART SUCCESS: {{data['title']}}"
+            html_content = "{success_template}".format(
+                title=data['title'],
+                timestamp=timestamp,
+                old_pid=data.get('old_pid', 'N/A'),
+                new_pid=data.get('new_pid', 'N/A'),
+                restart_count=data.get('restart_count', 0)
+            )
+        elif alert_type == "failed_restart":
+            subject = f"RESTART FAILED: {{data['title']}}"
+            html_content = "{failed_template}".format(
+                title=data['title'],
+                timestamp=timestamp,
+                restart_count=data.get('restart_count', 0),
+                error=data.get('error', 'Unknown error')
+            )
+        else:
+            return
+            
+        send_email(subject, html_content, recipients, credentials, "html")
+        print(f"{{alert_type.upper()}} email alert sent")
+        
     except Exception as e:
-        print(f"Email failed: {{e}}")
+        print(f"Email alert failed: {{e}}")
+
+def send_crash_alert(pid, title, recipients, credentials, restart_count=0):
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+    print(f"CRASH ALERT: {{title}} (PID {{pid}}) at {{timestamp}}")
+    
+    # Send crash email
+    send_email_alert("crash", {{
+        'title': title,
+        'pid': pid,
+        'restart_count': restart_count
+    }}, recipients, credentials)
     
     with open(r"{restart_file}", "w") as f:
-        json.dump({{"crashed": True, "timestamp": timestamp}}, f)
+        json.dump({{"crashed": True, "timestamp": timestamp, "restart_count": restart_count}}, f)
     
     try: os.unlink(r"{pid_file}")
     except: pass
@@ -56,6 +106,7 @@ except psutil.NoSuchProcess:
 
 count = 0
 while True:
+    # Check stop signal every 10 iterations to reduce I/O overhead
     if count % 10 == 0 and os.path.exists(r"{stop_file}"):
         try: os.unlink(r"{pid_file}")
         except: pass
@@ -65,29 +116,322 @@ while True:
     
     try:
         if not proc.is_running():
-            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}")
+            # Try to get restart count from restart file for context
+            restart_count = 0
+            try:
+                if os.path.exists(r"{restart_file}"):
+                    with open(r"{restart_file}") as f:
+                        data = json.load(f)
+                        restart_count = data.get("restart_count", 0)
+            except:
+                pass
+            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
         
-        # Only check for zombie/stopped states that indicate crashes
+        # Check for zombie/stopped states that indicate crashes
         status = proc.status()
         if status in [psutil.STATUS_ZOMBIE, psutil.STATUS_STOPPED, psutil.STATUS_DEAD]:
-            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}")
+            restart_count = 0
+            try:
+                if os.path.exists(r"{restart_file}"):
+                    with open(r"{restart_file}") as f:
+                        data = json.load(f)
+                        restart_count = data.get("restart_count", 0)
+            except:
+                pass
+            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
             
     except psutil.NoSuchProcess:
-        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}")
+        restart_count = 0
+        try:
+            if os.path.exists(r"{restart_file}"):
+                with open(r"{restart_file}") as f:
+                    data = json.load(f)
+                    restart_count = data.get("restart_count", 0)
+        except:
+            pass
+        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
     except Exception:
-        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}")
+        restart_count = 0
+        try:
+            if os.path.exists(r"{restart_file}"):
+                with open(r"{restart_file}") as f:
+                    data = json.load(f)
+                    restart_count = data.get("restart_count", 0)
+        except:
+            pass
+        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
     
     time.sleep({interval})
 
 print("Monitor completed")"""
 
 
+# ——————————————————————————— Child Process Cleanup —————————————————————————— #
+class ChildProcessCleanup:
+    """Efficient child process cleanup with graceful termination and force kill fallback."""
+
+    __slots__ = ("_current_pid", "_exclude_pids", "_termination_timeout", "_kill_timeout")
+
+    def __init__(self, termination_timeout: float = 2.0, kill_timeout: float = 1.0):
+        """Initialize cleanup manager with configurable timeouts.
+
+        Args:
+            termination_timeout: Seconds to wait for graceful termination
+            kill_timeout: Seconds to wait after force kill
+        """
+        self._current_pid = os.getpid()
+        self._exclude_pids: Set[int] = {self._current_pid}
+        self._termination_timeout = termination_timeout
+        self._kill_timeout = kill_timeout
+
+    def cleanup_children(self, exclude_pids: Optional[List[int]] = None) -> Tuple[int, int]:
+        """Clean up all child processes with optimized batch operations.
+
+        Args:
+            exclude_pids: Additional PIDs to exclude from cleanup
+
+        Returns:
+            Tuple of (terminated_count, killed_count)
+
+        Raises:
+            psutil.NoSuchProcess: If current process doesn't exist
+        """
+        # Combine exclude PIDs for efficient lookup
+        exclude_set = self._exclude_pids.copy()
+        if exclude_pids:
+            exclude_set.update(exclude_pids)
+
+        try:
+            current_process = psutil.Process(self._current_pid)
+            children = current_process.children(recursive=True)
+
+            if not children:
+                return 0, 0
+
+            # Filter children to cleanup (exclude protected PIDs)
+            targets = [child for child in children if child.pid not in exclude_set]
+
+            if not targets:
+                return 0, 0
+
+            print(f"Cleaning up {len(targets)} child processes")
+
+            # Phase 1: Graceful termination with parallel execution
+            terminated_count = self._terminate_processes(targets)
+
+            # Phase 2: Force kill remaining processes
+            killed_count = self._kill_remaining_processes(targets, exclude_set)
+
+            return terminated_count, killed_count
+
+        except psutil.NoSuchProcess:
+            raise psutil.NoSuchProcess(f"Current process {self._current_pid} not found")
+
+    def _terminate_processes(self, processes: List[psutil.Process]) -> int:
+        """Terminate processes gracefully with parallel execution.
+
+        Args:
+            processes: List of processes to terminate
+
+        Returns:
+            Number of processes successfully terminated
+        """
+        terminated_count = 0
+
+        # Parallel termination for efficiency
+        with ThreadPoolExecutor(max_workers=min(len(processes), 8)) as executor:
+            # Submit termination tasks
+            future_to_process = {executor.submit(self._safe_terminate, proc): proc for proc in processes}
+
+            # Collect results
+            for future in as_completed(future_to_process, timeout=self._termination_timeout + 1):
+                if future.result():
+                    terminated_count += 1
+
+        # Wait for graceful shutdown
+        if terminated_count > 0:
+            time.sleep(self._termination_timeout)
+
+        return terminated_count
+
+    def _safe_terminate(self, process: psutil.Process) -> bool:
+        """Safely terminate a single process with error handling.
+
+        Args:
+            process: Process to terminate
+
+        Returns:
+            True if termination signal sent successfully, False otherwise
+        """
+        try:
+            if process.is_running():
+                process.terminate()
+                return True
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+        return False
+
+    def _kill_remaining_processes(
+        self, original_processes: List[psutil.Process], exclude_set: Set[int]
+    ) -> int:
+        """Force kill processes that didn't terminate gracefully.
+
+        Args:
+            original_processes: Original list of processes to check
+            exclude_set: PIDs to exclude from force kill
+
+        Returns:
+            Number of processes force killed
+        """
+        killed_count = 0
+
+        # Re-check which processes are still running
+        for process in original_processes:
+            if process.pid in exclude_set:
+                continue
+
+            try:
+                if process.is_running():
+                    process.kill()
+                    killed_count += 1
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                # Process already gone or no permission
+                pass
+
+        # Brief wait after force kill
+        if killed_count > 0:
+            time.sleep(self._kill_timeout)
+
+        return killed_count
+
+    def add_protected_pid(self, pid: int) -> None:
+        """Add a PID to the protected (exclude) list.
+
+        Args:
+            pid: Process ID to protect from cleanup
+        """
+        self._exclude_pids.add(pid)
+
+    def remove_protected_pid(self, pid: int) -> None:
+        """Remove a PID from the protected list.
+
+        Args:
+            pid: Process ID to remove from protection
+        """
+        self._exclude_pids.discard(pid)  # discard won't raise if not present
+
+    def get_child_count(self) -> int:
+        """Get current number of child processes.
+
+        Returns:
+            Number of child processes (including nested children)
+        """
+        try:
+            current_process = psutil.Process(self._current_pid)
+            return len(current_process.children(recursive=True))
+        except psutil.NoSuchProcess:
+            return 0
+
+# ——————————————————————————— Notifications Manager —————————————————————————— #
+class EmailNotificationManager:
+    """Handles email notifications for restart events with configurable paths."""
+
+    __slots__ = ("recipients_file", "credentials_file", "email_enabled")  # Memory optimization
+
+    def __init__(self, recipients_file: Optional[str] = None, credentials_file: Optional[str] = None):
+        """Initialize email manager with configurable paths.
+
+        Args:
+            recipients_file: Path to recipients JSON file
+            credentials_file: Path to credentials JSON file
+        """
+        self.recipients_file = recipients_file or "./json/recipients.json"
+        self.credentials_file = credentials_file or "./json/credentials.json"
+        self.email_enabled = self._validate_email_config()
+
+    def _validate_email_config(self) -> bool:
+        """Validate email configuration files exist.
+
+        Returns:
+            True if email config is valid, False otherwise
+        """
+        recipients_exists = Path(self.recipients_file).exists()
+        credentials_exists = Path(self.credentials_file).exists()
+
+        if not (recipients_exists and credentials_exists):
+            print("Warning: Email config files not found, email alerts disabled")
+            print(f"Expected files: {self.recipients_file}, {self.credentials_file}")
+            return False
+
+        return True
+
+    def send_restart_success_alert(
+        self, title: str, old_pid: Optional[int], new_pid: int, restart_count: int
+    ) -> None:
+        """Send successful restart notification.
+
+        Args:
+            title: Process title
+            old_pid: Previous process PID
+            new_pid: New process PID
+            restart_count: Current restart count
+        """
+        if not self.email_enabled:
+            return
+
+        try:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+
+            subject = f"RESTART SUCCESS: {title}"
+            html_content = SUCCESS_RESTART_TEMPLATE.format(
+                title=title,
+                timestamp=timestamp,
+                old_pid=old_pid or "N/A",
+                new_pid=new_pid,
+                restart_count=restart_count,
+            )
+
+            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
+            print("Successful restart email alert sent")
+
+        except Exception as e:
+            print(f"Failed to send restart success email: {e}")
+
+    def send_restart_failed_alert(
+        self, title: str, restart_count: int, error: str = "Maximum restart attempts reached"
+    ) -> None:
+        """Send restart failure notification.
+
+        Args:
+            title: Process title
+            restart_count: Final restart count
+            error: Error description
+        """
+        if not self.email_enabled:
+            return
+
+        try:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+
+            subject = f"RESTART FAILED: {title}"
+            html_content = FAILED_RESTART_TEMPLATE.format(
+                title=title, timestamp=timestamp, restart_count=restart_count, error=error
+            )
+
+            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
+            print("Restart failure email alert sent")
+
+        except Exception as e:
+            print(f"Failed to send restart failure email: {e}")
+
+# ————————————————————————————— File Type Handler ———————————————————————————— #
 class FileTypeHandler:
     """Efficient file type detection and command generation with caching."""
 
-    # Class-level cache for performance optimization
+    # Class-level cache for performance optimization (bounded to prevent memory growth)
     _file_type_cache: Dict[str, str] = {}
     _command_cache: Dict[str, List[str]] = {}
+    _CACHE_LIMIT = 100  # Constant for cache size limit
 
     @classmethod
     def get_file_type(cls, file_path: Path) -> str:
@@ -115,7 +459,7 @@ class FileTypeHandler:
             file_type = "unknown"
 
         # Bounded cache to prevent memory growth
-        if len(cls._file_type_cache) < 100:
+        if len(cls._file_type_cache) < cls._CACHE_LIMIT:
             cls._file_type_cache[path_str] = file_type
 
         return file_type
@@ -149,8 +493,7 @@ class FileTypeHandler:
             command = [sys.executable, "-u", str(file_path), success_flag_file]
 
         elif file_type == "notebook":
-            # Direct Jupyter execution with runipy/papermill alternative
-            # Create a Python wrapper script that executes the notebook
+            # Create wrapper script for notebook execution
             wrapper_script = cls._create_notebook_wrapper(file_path, success_flag_file)
             command = [sys.executable, "-u", wrapper_script]
 
@@ -158,7 +501,7 @@ class FileTypeHandler:
             raise ValueError(f"Unsupported file type: {file_type} for {file_path}")
 
         # Cache command with bounded size to prevent memory growth
-        if len(cls._command_cache) < 100:
+        if len(cls._command_cache) < cls._CACHE_LIMIT:
             cls._command_cache[cache_key] = command.copy()
 
         return command, file_type
@@ -260,7 +603,7 @@ if __name__ == "__main__":
     @classmethod
     def cleanup_wrapper_scripts(cls) -> None:
         """Clean up temporary wrapper scripts created for notebook execution."""
-        # Find and remove temporary wrapper scripts
+        # Find and remove temporary wrapper scripts in batch operation
         temp_dir = Path(tempfile.gettempdir())
         for wrapper_file in temp_dir.glob("*_notebook_wrapper.py"):
             try:
@@ -268,7 +611,7 @@ if __name__ == "__main__":
             except OSError:
                 pass  # Ignore cleanup errors
 
-
+# ————————————————————————————— Terminal Launcher ———————————————————————————— #
 class SimpleTerminalLauncher:
     """Minimal terminal launcher for cross-platform execution."""
 
@@ -320,137 +663,9 @@ class SimpleTerminalLauncher:
         process.pid_file = pid_file
         return process
 
-
-def start_monitor(pid: int, title: str) -> Dict[str, Any]:
-    """Start minimal crash monitor with optimized resource usage.
-
-    Args:
-        pid: Process ID to monitor
-        title: Process title for alerts
-
-    Returns:
-        Monitor control info dictionary
-
-    Raises:
-        ValueError: If PID doesn't exist
-        OSError: If monitor startup fails
-    """
-    if not psutil.pid_exists(pid):
-        raise ValueError(f"Process PID {pid} not found")
-
-    # Check for email config files (single batch check)
-    recipients_file = "./json/recipients.json"
-    credentials_file = "./json/credentials.json"
-
-    if not (Path(recipients_file).exists() and Path(credentials_file).exists()):
-        print("Warning: Email config files not found, email alerts disabled")
-        recipients_file = credentials_file = "/dev/null"
-
-    # Create minimal control files
-    fd, script_path = tempfile.mkstemp(suffix="_monitor.py")
-    base_path = script_path.replace(".py", "")
-
-    control_files = {
-        "script_path": script_path,
-        "pid_file": f"{base_path}.pid",
-        "stop_file": f"{base_path}.stop",
-        "restart_file": f"{base_path}.restart",
-    }
-
-    # Generate minimal monitoring script using string formatting for performance
-    script_content = MONITOR_SCRIPT.format(
-        cwd=os.getcwd(),
-        pid=pid,
-        interval=2,
-        title=repr(title),
-        recipients=recipients_file,
-        credentials=credentials_file,
-        html=HTML_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
-        **control_files,
-    )
-
-    with os.fdopen(fd, "w") as f:
-        f.write(script_content)
-
-    if os.name != "nt":
-        os.chmod(script_path, 0o755)
-
-    # Launch monitor in terminal
-    launcher = SimpleTerminalLauncher()
-    process = launcher.launch([sys.executable, script_path], os.getcwd())
-
-    time.sleep(0.1)
-    if process.poll() is not None:
-        raise OSError("Monitor failed to start")
-
-    return {"process": process, **control_files}
-
-
-def stop_monitor(monitor_info: Dict[str, Any]) -> None:
-    """Stop monitor and cleanup files with optimized batch operations.
-
-    Args:
-        monitor_info: Monitor control info from start_monitor()
-    """
-    if not monitor_info:
-        return
-
-    # Signal stop (single I/O operation)
-    try:
-        with open(monitor_info["stop_file"], "w") as f:
-            f.write("STOP")
-    except:
-        pass
-
-    # Wait for graceful shutdown with optimized timeout
-    for _ in range(20):  # 2 second timeout
-        if not os.path.exists(monitor_info["pid_file"]):
-            break
-        time.sleep(0.1)
-
-    # Force terminate if needed
-    process = monitor_info.get("process")
-    if process and process.poll() is None:
-        try:
-            process.terminate()
-            process.wait(timeout=2)
-        except:
-            pass
-
-    # Batch file cleanup (single loop for efficiency)
-    cleanup_files = ["script_path", "pid_file", "stop_file", "restart_file"]
-    for file_key in cleanup_files:
-        try:
-            file_path = monitor_info.get(file_key)
-            if file_path and os.path.exists(file_path):
-                os.unlink(file_path)
-        except:
-            pass
-
-
-def check_crash_signal(monitor_info: Dict[str, Any]) -> bool:
-    """Check if process crashed with minimal I/O operations.
-
-    Args:
-        monitor_info: Monitor control info
-
-    Returns:
-        True if process crashed, False otherwise
-    """
-    restart_file = monitor_info.get("restart_file")
-    if not restart_file or not os.path.exists(restart_file):
-        return False
-
-    try:
-        with open(restart_file) as f:
-            data = json.load(f)
-            return data.get("crashed", False)
-    except:
-        return False
-
-
+# —————————————————————————————— Restart Manager ————————————————————————————— #
 class FlagBasedRestartManager:
-    """Efficient restart manager using completion flags with multi-file support."""
+    """Enhanced restart manager with comprehensive email notifications."""
 
     __slots__ = (
         "max_restarts",
@@ -460,15 +675,28 @@ class FlagBasedRestartManager:
         "current_terminal_process",
         "current_target_pid",
         "monitor_info",
-        "wrapper_scripts",  # Track wrapper scripts for cleanup
-    )  # Memory optimization using slots
+        "wrapper_scripts",
+        "email_manager",
+        "process_title",
+        "recipients_file",
+        "credentials_file",
+        "child_cleanup",
+    )
 
-    def __init__(self, max_restarts: int = 10, restart_delay: float = 3.0):
-        """Initialize restart manager with optimized defaults.
+    def __init__(
+        self,
+        max_restarts: int = 10,
+        restart_delay: float = 3.0,
+        recipients_file: Optional[str] = None,
+        credentials_file: Optional[str] = None,
+    ):
+        """Initialize restart manager with email notification support.
 
         Args:
             max_restarts: Maximum restart attempts
             restart_delay: Delay between restarts in seconds
+            recipients_file: Path to recipients JSON file
+            credentials_file: Path to credentials JSON file
         """
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
@@ -479,12 +707,21 @@ class FlagBasedRestartManager:
         self.current_terminal_process: Optional[subprocess.Popen] = None
         self.current_target_pid: Optional[int] = None
         self.monitor_info: Optional[Dict[str, Any]] = None
-        self.wrapper_scripts: List[str] = []  # Track for cleanup
+        self.wrapper_scripts: List[str] = []
+
+        # Email configuration
+        self.recipients_file = recipients_file or "./json/recipients.json"
+        self.credentials_file = credentials_file or "./json/credentials.json"
+        self.email_manager = EmailNotificationManager(self.recipients_file, self.credentials_file)
+        self.process_title: str = ""
+
+        # Child process cleanup manager
+        self.child_cleanup = ChildProcessCleanup()
 
     def run_file_with_restart(
         self, file_path: str, success_flag_file: str, title: Optional[str] = None
     ) -> None:
-        """Run file with flag-based restart logic supporting .py and .ipynb files.
+        """Run file with flag-based restart logic and email notifications.
 
         Args:
             file_path: Path to Python or Jupyter notebook file
@@ -500,18 +737,20 @@ class FlagBasedRestartManager:
         file_type = FileTypeHandler.get_file_type(validated_path)
 
         working_dir = str(validated_path.parent)
-        monitor_title = title or validated_path.stem
+        self.process_title = title or validated_path.stem
         flag_path = Path(success_flag_file).resolve()
 
         print(f"Starting flag-based auto-restart for: {validated_path}")
         print(f"File type: {file_type}")
         print(f"Success flag file: {flag_path}")
         print(f"Max restarts: {self.max_restarts}")
+        print(f"Email alerts: {'Enabled' if self.email_manager.email_enabled else 'Disabled'}")
 
         self.running = True
+        previous_pid = None
 
         try:
-            # Main restart loop with optimized control flow
+            # Main restart loop with enhanced email notifications
             while self.running and self.restart_count < self.max_restarts:
                 # Remove old success flag (atomic operation)
                 if flag_path.exists():
@@ -524,14 +763,25 @@ class FlagBasedRestartManager:
                     target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     print(f"Process started: PID {target_pid}")
 
-                    # Start crash monitor
-                    self.monitor_info = start_monitor(target_pid, monitor_title)
+                    # Send successful restart email (except for first start)
+                    if self.restart_count > 0:
+                        self.email_manager.send_restart_success_alert(
+                            self.process_title, previous_pid, target_pid, self.restart_count
+                        )
+
+                    # Start crash monitor with email configuration
+                    self.monitor_info = start_monitor(
+                        target_pid, self.process_title, self.recipients_file, self.credentials_file
+                    )
 
                     # Wait for completion or crash with optimized polling
                     completion_reason = self._wait_for_completion(flag_path)
                     runtime = time.time() - start_time
 
                     print(f"Process finished: {completion_reason}, runtime: {runtime:.1f}s")
+
+                    # Store PID for next restart notification
+                    previous_pid = target_pid
 
                     # Immediate cleanup for memory efficiency
                     self._cleanup_all()
@@ -552,15 +802,25 @@ class FlagBasedRestartManager:
                     self._cleanup_all()
                     self._handle_restart()
 
-            # Final status report
+            # Handle maximum restarts reached
             if self.restart_count >= self.max_restarts:
                 print(f"Maximum restarts reached: {self.max_restarts}")
+                self.email_manager.send_restart_failed_alert(
+                    self.process_title,
+                    self.restart_count,
+                    f"Maximum restart attempts ({self.max_restarts}) reached",
+                )
 
         except KeyboardInterrupt:
             print("Interrupted by user")
+        except Exception as e:
+            print(f"Fatal error: {e}")
+            self.email_manager.send_restart_failed_alert(
+                self.process_title, self.restart_count, f"Fatal error: {str(e)}"
+            )
         finally:
             self._cleanup_all()
-            self._cleanup_wrapper_scripts()  # Clean up notebook wrappers
+            self._cleanup_wrapper_scripts()
             print(f"Total restarts: {self.restart_count}")
 
     def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
@@ -665,7 +925,8 @@ class FlagBasedRestartManager:
 
             # Check crash signal every other iteration to reduce I/O
             if check_count % 2 == 0 and self.monitor_info:
-                if check_crash_signal(self.monitor_info):
+                crash_info = check_crash_signal(self.monitor_info)
+                if crash_info:
                     return "crashed"
 
             # Check process existence every 4th iteration for efficiency
@@ -681,7 +942,22 @@ class FlagBasedRestartManager:
         """Handle restart logic with exponential backoff for stability."""
         self.restart_count += 1
         if self.restart_count < self.max_restarts:
-            # Exponential backoff with reasonable upper limit
+            # Protect current target process if still running
+            exclude_pids = []
+            if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
+                exclude_pids.append(self.current_target_pid)
+
+            # Perform child process cleanup before restart
+            try:
+                terminated, killed = self.child_cleanup.cleanup_children(exclude_pids)
+                if terminated > 0 or killed > 0:
+                    print(f"Child cleanup: {terminated} terminated, {killed} killed")
+            except psutil.NoSuchProcess:
+                print("Warning: Current process not found during cleanup")
+            except Exception as e:
+                print(f"Child cleanup failed (non-fatal): {e}")
+
+            # Exponential backoff
             delay = min(self.restart_delay * (1.2 ** (self.restart_count - 1)), 30.0)
             print(f"Restarting in {delay:.1f}s ({self.restart_count}/{self.max_restarts})")
             self._sleep(delay)
@@ -747,21 +1023,157 @@ class FlagBasedRestartManager:
             time.sleep(min(0.1, end_time - time.time()))
 
 
+def start_monitor(pid: int, title: str, recipients_file: str, credentials_file: str) -> Dict[str, Any]:
+    """Start enhanced crash monitor with email alert capabilities.
+
+    Args:
+        pid: Process ID to monitor
+        title: Process title for alerts
+        recipients_file: Path to recipients configuration file
+        credentials_file: Path to credentials configuration file
+
+    Returns:
+        Monitor control info dictionary
+
+    Raises:
+        ValueError: If PID doesn't exist
+        OSError: If monitor startup fails
+    """
+    if not psutil.pid_exists(pid):
+        raise ValueError(f"Process PID {pid} not found")
+
+    # Use provided email config files or disable if missing
+    if not (Path(recipients_file).exists() and Path(credentials_file).exists()):
+        print("Warning: Email config files not found, email alerts disabled")
+        recipients_file = credentials_file = "/dev/null"
+
+    # Create minimal control files
+    fd, script_path = tempfile.mkstemp(suffix="_monitor.py")
+    base_path = script_path.replace(".py", "")
+
+    control_files = {
+        "script_path": script_path,
+        "pid_file": f"{base_path}.pid",
+        "stop_file": f"{base_path}.stop",
+        "restart_file": f"{base_path}.restart",
+    }
+
+    # Generate enhanced monitoring script with email templates
+    script_content = MONITOR_SCRIPT.format(
+        cwd=os.getcwd(),
+        pid=pid,
+        interval=2,
+        title=repr(title),
+        recipients=recipients_file,
+        credentials=credentials_file,
+        crash_template=CRASH_ALERT_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
+        success_template=SUCCESS_RESTART_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
+        failed_template=FAILED_RESTART_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
+        **control_files,
+    )
+
+    with os.fdopen(fd, "w") as f:
+        f.write(script_content)
+
+    if os.name != "nt":
+        os.chmod(script_path, 0o755)
+
+    # Launch monitor in terminal
+    launcher = SimpleTerminalLauncher()
+    process = launcher.launch([sys.executable, script_path], os.getcwd())
+
+    time.sleep(0.1)
+    if process.poll() is not None:
+        raise OSError("Monitor failed to start")
+
+    return {"process": process, **control_files}
+
+
+def stop_monitor(monitor_info: Dict[str, Any]) -> None:
+    """Stop monitor and cleanup files with optimized batch operations.
+
+    Args:
+        monitor_info: Monitor control info from start_monitor()
+    """
+    if not monitor_info:
+        return
+
+    # Signal stop (single I/O operation)
+    try:
+        with open(monitor_info["stop_file"], "w") as f:
+            f.write("STOP")
+    except:
+        pass
+
+    # Wait for graceful shutdown with optimized timeout
+    for _ in range(20):  # 2 second timeout
+        if not os.path.exists(monitor_info["pid_file"]):
+            break
+        time.sleep(0.1)
+
+    # Force terminate if needed
+    process = monitor_info.get("process")
+    if process and process.poll() is None:
+        try:
+            process.terminate()
+            process.wait(timeout=2)
+        except:
+            pass
+
+    # Batch file cleanup (single loop for efficiency)
+    cleanup_files = ["script_path", "pid_file", "stop_file", "restart_file"]
+    for file_key in cleanup_files:
+        try:
+            file_path = monitor_info.get(file_key)
+            if file_path and os.path.exists(file_path):
+                os.unlink(file_path)
+        except:
+            pass
+
+
+def check_crash_signal(monitor_info: Dict[str, Any]) -> Dict[str, Any]:
+    """Check if process crashed with minimal I/O operations.
+
+    Args:
+        monitor_info: Monitor control info
+
+    Returns:
+        Dictionary with crash info or empty dict if no crash
+    """
+    restart_file = monitor_info.get("restart_file")
+    if not restart_file or not os.path.exists(restart_file):
+        return {}
+
+    try:
+        with open(restart_file) as f:
+            data = json.load(f)
+            if data.get("crashed", False):
+                return data
+    except:
+        pass
+
+    return {}
+
+
 def run_auto_restart(
     file_path: str,
     success_flag_file: str = "/tmp/success.flag",
     title: Optional[str] = None,
     max_restarts: int = 10,
     restart_delay: float = 3.0,
+    recipients_file: Optional[str] = None,
+    credentials_file: Optional[str] = None,
 ) -> None:
-    """Main function accepting parameters directly for programmatic use.
+    """Main function with enhanced email notification support and configurable email paths.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
         success_flag_file: Path to success flag file
-        title: Custom title for monitoring
+        title: Custom title for monitoring and email alerts
         max_restarts: Maximum restart attempts
         restart_delay: Delay between restarts in seconds
+        recipients_file: Path to recipients JSON file (defaults to ./json/recipients.json)
+        credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -769,25 +1181,29 @@ def run_auto_restart(
         ImportError: If notebook dependencies missing for .ipynb files
     """
     try:
+        # Clean up any existing success flag file before starting
+        Path(success_flag_file).unlink(missing_ok=True)
+
         # Validate file early with detailed error messages
         validated_path = FileTypeHandler.validate_file(file_path)
         file_type = FileTypeHandler.get_file_type(validated_path)
 
-        print(f"Validated file: {validated_path} (type: {file_type})")
-
         # Check notebook dependencies if needed
         if file_type == "notebook":
             try:
-                import nbformat, nbconvert
-
-                print("Notebook dependencies found")
+                import nbformat, nbconvert, jupyter
             except ImportError as e:
                 raise ImportError(
                     "Missing notebook dependencies. " "Please install: pip install nbformat nbconvert jupyter"
                 ) from e
 
-        # Create optimized restart manager
-        manager = FlagBasedRestartManager(max_restarts=max_restarts, restart_delay=restart_delay)
+        # Create enhanced restart manager with configurable email paths
+        manager = FlagBasedRestartManager(
+            max_restarts=max_restarts,
+            restart_delay=restart_delay,
+            recipients_file=recipients_file,
+            credentials_file=credentials_file,
+        )
 
         manager.run_file_with_restart(file_path=file_path, success_flag_file=success_flag_file, title=title)
 
