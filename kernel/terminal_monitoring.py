@@ -8,11 +8,24 @@ Functions:
     - _send_alert_email: Sends an email alert when the monitored process crashes or terminates.
 
 Example usage:
-    # Start monitoring a process with PID 1234
-    monitor_process = start_monitor(1234)
+    if NUM_TRIALS > 20: # Skip tests
+    _monitor_proc = start_monitor(
+        pid=os.getpid(),
+        log_dir=RUN_DIR,
+        custom_title=f"{RUN_DIR}",
+        recipients_file="./json/recipients.json",
+        credentials_file="./json/credentials.json",
+    )
 
-    # Stop monitoring the process
-    stop_monitor(monitor_process)
+    # In the end:
+    if NUM_TRIALS > 20:  # Skip tests
+        notify_training_success(
+            recipients_file="./json/recipients.json",
+            credentials_file="./json/credentials.json",
+            subject=f"🎉 {RUN_DIR} Training Complete",
+        )
+
+        stop_monitor(_monitor_proc)
 """
 
 import os
