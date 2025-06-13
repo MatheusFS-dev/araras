@@ -360,7 +360,7 @@ class EmailNotificationManager:
         credentials_exists = Path(self.credentials_file).exists()
 
         if not (recipients_exists and credentials_exists):
-            print("Warning: Email config files not found, email alerts disabled")
+            print("\033[91mWarning: Email config files not found, email alerts disabled\033[0m")
             print(f"Expected files: {self.recipients_file}, {self.credentials_file}")
             return False
 
