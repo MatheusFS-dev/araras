@@ -5,8 +5,6 @@ This module provides comprehensive analysis tools for Optuna hyperparameter opti
 generating statistical summaries, visualizations, and comparative analyses between best and worst
 performing trials.
 
-HOW TO ANALYZE RESULTS: check guide.md
-
 Functions:
     - analyze_study: Main analysis function generating all summaries and visualizations
 
@@ -23,7 +21,6 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from araras.plot.configs import config_plt
 from optuna.importance import get_param_importances
-from scipy.stats import mannwhitneyu, chi2_contingency
 
 
 # Configure matplotlib for IEEE-style single-column figures
