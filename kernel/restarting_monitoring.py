@@ -171,7 +171,7 @@ print("Monitor completed")"""
 
 # ——————————————————————————— Print Functions ——————————————————————————————— #
 def print_monitoring_config_summary(
-    file_path: str, file_type: str, success_flag_file: str, max_restarts: int, email_enabled: bool, title: str
+    file_path: str, file_type: str, success_flag_file: str, max_restarts: int, email_enabled: bool, title: str, restart_after_delay: Optional[float] = None
 ) -> None:
     """Print a summary of monitoring configuration."""
     print("=" * 70)
@@ -182,6 +182,8 @@ def print_monitoring_config_summary(
     print(f"Process Title: \033[38;5;208m{title}\033[0m")
     print(f"Success Flag: {success_flag_file}")
     print(f"Max Restarts: {max_restarts}")
+    if restart_after_delay is not None:
+        print(f"Run will force restart after: {restart_after_delay} seconds")
     
     if email_enabled:
         print(f"Email Alerts: \033[92mEnabled\033[0m")
@@ -524,7 +526,7 @@ class FlagBasedRestartManager:
         self.child_cleanup = ChildProcessCleanup()
 
     def run_file_with_restart(
-        self, file_path: str, success_flag_file: str, title: Optional[str] = None
+        self, file_path: str, success_flag_file: str, title: Optional[str] = None, restart_after_delay: Optional[float] = None
     ) -> None:
         """Run file with flag-based restart logic and email notifications.
 
@@ -532,6 +534,7 @@ class FlagBasedRestartManager:
             file_path: Path to Python or Jupyter notebook file
             success_flag_file: Path where target process writes completion flag
             title: Custom title for monitoring
+            restart_after_delay: Optional delay after which the run will be restarted
 
         Raises:
             FileNotFoundError: If file doesn't exist
@@ -567,6 +570,7 @@ class FlagBasedRestartManager:
             max_restarts=self.max_restarts,
             email_enabled=self.email_manager.email_enabled,
             title=self.process_title,
+            restart_after_delay=restart_after_delay,
         )
 
         self.running = True
@@ -1027,7 +1031,7 @@ def run_auto_restart(
                     def run_and_flag():
                         try:
                             manager.run_file_with_restart(
-                                file_path=file_path, success_flag_file=success_flag_file, title=title
+                                file_path=file_path, success_flag_file=success_flag_file, title=title, restart_after_delay=restart_after_delay
                             )
                             finished[0] = True
                         except Exception:
