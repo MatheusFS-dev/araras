@@ -7,10 +7,15 @@ Functions:
     - format_bytes: Formats a byte value with binary suffixes (B, KB, MB, etc.) and precision.
     - format_scientific: Formats a number in scientific notation with automatic precision.
     - format_number_commas: Formats a number with commas as thousands separators.
+    
+Classes:
+    - NotebookConverter: Converts Jupyter notebooks to Python files with proper formatting and metadata.
 """
 
 import os
 import math
+import time
+from pathlib import Path
 from IPython.display import clear_output
 
 
@@ -175,3 +180,75 @@ def format_number_commas(number, precision=2):
         return f"{number:,.{precision}f}"
     else:
         raise ValueError("Input must be an integer or float")
+
+
+# ——————————————————————————— Notebook Converter ———————————————————————————— #
+class NotebookConverter:
+    """Notebook to Python conversion."""
+
+    @staticmethod
+    def convert_notebook_to_python(notebook_path: Path) -> Path:
+        """Convert Jupyter notebook to Python file with same name.
+
+        Args:
+            notebook_path: Path to .ipynb file
+
+        Returns:
+            Path to generated .py file
+
+        Raises:
+            ImportError: If notebook dependencies missing
+            ValueError: If notebook conversion fails
+        """
+        try:
+            import nbformat
+        except ImportError as e:
+            raise ImportError("Missing notebook dependencies. " "Please install: pip install nbformat") from e
+
+        # Target Python file path (same directory, same name, .py extension)
+        python_path = notebook_path.with_suffix(".py")
+
+        try:
+            # Load notebook with minimal memory footprint
+            with open(notebook_path, "r", encoding="utf-8") as f:
+                notebook = nbformat.read(f, as_version=4)
+
+            # Extract code cells efficiently
+            python_lines = [
+                "#!/usr/bin/env python",
+                "# -*- coding: utf-8 -*-",
+                f"# Converted from: {notebook_path.name}",
+                f'# Generated on: {time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())}',
+                "",
+            ]
+
+            # Process cells with memory-efficient iteration
+            for cell_idx, cell in enumerate(notebook.cells):
+                if cell.cell_type == "code" and cell.source.strip():
+                    # Add cell separator for debugging
+                    python_lines.append(f"# Cell {cell_idx + 1}")
+
+                    # Clean and add source code
+                    source_lines = cell.source.strip().split("\n")
+                    python_lines.extend(source_lines)
+                    python_lines.append("")  # Empty line between cells
+
+            # Write to Python file atomically
+            temp_path = python_path.with_suffix(".py.tmp")
+            try:
+                with open(temp_path, "w", encoding="utf-8") as f:
+                    f.write("\n".join(python_lines))
+
+                # Atomic rename for consistency
+                temp_path.replace(python_path)
+
+            except Exception:
+                # Cleanup temp file on error
+                if temp_path.exists():
+                    temp_path.unlink()
+                raise
+
+            return python_path
+
+        except Exception as e:
+            raise ValueError(f"Failed to convert notebook {notebook_path}: {e}") from e
