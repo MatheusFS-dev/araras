@@ -22,9 +22,9 @@ Example Usage:
 import json
 import smtplib
 import traceback
+from typing import *
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from typing import *
 
 
 def get_credentials(file_path: str) -> tuple[str, str]:
