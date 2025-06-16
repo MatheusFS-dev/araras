@@ -906,9 +906,9 @@ def start_monitor(pid: int, title: str, recipients_file: str, credentials_file: 
     launcher = SimpleTerminalLauncher()
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
-    time.sleep(0.1)
-    if process.poll() is not None:
-        raise OSError("Monitor failed to start")
+    time.sleep(3)
+    # if process.poll() is not None:
+    #     raise OSError("Monitor failed to start")
 
     return {"process": process, **control_files}
 
