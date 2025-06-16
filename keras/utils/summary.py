@@ -6,8 +6,6 @@ Functions:
 
 """
 
-# TODO: https://github.com/keras-team/keras/issues/13565
-
 def capture_model_summary(model):
     """
     Capture model summary as a string.
