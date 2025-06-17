@@ -1,6 +1,6 @@
 """
 This module provides a restarting monitoring system for processes with email alert capabilities.
-It monitors a process for crashes, restarts it if necessary, and sends email notifications.
+It monitors a process for crashes and restarts it if necessary.
 
 Usage example:
     run_auto_restart(
@@ -22,80 +22,35 @@ from pathlib import Path
 from threading import Event, Thread
 
 # Local imports
-from araras.email.utils import send_email, notify_training_success
+from araras.email.utils import send_email
 from araras.utils.cleanup import ChildProcessCleanup
 from araras.utils.terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
 
 
-# —————————————————————————————— HTML templates —————————————————————————————— #
-CRASH_ALERT_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#d9534f">Process Crash Alert</h2><p>Process "<strong>{title}</strong>" (PID <strong>{pid}</strong>) has crashed.</p><p>Time: {timestamp}</p><p>Restart Count: {restart_count}</p></div></body></html>"""
+# Enhanced HTML template for consolidated status reports
+CONSOLIDATED_STATUS_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:{color}">{status_title}</h2><div style="background:#f9f9f9;padding:15px;margin:15px 0;border-left:4px solid {color}"><h3>Process Information</h3><p><strong>Process:</strong> {title}</p><p><strong>Status:</strong> {status_description}</p><p><strong>Timestamp:</strong> {timestamp}</p></div>{details_section}<div style="background:#f0f0f0;padding:10px;margin-top:20px;font-size:12px;color:#666"><p>This is an automated status report from the process monitoring system.</p></div></div></body></html>"""
 
-SUCCESS_RESTART_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#5cb85c">Successful Restart</h2><p>Process "<strong>{title}</strong>" has been successfully restarted.</p><p>Time: {timestamp}</p><p>Previous PID: {old_pid}</p><p>New PID: {new_pid}</p><p>Restart Count: {restart_count}</p></div></body></html>"""
+RESTART_DETAILS_TEMPLATE = """<div style="background:#fff3cd;padding:15px;margin:15px 0;border-left:4px solid #ffc107"><h3>Restart Information</h3><p><strong>Previous PID:</strong> {old_pid}</p><p><strong>New PID:</strong> {new_pid}</p><p><strong>Total Restarts:</strong> {restart_count}</p><p><strong>Runtime Before Restart:</strong> {runtime:.1f}s</p></div>"""
 
-FAILED_RESTART_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:#f0ad4e">Restart Failed</h2><p>Process "<strong>{title}</strong>" failed to restart after maximum attempts.</p><p>Time: {timestamp}</p><p>Final Restart Count: {restart_count}</p><p>Error: {error}</p></div></body></html>"""
+FAILURE_DETAILS_TEMPLATE = """<div style="background:#f8d7da;padding:15px;margin:15px 0;border-left:4px solid #dc3545"><h3>Failure Details</h3><p><strong>Failed Attempts:</strong> {failed_attempts}</p><p><strong>Remaining Attempts:</strong> {remaining_attempts}</p><p><strong>Total Restart Count:</strong> {restart_count}</p><p><strong>Error:</strong> {error}</p></div>"""
 
-# —————————————— Monitoring script with email alert capabilities ————————————— #
+COMPLETION_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Completion Summary</h3><p><strong>Total Restarts:</strong> {restart_count}</p><p><strong>Total Runtime:</strong> {total_runtime:.1f}s</p><p><strong>Final Status:</strong> Successfully completed</p></div>"""
+
+# Updated monitoring script with consolidated email capabilities
 MONITOR_SCRIPT = """import os,sys,time,psutil,json
 sys.path.insert(0,r"{cwd}")
 
 with open(r"{pid_file}", "w") as f:
     f.write(str(os.getpid()))
 
-def send_email_alert(alert_type, data, recipients, credentials):
-    \"\"\"Send email alert based on type.\"\"\"
+def send_crash_signal(pid, title, restart_count=0):
+    \"\"\"Send crash signal for restart manager to handle.\"\"\"
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
-    
-    try:
-        from araras.email.utils import send_email
-        
-        if alert_type == "crash":
-            subject = f"CRASH ALERT: {{data['title']}} (PID {{data['pid']}})"
-            html_content = "{crash_template}".format(
-                title=data['title'], 
-                pid=data['pid'], 
-                timestamp=timestamp,
-                restart_count=data.get('restart_count', 0)
-            )
-        elif alert_type == "success_restart":
-            subject = f"RESTART SUCCESS: {{data['title']}}"
-            html_content = "{success_template}".format(
-                title=data['title'],
-                timestamp=timestamp,
-                old_pid=data.get('old_pid', 'N/A'),
-                new_pid=data.get('new_pid', 'N/A'),
-                restart_count=data.get('restart_count', 0)
-            )
-        elif alert_type == "failed_restart":
-            subject = f"RESTART FAILED: {{data['title']}}"
-            html_content = "{failed_template}".format(
-                title=data['title'],
-                timestamp=timestamp,
-                restart_count=data.get('restart_count', 0),
-                error=data.get('error', 'Unknown error')
-            )
-        else:
-            return
-            
-        send_email(subject, html_content, recipients, credentials, "html")
-        print(f"{{alert_type.upper()}} email alert sent")
-        
-    except Exception as e:
-        print(f"Email alert failed: {{e}}")
-
-def send_crash_alert(pid, title, recipients, credentials, restart_count=0):
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
-    print(f"CRASH ALERT: {{title}} (PID {{pid}}) at {{timestamp}}")
-    
-    # Send crash email
-    send_email_alert("crash", {{
-        'title': title,
-        'pid': pid,
-        'restart_count': restart_count
-    }}, recipients, credentials)
+    print(f"CRASH DETECTED: {{title}} (PID {{pid}}) at {{timestamp}}")
     
     with open(r"{restart_file}", "w") as f:
-        json.dump({{"crashed": True, "timestamp": timestamp, "restart_count": restart_count}}, f)
+        json.dump({{"crashed": True, "timestamp": timestamp, "restart_count": restart_count, "pid": pid}}, f)
     
     try: os.unlink(r"{pid_file}")
     except: pass
@@ -105,7 +60,7 @@ try:
     proc = psutil.Process({pid})
     print(f"Monitoring PID {{pid}} for crashes")
 except psutil.NoSuchProcess:
-    send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}")
+    send_crash_signal({pid}, {title})
 
 count = 0
 while True:
@@ -119,7 +74,6 @@ while True:
     
     try:
         if not proc.is_running():
-            # Try to get restart count from restart file for context
             restart_count = 0
             try:
                 if os.path.exists(r"{restart_file}"):
@@ -128,7 +82,7 @@ while True:
                         restart_count = data.get("restart_count", 0)
             except:
                 pass
-            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
+            send_crash_signal({pid}, {title}, restart_count)
         
         # Check for zombie/stopped states that indicate crashes
         status = proc.status()
@@ -141,7 +95,7 @@ while True:
                         restart_count = data.get("restart_count", 0)
             except:
                 pass
-            send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
+            send_crash_signal({pid}, {title}, restart_count)
             
     except psutil.NoSuchProcess:
         restart_count = 0
@@ -152,7 +106,7 @@ while True:
                     restart_count = data.get("restart_count", 0)
         except:
             pass
-        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
+        send_crash_signal({pid}, {title}, restart_count)
     except Exception:
         restart_count = 0
         try:
@@ -162,7 +116,7 @@ while True:
                     restart_count = data.get("restart_count", 0)
         except:
             pass
-        send_crash_alert({pid}, {title}, r"{recipients}", r"{credentials}", restart_count)
+        send_crash_signal({pid}, {title}, restart_count)
     
     time.sleep({interval})
 
@@ -171,25 +125,33 @@ print("Monitor completed")"""
 
 # ——————————————————————————— Print Functions ——————————————————————————————— #
 def print_monitoring_config_summary(
-    file_path: str, file_type: str, success_flag_file: str, max_restarts: int, email_enabled: bool, title: str, restart_after_delay: Optional[float] = None
+    file_path: str,
+    file_type: str,
+    success_flag_file: str,
+    max_restarts: int,
+    email_enabled: bool,
+    title: str,
+    restart_after_delay: Optional[float] = None,
 ) -> None:
     """Print a summary of monitoring configuration."""
+    print()
     print("=" * 70)
     print("MONITORING CONFIGURATION SUMMARY")
     print("=" * 70)
     print(f"Target File: {file_path}")
     print(f"File Type: {file_type}")
-    print(f"Process Title: \033[38;5;208m{title}\033[0m")
+    print(f"Process Title: \033[33m{title}\033[0m")
     print(f"Success Flag: {success_flag_file}")
     print(f"Max Restarts: {max_restarts}")
     if restart_after_delay is not None:
         print(f"Run will force restart after: {restart_after_delay} seconds")
-    
+
     if email_enabled:
         print(f"Email Alerts: \033[92mEnabled\033[0m")
     else:
         print(f"Email Alerts: \033[91mDisabled\033[0m")
     print("=" * 70)
+    print()
 
 
 def print_process_status(message: str, pid: Optional[int] = None, runtime: Optional[float] = None) -> None:
@@ -226,7 +188,7 @@ def print_error_message(error_type: str, message: str) -> None:
 
 def print_warning_message(message: str) -> None:
     """Print warning messages with consistent formatting."""
-    print(f"\033[91mWarning: {message}\033[0m")
+    print(f"Warning: {message}")
 
 
 def print_success_message(message: str) -> None:
@@ -240,22 +202,38 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
         print(f"Child cleanup: {terminated} terminated, {killed} killed")
 
 
-# ——————————————————————————— Notifications Manager —————————————————————————— #
-class EmailNotificationManager:
-    """Handles email notifications for restart events with configurable paths."""
+# ——————————————————————————— Consolidated Email Manager —————————————————————————————— #
+class ConsolidatedEmailManager:
+    """Handles consolidated email notifications for restart events with configurable paths and retry logic."""
 
-    __slots__ = ("recipients_file", "credentials_file", "email_enabled")
+    __slots__ = (
+        "recipients_file",
+        "credentials_file",
+        "email_enabled",
+        "retry_attempts",
+        "retry_count",
+        "last_notification_time",
+    )
 
-    def __init__(self, recipients_file: Optional[str] = None, credentials_file: Optional[str] = None):
-        """Initialize email manager with configurable paths.
+    def __init__(
+        self,
+        recipients_file: Optional[str] = None,
+        credentials_file: Optional[str] = None,
+        retry_attempts: int = 2,
+    ):
+        """Initialize consolidated email manager with retry logic.
 
         Args:
             recipients_file: Path to recipients JSON file
             credentials_file: Path to credentials JSON file
+            retry_attempts: Number of retry attempts before sending failure email
         """
         self.recipients_file = recipients_file or "./json/recipients.json"
         self.credentials_file = credentials_file or "./json/credentials.json"
+        self.retry_attempts = retry_attempts
         self.email_enabled = self._validate_email_config()
+        self.retry_count = 0
+        self.last_notification_time = 0
 
     def _validate_email_config(self) -> bool:
         """Validate email configuration files exist.
@@ -273,84 +251,171 @@ class EmailNotificationManager:
 
         return True
 
-    def send_restart_success_alert(
-        self, title: str, old_pid: Optional[int], new_pid: int, restart_count: int
+    def send_consolidated_status_email(self, status_type: str, process_data: Dict[str, Any]) -> None:
+        """Send consolidated status email with unified reporting.
+
+        Args:
+            status_type: Type of status ('restart_success', 'restart_failed', 'task_complete')
+            process_data: Dictionary containing process information and metrics
+        """
+        if not self.email_enabled:
+            return
+
+        try:
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+            title = process_data.get("title", "Unknown Process")
+
+            # Generate subject and content based on status type
+            if status_type == "restart_success":
+                subject = f"{title} crashed - Restart Successful"
+                color = "#28a745"
+                status_title = "Process Restart Successful"
+                status_description = "Process crashed but was successfully restarted"
+                details_section = RESTART_DETAILS_TEMPLATE.format(
+                    old_pid=process_data.get("old_pid", "N/A"),
+                    new_pid=process_data.get("new_pid", "N/A"),
+                    restart_count=process_data.get("restart_count", 0),
+                    runtime=process_data.get("runtime", 0.0),
+                )
+
+            elif status_type == "restart_failed":
+                failed_attempts = process_data.get("failed_attempts", 0)
+                remaining = process_data.get("remaining_attempts", 0)
+
+                if remaining > 0:
+                    subject = f"{title} crashed - Restart Failed ({failed_attempts} attempts, {remaining} remaining)"
+                    status_description = (
+                        f"Restart failed after {failed_attempts} attempts, {remaining} attempts remaining"
+                    )
+                else:
+                    subject = f"{title} crashed - Maximum Restarts Reached"
+                    status_description = "All restart attempts have been exhausted"
+
+                color = "#dc3545"
+                status_title = "Process Restart Failed"
+                details_section = FAILURE_DETAILS_TEMPLATE.format(
+                    failed_attempts=failed_attempts,
+                    remaining_attempts=remaining,
+                    restart_count=process_data.get("restart_count", 0),
+                    error=process_data.get("error", "Unknown error"),
+                )
+
+            elif status_type == "task_complete":
+                subject = f"{title} - Task Completed Successfully"
+                color = "#28a745"
+                status_title = "Task Completed Successfully"
+                status_description = "Process completed all tasks successfully"
+                details_section = COMPLETION_DETAILS_TEMPLATE.format(
+                    restart_count=process_data.get("restart_count", 0),
+                    total_runtime=process_data.get("total_runtime", 0.0),
+                )
+            else:
+                return  # Unknown status type
+
+            # Generate consolidated HTML email
+            html_content = CONSOLIDATED_STATUS_TEMPLATE.format(
+                color=color,
+                status_title=status_title,
+                title=title,
+                status_description=status_description,
+                timestamp=timestamp,
+                details_section=details_section,
+            )
+
+            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
+            self.last_notification_time = time.time()
+
+        except Exception as e:
+            print_error_message("EMAIL", f"Failed to send consolidated status email: {e}")
+
+    def should_attempt_restart(self, title: str, restart_count: int, max_restarts: int) -> bool:
+        """Determine if should attempt restart with retry logic.
+
+        Args:
+            title: Process title
+            restart_count: Current restart count
+            max_restarts: Maximum allowed restarts
+
+        Returns:
+            True if should attempt restart, False if should send failure email
+        """
+        if self.retry_count < self.retry_attempts:
+            self.retry_count += 1
+            return True
+
+        # Send failure email after exhausting retries
+        remaining_attempts = max(0, max_restarts - restart_count)
+        self.send_consolidated_status_email(
+            "restart_failed",
+            {
+                "title": title,
+                "failed_attempts": self.retry_attempts,
+                "remaining_attempts": remaining_attempts,
+                "restart_count": restart_count,
+                "error": f"Process failed to restart after {self.retry_attempts} retry attempts",
+            },
+        )
+
+        # Reset retry count for next failure cycle
+        self.retry_count = 0
+        return remaining_attempts > 0
+
+    def report_successful_restart(
+        self, title: str, old_pid: Optional[int], new_pid: int, restart_count: int, runtime: float
     ) -> None:
-        """Send successful restart notification.
+        """Report successful restart with consolidated information.
 
         Args:
             title: Process title
             old_pid: Previous process PID
             new_pid: New process PID
             restart_count: Current restart count
+            runtime: Runtime before restart
         """
-        if not self.email_enabled:
-            return
+        # Reset retry count on successful restart
+        self.retry_count = 0
 
-        try:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+        self.send_consolidated_status_email(
+            "restart_success",
+            {
+                "title": title,
+                "old_pid": old_pid,
+                "new_pid": new_pid,
+                "restart_count": restart_count,
+                "runtime": runtime,
+            },
+        )
 
-            subject = f"RESTART SUCCESS: {title}"
-            html_content = SUCCESS_RESTART_TEMPLATE.format(
-                title=title,
-                timestamp=timestamp,
-                old_pid=old_pid or "N/A",
-                new_pid=new_pid,
-                restart_count=restart_count,
-            )
+    def report_task_completion(self, title: str, restart_count: int, total_runtime: float) -> None:
+        """Report successful task completion.
 
-            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
-            print("Successful restart email alert sent")
+        Args:
+            title: Process title
+            restart_count: Total number of restarts during execution
+            total_runtime: Total execution time
+        """
+        self.send_consolidated_status_email(
+            "task_complete", {"title": title, "restart_count": restart_count, "total_runtime": total_runtime}
+        )
 
-        except Exception as e:
-            print_error_message("EMAIL", f"Failed to send restart success email: {e}")
-
-    def send_restart_failed_alert(
-        self, title: str, restart_count: int, error: str = "Maximum restart attempts reached"
-    ) -> None:
-        """Send restart failure notification.
+    def report_final_failure(self, title: str, restart_count: int, error: str) -> None:
+        """Report final failure after all attempts exhausted.
 
         Args:
             title: Process title
             restart_count: Final restart count
             error: Error description
         """
-        if not self.email_enabled:
-            return
-
-        try:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
-
-            subject = f"RESTART FAILED: {title}"
-            html_content = FAILED_RESTART_TEMPLATE.format(
-                title=title, timestamp=timestamp, restart_count=restart_count, error=error
-            )
-
-            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
-            print("Restart failure email alert sent")
-
-        except Exception as e:
-            print_error_message("EMAIL", f"Failed to send restart failure email: {e}")
-
-    def send_task_completion_alert(self, title: str) -> None:
-        """Send task completion notification.
-
-        Args:
-            title: Process title
-        """
-        if not self.email_enabled:
-            return
-
-        try:
-            notify_training_success(
-                recipients_file=self.recipients_file,
-                credentials_file=self.credentials_file,
-                subject=f"Training Complete: {title}",
-            )
-            print("Task completion email alert sent")
-
-        except Exception as e:
-            print_error_message("EMAIL", f"Failed to send task completion email: {e}")
+        self.send_consolidated_status_email(
+            "restart_failed",
+            {
+                "title": title,
+                "failed_attempts": restart_count,
+                "remaining_attempts": 0,
+                "restart_count": restart_count,
+                "error": error,
+            },
+        )
 
 
 # ————————————————————————————— File Type Handler ———————————————————————————— #
@@ -464,9 +529,9 @@ class FileTypeHandler:
         return path_obj.resolve()
 
 
-# —————————————————————————————— Restart Manager ————————————————————————————— #
+# —————————————————————————————— Enhanced Restart Manager ————————————————————————————— #
 class FlagBasedRestartManager:
-    """Enhanced restart manager with comprehensive email notifications and file cleanup."""
+    """Enhanced restart manager with consolidated email notifications and retry logic."""
 
     __slots__ = (
         "max_restarts",
@@ -484,6 +549,7 @@ class FlagBasedRestartManager:
         "converted_python_file",
         "original_was_notebook",
         "start_time",
+        "last_process_start_time",
     )
 
     def __init__(
@@ -492,20 +558,23 @@ class FlagBasedRestartManager:
         restart_delay: float = 3.0,
         recipients_file: Optional[str] = None,
         credentials_file: Optional[str] = None,
+        retry_attempts: int = 2,
     ):
-        """Initialize restart manager with email notification support.
+        """Initialize restart manager with consolidated email notification support.
 
         Args:
             max_restarts: Maximum restart attempts
             restart_delay: Delay between restarts in seconds
             recipients_file: Path to recipients JSON file
             credentials_file: Path to credentials JSON file
+            retry_attempts: Number of retry attempts before sending failure email
         """
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
         self.restart_count = 0
         self.running = False
         self.start_time = None
+        self.last_process_start_time = None
 
         # Process tracking with minimal state
         self.current_terminal_process: Optional[subprocess.Popen] = None
@@ -516,19 +585,25 @@ class FlagBasedRestartManager:
         self.converted_python_file: Optional[Path] = None
         self.original_was_notebook: bool = False
 
-        # Email configuration
+        # Email configuration with consolidated manager
         self.recipients_file = recipients_file or "./json/recipients.json"
         self.credentials_file = credentials_file or "./json/credentials.json"
-        self.email_manager = EmailNotificationManager(self.recipients_file, self.credentials_file)
+        self.email_manager = ConsolidatedEmailManager(
+            self.recipients_file, self.credentials_file, retry_attempts
+        )
         self.process_title: str = ""
 
         # Child process cleanup manager
         self.child_cleanup = ChildProcessCleanup()
 
     def run_file_with_restart(
-        self, file_path: str, success_flag_file: str, title: Optional[str] = None, restart_after_delay: Optional[float] = None
+        self,
+        file_path: str,
+        success_flag_file: str,
+        title: Optional[str] = None,
+        restart_after_delay: Optional[float] = None,
     ) -> None:
-        """Run file with flag-based restart logic and email notifications.
+        """Run file with flag-based restart logic and consolidated email notifications.
 
         Args:
             file_path: Path to Python or Jupyter notebook file
@@ -577,33 +652,32 @@ class FlagBasedRestartManager:
         previous_pid = None
 
         try:
-            # Main restart loop with enhanced email notifications
+            # Main restart loop with consolidated email notifications
             while self.running and self.restart_count < self.max_restarts:
                 # Remove old success flag (atomic operation)
                 if flag_path.exists():
                     flag_path.unlink()
 
-                process_start_time = time.time()
+                self.last_process_start_time = time.time()
 
                 try:
                     # Launch process
                     target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     print_process_status("Process started", target_pid)
 
-                    # Send successful restart email (except for first start)
+                    # Send successful restart email (only for actual restarts, not first start)
                     if self.restart_count > 0:
-                        self.email_manager.send_restart_success_alert(
-                            self.process_title, previous_pid, target_pid, self.restart_count
+                        runtime = time.time() - self.last_process_start_time
+                        self.email_manager.report_successful_restart(
+                            self.process_title, previous_pid, target_pid, self.restart_count, runtime
                         )
 
-                    # Start crash monitor with email configuration
-                    self.monitor_info = start_monitor(
-                        target_pid, self.process_title, self.recipients_file, self.credentials_file
-                    )
+                    # Start crash monitor with simplified monitoring
+                    self.monitor_info = start_monitor(target_pid, self.process_title)
 
                     # Wait for completion or crash with optimized polling
                     completion_reason = self._wait_for_completion(flag_path)
-                    runtime = time.time() - process_start_time
+                    runtime = time.time() - self.last_process_start_time
 
                     print_process_status(f"Process finished: {completion_reason}", target_pid, runtime)
 
@@ -616,24 +690,30 @@ class FlagBasedRestartManager:
                     # Smart decision logic based on completion reason
                     if completion_reason == "success_flag":
                         print_success_message("Process completed successfully")
-                        self.email_manager.send_task_completion_alert(self.process_title)
+                        total_runtime = time.time() - self.start_time
+                        self.email_manager.report_task_completion(
+                            self.process_title, self.restart_count, total_runtime
+                        )
                         break
                     elif completion_reason == "crashed":
-                        print_process_status("Process crashed, will restart")
-                        self._handle_restart()
+                        print_process_status("Process crashed, checking restart policy")
+                        if not self._handle_restart_with_retry():
+                            break
                     else:
                         print_process_status("Process ended without success flag, treating as failure")
-                        self._handle_restart()
+                        if not self._handle_restart_with_retry():
+                            break
 
                 except Exception as e:
                     print_error_message("LAUNCH", str(e))
                     self._cleanup_all()
-                    self._handle_restart()
+                    if not self._handle_restart_with_retry():
+                        break
 
             # Handle maximum restarts reached
             if self.restart_count >= self.max_restarts:
                 print_error_message("MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}")
-                self.email_manager.send_restart_failed_alert(
+                self.email_manager.report_final_failure(
                     self.process_title,
                     self.restart_count,
                     f"Maximum restart attempts ({self.max_restarts}) reached",
@@ -643,7 +723,7 @@ class FlagBasedRestartManager:
             print_process_status("Interrupted by user")
         except Exception as e:
             print_error_message("FATAL", str(e))
-            self.email_manager.send_restart_failed_alert(
+            self.email_manager.report_final_failure(
                 self.process_title, self.restart_count, f"Fatal error: {str(e)}"
             )
         finally:
@@ -651,6 +731,43 @@ class FlagBasedRestartManager:
             self._cleanup_converted_file()
             total_runtime = time.time() - self.start_time if self.start_time else None
             print_completion_summary(self.restart_count, total_runtime)
+
+    def _handle_restart_with_retry(self) -> bool:
+        """Handle restart with retry logic and consolidated email notifications.
+
+        Returns:
+            True if should continue restart attempts, False if should stop
+        """
+        self.restart_count += 1
+
+        # Check if should attempt restart using consolidated email manager
+        if not self.email_manager.should_attempt_restart(
+            self.process_title, self.restart_count, self.max_restarts
+        ):
+            return False
+
+        if self.restart_count < self.max_restarts:
+            # Protect current target process if still running
+            exclude_pids = []
+            if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
+                exclude_pids.append(self.current_target_pid)
+
+            # Perform child process cleanup before restart
+            try:
+                terminated, killed = self.child_cleanup.cleanup_children(exclude_pids)
+                print_cleanup_info(terminated, killed)
+            except psutil.NoSuchProcess:
+                print_warning_message("Current process not found during cleanup")
+            except Exception as e:
+                print_error_message("CLEANUP", f"Child cleanup failed (non-fatal): {e}")
+
+            # Exponential backoff with cap at 30 seconds
+            delay = min(self.restart_delay * (1.2 ** (self.restart_count - 1)), 30.0)
+            print_restart_info(self.restart_count, self.max_restarts, delay)
+            self._sleep(delay)
+            return True
+
+        return False
 
     def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
         """Launch target process.
@@ -761,29 +878,6 @@ class FlagBasedRestartManager:
 
         return "stopped"
 
-    def _handle_restart(self) -> None:
-        """Handle restart logic with exponential backoff for stability."""
-        self.restart_count += 1
-        if self.restart_count < self.max_restarts:
-            # Protect current target process if still running
-            exclude_pids = []
-            if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
-                exclude_pids.append(self.current_target_pid)
-
-            # Perform child process cleanup before restart
-            try:
-                terminated, killed = self.child_cleanup.cleanup_children(exclude_pids)
-                print_cleanup_info(terminated, killed)
-            except psutil.NoSuchProcess:
-                print_warning_message("Current process not found during cleanup")
-            except Exception as e:
-                print_error_message("CLEANUP", f"Child cleanup failed (non-fatal): {e}")
-
-            # Exponential backoff with cap at 30 seconds
-            delay = min(self.restart_delay * (1.2 ** (self.restart_count - 1)), 30.0)
-            print_restart_info(self.restart_count, self.max_restarts, delay)
-            self._sleep(delay)
-
     def _cleanup_all(self) -> None:
         """Cleanup all resources with optimized order for reliability."""
         # Stop monitor first (most critical for clean shutdown)
@@ -852,14 +946,12 @@ class FlagBasedRestartManager:
             time.sleep(min(0.1, end_time - time.time()))
 
 
-def start_monitor(pid: int, title: str, recipients_file: str, credentials_file: str) -> Dict[str, Any]:
-    """Start enhanced crash monitor with email alert capabilities.
+def start_monitor(pid: int, title: str) -> Dict[str, Any]:
+    """Start simplified crash monitor without email capabilities.
 
     Args:
         pid: Process ID to monitor
         title: Process title for alerts
-        recipients_file: Path to recipients configuration file
-        credentials_file: Path to credentials configuration file
 
     Returns:
         Monitor control info dictionary
@@ -882,17 +974,12 @@ def start_monitor(pid: int, title: str, recipients_file: str, credentials_file: 
         "restart_file": f"{base_path}.restart",
     }
 
-    # Generate enhanced monitoring script with email templates
+    # Generate simplified monitoring script
     script_content = MONITOR_SCRIPT.format(
         cwd=os.getcwd(),
         pid=pid,
         interval=2,
         title=repr(title),
-        recipients=recipients_file,
-        credentials=credentials_file,
-        crash_template=CRASH_ALERT_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
-        success_template=SUCCESS_RESTART_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
-        failed_template=FAILED_RESTART_TEMPLATE.replace('"', '\\"').replace("\n", "\\n"),
         **control_files,
     )
 
@@ -907,8 +994,6 @@ def start_monitor(pid: int, title: str, recipients_file: str, credentials_file: 
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
     time.sleep(3)
-    # if process.poll() is not None:
-    #     raise OSError("Monitor failed to start")
 
     return {"process": process, **control_files}
 
@@ -988,8 +1073,9 @@ def run_auto_restart(
     recipients_file: Optional[str] = None,
     credentials_file: Optional[str] = None,
     restart_after_delay: Optional[float] = None,
+    retry_attempts: int = 2,
 ) -> None:
-    """Main function with notebook conversion, file cleanup, and enhanced email notification support.
+    """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
@@ -1000,6 +1086,7 @@ def run_auto_restart(
         recipients_file: Path to recipients JSON file (defaults to ./json/recipients.json)
         credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
         restart_after_delay: restart the run after a delay in seconds
+        retry_attempts: Number of retry attempts before sending failure email
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -1015,6 +1102,7 @@ def run_auto_restart(
             restart_delay=restart_delay,
             recipients_file=recipients_file,
             credentials_file=credentials_file,
+            retry_attempts=retry_attempts,
         )
 
         if restart_after_delay is not None and restart_after_delay > 0:
@@ -1031,7 +1119,10 @@ def run_auto_restart(
                     def run_and_flag():
                         try:
                             manager.run_file_with_restart(
-                                file_path=file_path, success_flag_file=success_flag_file, title=title, restart_after_delay=restart_after_delay
+                                file_path=file_path,
+                                success_flag_file=success_flag_file,
+                                title=title,
+                                restart_after_delay=restart_after_delay,
                             )
                             finished[0] = True
                         except Exception:
