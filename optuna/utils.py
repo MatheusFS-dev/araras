@@ -191,6 +191,8 @@ def save_top_k_trials(
         trial_model_size = trial.user_attrs.get("model_size", None)
         trial_flops = trial.user_attrs.get("flops", None)
         trial_macs = trial.user_attrs.get("macs", None)
+        trial_mem_usage = trial.user_attrs.get("peak_memory_usage", None)
+        trial_inference_time = trial.user_attrs.get("inference_time", None)
         trial_summary = trial.user_attrs.get("model_summary", None)
         print(trial_summary)
 
@@ -210,13 +212,15 @@ def save_top_k_trials(
             file.write(f"Model size: {format_bytes(trial_model_size)}\n")
             file.write(f"FLOPs: {format_number(trial_flops)}FLOPs\n")
             file.write(f"MACs: {format_number(trial_macs)}MACs\n")
+            file.write(f"Peak memory usage: {format_bytes(trial_mem_usage)}\n")
+            file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)}s\n")
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
             
             # Write extra attributes
             for attr, value in extra_values.items():
                 file.write(f"{attr}: {value}\n")
 
-            file.write(f"Model summary: {trial_summary}\n")
+            file.write(f"\nModel summary: {trial_summary}\n")
 
             # Write trial hyperparameters
             if trial_params:
