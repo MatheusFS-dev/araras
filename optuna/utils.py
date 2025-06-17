@@ -211,12 +211,13 @@ def save_top_k_trials(
             file.write(f"FLOPs: {format_number(trial_flops)}FLOPs\n")
             file.write(f"MACs: {format_number(trial_macs)}MACs\n")
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
-            file.write(f"Model summary: {trial_summary}\n")
-
+            
             # Write extra attributes
             for attr, value in extra_values.items():
                 file.write(f"{attr}: {value}\n")
-            
+
+            file.write(f"Model summary: {trial_summary}\n")
+
             # Write trial hyperparameters
             if trial_params:
                 file.write("\n")
