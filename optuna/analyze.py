@@ -340,7 +340,7 @@ def plot_hyperparameter_distributions(
 
         # Handle different array shapes
         if n_plots == 1:
-            axes = np.array([axes])
+            axes = np.array([[axes]])
         elif n_rows == 1:
             axes = axes.reshape(1, -1)
         elif n_cols == 1:
@@ -446,7 +446,7 @@ def plot_hyperparameter_distributions(
 
         # Handle different array shapes
         if n_plots == 1:
-            axes = np.array([axes])
+            axes = np.array([[axes]])
         elif n_rows == 1:
             axes = axes.reshape(1, -1)
         elif n_cols == 1:
@@ -714,7 +714,7 @@ def plot_parameter_boxplots(
 
         # Handle different array shapes
         if n_plots == 1:
-            axes = np.array([axes])
+            axes = np.array([[axes]])
         elif n_rows == 1:
             axes = axes.reshape(1, -1)
         elif n_cols == 1:
@@ -798,7 +798,7 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
 
     # Handle different array shapes
     if n_plots == 1:
-        axes = np.array([axes])
+        axes = np.array([[axes]])
     elif n_rows == 1:
         axes = axes.reshape(1, -1)
     elif n_cols == 1:
@@ -1046,7 +1046,7 @@ def plot_optimal_ranges_analysis(
 
     # Handle different array shapes
     if n_plots == 1:
-        axes = np.array([axes])
+        axes = np.array([[axes]])
     elif n_rows == 1:
         axes = axes.reshape(1, -1)
     elif n_cols == 1:
