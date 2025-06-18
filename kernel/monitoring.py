@@ -993,7 +993,7 @@ def start_monitor(pid: int, title: str) -> Dict[str, Any]:
     launcher = SimpleTerminalLauncher()
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
-    time.sleep(3)
+    time.sleep(0.1)
     if process.poll() is not None: # Check if it died
         exit_code = process.returncode
         error_msg = f"Monitor failed to start (exit code: {exit_code})"
