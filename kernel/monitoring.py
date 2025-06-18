@@ -994,6 +994,27 @@ def start_monitor(pid: int, title: str) -> Dict[str, Any]:
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
     time.sleep(3)
+    if process.poll() is not None: # Check if it died
+        exit_code = process.returncode
+        error_msg = f"Monitor failed to start (exit code: {exit_code})"
+
+        # Try to get stderr output if available
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+            if stderr:
+                error_msg += f". Error output: {stderr.decode().strip()}"
+            elif stdout:
+                error_msg += f". Output: {stdout.decode().strip()}"
+        except:
+            pass
+
+        # Cleanup the failed script file
+        try:
+            os.unlink(script_path)
+        except:
+            pass
+
+        raise OSError(error_msg)
 
     return {"process": process, **control_files}
 
