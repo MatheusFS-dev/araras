@@ -103,7 +103,10 @@ def format_bytes(bytes_value, precision=2):
     if bytes_value == 0:
         return "0 B"
 
-    is_negative = bytes_value < 0
+    try:
+        is_negative = bytes_value < 0
+    except Exception as e:
+        return "Invalid input: " + str(e)
     bytes_value = abs(bytes_value)
 
     suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
@@ -137,8 +140,11 @@ def format_scientific(number, max_precision=2):
     if number == 0:
         return "0"
 
-    if math.isnan(number) or math.isinf(number):
-        return str(number)
+    try:
+        if math.isnan(number) or math.isinf(number):
+            return str(number)
+    except Exception as e:
+        return "Invalid input: " + str(e)
 
     # Calculate exponent
     exponent = math.floor(math.log10(abs(number)))
