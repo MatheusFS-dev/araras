@@ -30,6 +30,7 @@ class SimpleTerminalLauncher:
         """
         pid_file = tempfile.mktemp(suffix=".pid")
         cmd_str = " ".join(f'"{arg}"' for arg in command)
+        cmd_str = f"{cmd_str} 2> >(awk '!/ptxas/')"
 
         # Simple PID capture without exit code complexity
         full_cmd = f"({cmd_str}) & echo $! > '{pid_file}'; wait"
