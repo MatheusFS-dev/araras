@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import json
+import glob
 import psutil
 import tempfile
 import subprocess
@@ -25,7 +26,7 @@ from threading import Event, Thread
 from araras.email.utils import send_email
 from araras.utils.cleanup import ChildProcessCleanup
 from araras.utils.terminal import SimpleTerminalLauncher
-from araras.utils.misc import NotebookConverter
+from araras.utils.misc import NotebookConverter, clear
 
 
 # Enhanced HTML template for consolidated status reports
@@ -200,6 +201,16 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
         print(f"Child cleanup: {terminated} terminated, {killed} killed")
+
+
+# —————————————————————————————————— Utility ————————————————————————————————— #
+def _cleanup_stale_monitor_files():
+    tmpdir = tempfile.gettempdir()
+    for path in glob.glob(os.path.join(tmpdir, "*_monitor.*")):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
 
 
 # ——————————————————————————— Consolidated Email Manager —————————————————————————————— #
@@ -550,6 +561,7 @@ class FlagBasedRestartManager:
         "original_was_notebook",
         "start_time",
         "last_process_start_time",
+        "_last_restart_file",
     )
 
     def __init__(
@@ -580,6 +592,7 @@ class FlagBasedRestartManager:
         self.current_terminal_process: Optional[subprocess.Popen] = None
         self.current_target_pid: Optional[int] = None
         self.monitor_info: Optional[Dict[str, Any]] = None
+        self._last_restart_file: Optional[str] = None
 
         # File cleanup tracking
         self.converted_python_file: Optional[Path] = None
@@ -652,6 +665,10 @@ class FlagBasedRestartManager:
         previous_pid = None
 
         try:
+            # before launching a new run
+            if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
+                raise RuntimeError("Previous target process still running, aborting duplicate start")
+
             # Main restart loop with consolidated email notifications
             while self.running and self.restart_count < self.max_restarts:
                 # Remove old success flag (atomic operation)
@@ -674,6 +691,7 @@ class FlagBasedRestartManager:
 
                     # Start crash monitor with simplified monitoring
                     self.monitor_info = start_monitor(target_pid, self.process_title)
+                    self._last_restart_file = self.monitor_info["restart_file"]
 
                     # Wait for completion or crash with optimized polling
                     completion_reason = self._wait_for_completion(flag_path)
@@ -699,6 +717,10 @@ class FlagBasedRestartManager:
                         print_process_status("Process crashed, checking restart policy")
                         if not self._handle_restart_with_retry():
                             break
+                    elif completion_reason == "interrupted":
+                        # User pressed CTRL+C, clean up and exit
+                        print_process_status("Process interrupted by user")
+                        break
                     else:
                         print_process_status("Process ended without success flag, treating as failure")
                         if not self._handle_restart_with_retry():
@@ -720,13 +742,15 @@ class FlagBasedRestartManager:
                 )
 
         except KeyboardInterrupt:
-            print_process_status("Interrupted by user")
+            print_process_status("Interrupted by user, cleaning up resources")
+            self.running = False
         except Exception as e:
             print_error_message("FATAL", str(e))
             self.email_manager.report_final_failure(
                 self.process_title, self.restart_count, f"Fatal error: {str(e)}"
             )
         finally:
+            # Ensure all cleanup operations are performed
             self._cleanup_all()
             self._cleanup_converted_file()
             total_runtime = time.time() - self.start_time if self.start_time else None
@@ -859,22 +883,30 @@ class FlagBasedRestartManager:
         while self.running:
             check_count += 1
 
-            # Check for success flag (highest priority, O(1) operation)
-            if flag_path.exists():
-                return "success_flag"
+            # Check for keyboard interrupt (CTRL+C)
+            try:
+                # Check for success flag (highest priority, O(1) operation)
+                if flag_path.exists():
+                    return "success_flag"
 
-            # Check crash signal every other iteration to reduce I/O
-            if check_count % 2 == 0 and self.monitor_info:
-                crash_info = check_crash_signal(self.monitor_info)
-                if crash_info:
-                    return "crashed"
+                # Check crash signal every other iteration to reduce I/O
+                if check_count % 2 == 0 and self.monitor_info:
+                    crash_info = check_crash_signal(self.monitor_info)
+                    if crash_info:
+                        return "crashed"
 
-            # Check process existence every 4th iteration for efficiency
-            if check_count % 4 == 0 and self.current_target_pid:
-                if not psutil.pid_exists(self.current_target_pid):
-                    return "process_died"
+                # Check process existence every 4th iteration for efficiency
+                if check_count % 4 == 0 and self.current_target_pid:
+                    if not psutil.pid_exists(self.current_target_pid):
+                        return "process_died"
 
-            time.sleep(0.5)
+                time.sleep(0.5)
+            except KeyboardInterrupt:
+                # Handle CTRL+C by cleaning up the current monitored process
+                print_process_status("CTRL+C detected, shutting down monitored process")
+                self.running = False
+                self._cleanup_all()
+                return "interrupted"
 
         return "stopped"
 
@@ -885,18 +917,36 @@ class FlagBasedRestartManager:
             stop_monitor(self.monitor_info)
             self.monitor_info = None
 
+        # now delete its restart_file if it still exists
+        if self._last_restart_file and os.path.exists(self._last_restart_file):
+            try:
+                os.unlink(self._last_restart_file)
+            except OSError:
+                pass
+        self._last_restart_file = None
+
+        time.sleep(0.1)
+
         # Terminate target process
         if self.current_target_pid:
             try:
                 proc = psutil.Process(self.current_target_pid)
                 proc.terminate()
                 proc.wait(timeout=3)
-            except:
+            except psutil.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            except psutil.NoSuchProcess:
                 pass
-            self.current_target_pid = None
+            finally:
+                self.current_target_pid = None
+
+        time.sleep(0.1)
 
         # Cleanup terminal last
         self._cleanup_terminal()
+
+        time.sleep(0.1)
 
     def _cleanup_terminal(self) -> None:
         """Cleanup terminal process with minimal overhead."""
@@ -943,7 +993,13 @@ class FlagBasedRestartManager:
         """
         end_time = time.time() + duration
         while self.running and time.time() < end_time:
-            time.sleep(min(0.1, end_time - time.time()))
+            try:
+                time.sleep(min(0.1, end_time - time.time()))
+            except KeyboardInterrupt:
+                # Handle CTRL+C during sleep
+                self.running = False
+                print_process_status("CTRL+C detected during restart delay, aborting restart")
+                break
 
 
 def start_monitor(pid: int, title: str) -> Dict[str, Any]:
@@ -960,6 +1016,9 @@ def start_monitor(pid: int, title: str) -> Dict[str, Any]:
         ValueError: If PID doesn't exist
         OSError: If monitor startup fails
     """
+    _cleanup_stale_monitor_files()
+    time.sleep(0.1)  # Allow time for process to stabilize
+
     if not psutil.pid_exists(pid):
         raise ValueError(f"Process PID {pid} not found")
 
@@ -994,7 +1053,7 @@ def start_monitor(pid: int, title: str) -> Dict[str, Any]:
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
     time.sleep(0.1)
-    if process.poll() is not None: # Check if it died
+    if process.poll() is not None:  # Check if it died
         exit_code = process.returncode
         error_msg = f"Monitor failed to start (exit code: {exit_code})"
 
@@ -1094,7 +1153,7 @@ def run_auto_restart(
     recipients_file: Optional[str] = None,
     credentials_file: Optional[str] = None,
     restart_after_delay: Optional[float] = None,
-    retry_attempts: int = 2,
+    retry_attempts: int = None,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -1123,7 +1182,7 @@ def run_auto_restart(
             restart_delay=restart_delay,
             recipients_file=recipients_file,
             credentials_file=credentials_file,
-            retry_attempts=retry_attempts,
+            retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
         )
 
         if restart_after_delay is not None and restart_after_delay > 0:
@@ -1133,41 +1192,60 @@ def run_auto_restart(
             stop_event = Event()
 
             def restart_loop():
-                while not stop_event.is_set():
-                    manager.restart_count = 0  # Never increment max_restarts for forced restart
-                    finished = [False]
+                try:
+                    while not stop_event.is_set():
+                        manager.restart_count = 0  # Never increment max_restarts for forced restart
+                        finished = [False]
 
-                    def run_and_flag():
-                        try:
-                            manager.run_file_with_restart(
-                                file_path=file_path,
-                                success_flag_file=success_flag_file,
-                                title=title,
-                                restart_after_delay=restart_after_delay,
+                        def run_and_flag():
+                            try:
+                                manager.run_file_with_restart(
+                                    file_path=file_path,
+                                    success_flag_file=success_flag_file,
+                                    title=title,
+                                    restart_after_delay=restart_after_delay,
+                                )
+                                finished[0] = True
+                            except Exception:
+                                finished[0] = True  # On error, still allow restart
+
+                        thread = Thread(target=run_and_flag)
+                        thread.start()
+                        thread.join(timeout=restart_after_delay)
+                        if thread.is_alive():
+                            print_process_status(
+                                f"Forcing restart after {restart_after_delay} seconds (not a crash)"
                             )
-                            finished[0] = True
-                        except Exception:
-                            finished[0] = True  # On error, still allow restart
 
-                    thread = Thread(target=run_and_flag)
-                    thread.start()
-                    thread.join(timeout=restart_after_delay)
-                    if thread.is_alive():
-                        print_process_status(
-                            f"Forcing restart after {restart_after_delay} seconds (not a crash)"
-                        )
-                        manager._cleanup_all()
-                        # Intentionally NOT incrementing restart_count
-                        # Signal process to stop, then continue
-                        # The completion reason will be 'stopped', and the outer loop will restart
-                        # Wait for thread to finish cleanup
-                        thread.join(2)
-                    else:
-                        # If finished (success or crash), check if success
-                        if Path(success_flag_file).exists():
-                            stop_event.set()
+                            # First stop the monitor before restarting the process
+                            if manager.monitor_info:
+                                print_process_status("Stopping monitor before restart")
+                                stop_monitor(manager.monitor_info)
+                                manager.monitor_info = None
+                                time.sleep(0.1)
+
+                            manager._cleanup_all()
+                            # Intentionally NOT incrementing restart_count
+                            # Signal process to stop, then continue
+                            # The completion reason will be 'stopped', and the outer loop will restart
+                            # Wait for thread to finish cleanup
+                            thread.join(2)
+                            clear()
+
                         else:
-                            print_process_status("Process ended before restart_after_delay, restarting...")
+                            # If finished (success or crash), check if success
+                            if Path(success_flag_file).exists():
+                                stop_event.set()
+                            else:
+                                print_process_status(
+                                    "Process ended before restart_after_delay, restarting..."
+                                )     
+                except KeyboardInterrupt:
+                    # Handle CTRL+C in the restart loop
+                    stop_event.set()
+                    print_process_status("Restart loop interrupted by user, cleaning up")
+                    manager._cleanup_all()
+                    manager._cleanup_converted_file()
                 print_process_status("Restart-after-delay loop done")
 
             restart_loop()
@@ -1181,6 +1259,8 @@ def run_auto_restart(
     except (FileNotFoundError, ValueError, ImportError) as e:
         print_error_message("CONFIG", str(e))
         raise
+    except KeyboardInterrupt:
+        print_process_status("Main process interrupted by user, performing final cleanup")
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
