@@ -678,6 +678,10 @@ class FlagBasedRestartManager:
                 self.last_process_start_time = time.time()
 
                 try:
+                    if self.monitor_info:
+                        stop_monitor(self.monitor_info)
+                        self.monitor_info = None
+
                     # Launch process
                     target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     print_process_status("Process started", target_pid)
