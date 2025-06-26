@@ -37,12 +37,32 @@ def get_user_gpu_choice():
         print(f"{RED}No GPUs available. Using CPU.{RESET}")
         return ""
     elif num_gpus == 1:
-        print(f"{GREEN}Only one GPU available: {available_gpus[0].name}{RESET}")
+        # Get GPU data for single GPU
+        gpu_data = _get_nvidia_smi_data()
+        if gpu_data and len(gpu_data) > 0:
+            gpu = gpu_data[0]
+            free_gb = gpu["free_mb"] / 1024
+            total_gb = gpu["total_mb"] / 1024
+            print(
+                f"Only one GPU available: {gpu['name']} ({GREEN}{free_gb:.1f}GB/{RED}{total_gb:.1f}GB free){RESET}"
+            )
+        else:
+            print(f"Only one GPU available: {GREEN}{available_gpus[0].name}{RESET}")
         return "0"
+
+    # Get GPU data for multiple GPUs
+    gpu_data = _get_nvidia_smi_data()
+    gpu_info_map = {gpu["index"]: gpu for gpu in gpu_data} if gpu_data else {}
 
     print(f"{BOLD}{BLUE}Available GPUs: {GREEN}{num_gpus}{RESET}")
     for i, gpu in enumerate(available_gpus):
-        print(f"  {CYAN}GPU {i}{RESET}: {gpu.name}")
+        if i in gpu_info_map:
+            gpu_info = gpu_info_map[i]
+            free_gb = gpu_info["free_mb"] / 1024
+            total_gb = gpu_info["total_mb"] / 1024
+            print(f"  {CYAN}GPU {i}{RESET}: {gpu_info['name']} ({free_gb:.1f}GB/{total_gb:.1f}GB free)")
+        else:
+            print(f"  {CYAN}GPU {i}{RESET}: {gpu.name}")
 
     while True:
         try:
@@ -58,7 +78,6 @@ def get_user_gpu_choice():
             print(f"{RED}Invalid input. Please enter a valid number.{RESET}")
         except KeyboardInterrupt:
             print(f"\n{YELLOW}Operation cancelled. Using GPU 0 as default.{RESET}")
-            return "0"
 
 
 def _get_nvidia_smi_data():
