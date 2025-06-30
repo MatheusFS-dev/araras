@@ -49,7 +49,7 @@ class SimpleTerminalLauncher:
             terminal_cmd,
             cwd=working_dir,
             start_new_session=False,
-            stdin=subprocess.PIPE,
+            stdin=None,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             close_fds=False,
