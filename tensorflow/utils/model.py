@@ -106,7 +106,7 @@ def get_model_usage_stats(
         dummy_inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
 
     # Print the shapes of the input tensors
-    print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
+    # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
     powers: list[float] = []  # store measured power values
     times: list[float] = []  # store inference durations
