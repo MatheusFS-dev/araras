@@ -9,7 +9,7 @@ from typing import *
 class SimpleTerminalLauncher:
     """Minimal terminal launcher for cross-platform execution."""
 
-    __slots__ = ("system",)
+    __slots__ = ("system", "supress_tf_warnings")
 
     def __init__(self, supress_tf_warnings: bool = False):
         """Initialize launcher with OS detection."""
