@@ -140,10 +140,7 @@ def _print_tensorflow_info():
 
     gpus = tf.config.list_physical_devices("GPU")
     if gpus:
-        print(f"GPUs Detected  : {GREEN}{len(gpus)}{RESET}")
-        print(f"Default Device : {tf.test.gpu_device_name()}")
-    else:
-        print(f"GPUs Detected  : {RED}0{RESET}")
+       tf.test.gpu_device_name()
 
 
 def _print_gpu_table(gpu_data):
@@ -244,7 +241,7 @@ def get_gpu_info() -> None:
     _print_gpu_table(gpu_data)
 
     # Print memory summary
-    _print_memory_summary(gpu_data)
+    # _print_memory_summary(gpu_data)
 
     print(f"\n{BLUE}{'=' * 80}{RESET}")
 
