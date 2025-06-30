@@ -48,11 +48,11 @@ class SimpleTerminalLauncher:
         process = subprocess.Popen(
             terminal_cmd,
             cwd=working_dir,
-            start_new_session=True,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            close_fds=True if os.name != "nt" else False,
+            start_new_session=False,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            close_fds=False,
         )
 
         process.pid_file = pid_file
