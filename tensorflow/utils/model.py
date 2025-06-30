@@ -11,8 +11,7 @@ from typing import Tuple, Optional
 
 def get_model_usage_stats(
     saved_model: str | tf.keras.Model,
-    input_shape: Tuple[int, ...],
-    n_trials: int = 100000,
+    n_trials: int = 10000,
     device: str = "cpu",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     
@@ -33,7 +32,6 @@ def get_model_usage_stats(
     Args:
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
             a .keras model file, or a Keras Model instance.
-        input_shape (Tuple[int, ...]): Shape of the input tensor to use for inference.
         n_trials (int): Number of inference trials to perform. Defaults to 100000.
         device (str): Device for power measurement; must be 'cpu' or 'gpu'. Defaults to 'cpu'.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
@@ -99,8 +97,16 @@ def get_model_usage_stats(
     reloaded_model: tf.Module = tf.saved_model.load(saved_model)
     infer = reloaded_model.signatures["serving_default"]
 
-    # Prepare a random input tensor of the specified shape
-    input_tensor: tf.Tensor = tf.random.normal(input_shape)
+    # Build dummy inputs only for the real TensorSpecs
+    args, kwargs = infer.structured_input_signature
+    dummy_inputs = {}
+    for name, spec in kwargs.items():
+        # replace any None dims with 1
+        shape = [d if d is not None else 1 for d in spec.shape.as_list()]
+        dummy_inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
+
+    # Print the shapes of the input tensors
+    print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
     powers: list[float] = []  # store measured power values
     times: list[float] = []  # store inference durations
@@ -120,8 +126,8 @@ def get_model_usage_stats(
             # invalid device selection
             raise ValueError("Unsupported device: choose 'gpu' or 'cpu'")
 
-        # Execute model inference
-        _ = infer(input_tensor)
+        # Run inference
+        _ = infer(**dummy_inputs)
 
         # Compute how long the inference took
         elapsed = time.time() - start_time

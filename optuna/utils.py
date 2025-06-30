@@ -215,9 +215,9 @@ def save_top_k_trials(
             file.write(f"FLOPs: {format_number(trial_flops)}FLOPs\n")
             file.write(f"MACs: {format_number(trial_macs)}MACs\n")
             file.write(f"Peak memory usage: {format_bytes(trial_mem_usage)}\n")
-            file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)}s\n")
-            file.write(f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)}W\n")
-            file.write(f"Average energy consumption: {format_scientific(trial_avg_energy, max_precision=4)}J\n")
+            file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)} s\n")
+            file.write(f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n")
+            file.write(f"Average energy consumption: {format_scientific(trial_avg_energy, max_precision=4)} J\n")
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
 
             # Write extra attributes
