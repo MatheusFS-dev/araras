@@ -615,6 +615,7 @@ class FlagBasedRestartManager:
         success_flag_file: str,
         title: Optional[str] = None,
         restart_after_delay: Optional[float] = None,
+        supress_tf_warnings: bool = False
     ) -> None:
         """Run file with flag-based restart logic and consolidated email notifications.
 
@@ -623,6 +624,7 @@ class FlagBasedRestartManager:
             success_flag_file: Path where target process writes completion flag
             title: Custom title for monitoring
             restart_after_delay: Optional delay after which the run will be restarted
+            supress_tf_warnings: Suppress TensorFlow warnings (default: False)
 
         Raises:
             FileNotFoundError: If file doesn't exist
@@ -694,7 +696,7 @@ class FlagBasedRestartManager:
                         )
 
                     # Start crash monitor with simplified monitoring
-                    self.monitor_info = start_monitor(target_pid, self.process_title)
+                    self.monitor_info = start_monitor(target_pid, self.process_title, supress_tf_warnings=supress_tf_warnings)
                     self._last_restart_file = self.monitor_info["restart_file"]
 
                     # Wait for completion or crash with optimized polling
@@ -1006,12 +1008,13 @@ class FlagBasedRestartManager:
                 break
 
 
-def start_monitor(pid: int, title: str) -> Dict[str, Any]:
+def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
     """Start simplified crash monitor without email capabilities.
 
     Args:
         pid: Process ID to monitor
         title: Process title for alerts
+        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
 
     Returns:
         Monitor control info dictionary
@@ -1054,6 +1057,7 @@ def start_monitor(pid: int, title: str) -> Dict[str, Any]:
 
     # Launch monitor in terminal
     launcher = SimpleTerminalLauncher()
+    launcher.set_supress_tf_warnings(supress_tf_warnings)
     process = launcher.launch([sys.executable, script_path], os.getcwd())
 
     time.sleep(0.1)
@@ -1158,6 +1162,7 @@ def run_auto_restart(
     credentials_file: Optional[str] = None,
     restart_after_delay: Optional[float] = None,
     retry_attempts: int = None,
+    supress_tf_warnings: bool = False,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -1171,12 +1176,14 @@ def run_auto_restart(
         credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
         restart_after_delay: restart the run after a delay in seconds
         retry_attempts: Number of retry attempts before sending failure email
+        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
 
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If file type is unsupported
         ImportError: If notebook dependencies missing for .ipynb files
     """
+
     try:
         # Clean up any existing success flag file before starting
         Path(success_flag_file).unlink(missing_ok=True)
@@ -1208,6 +1215,7 @@ def run_auto_restart(
                                     success_flag_file=success_flag_file,
                                     title=title,
                                     restart_after_delay=restart_after_delay,
+                                    supress_tf_warnings=supress_tf_warnings,
                                 )
                                 finished[0] = True
                             except Exception:
@@ -1257,7 +1265,10 @@ def run_auto_restart(
         else:
             # Regular auto-restart logic
             manager.run_file_with_restart(
-                file_path=file_path, success_flag_file=success_flag_file, title=title
+                file_path=file_path,
+                success_flag_file=success_flag_file,
+                title=title,
+                supress_tf_warnings=supress_tf_warnings,
             )
 
     except (FileNotFoundError, ValueError, ImportError) as e:

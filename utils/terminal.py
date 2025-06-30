@@ -11,9 +11,18 @@ class SimpleTerminalLauncher:
 
     __slots__ = ("system",)
 
-    def __init__(self):
+    def __init__(self, supress_tf_warnings: bool = False):
         """Initialize launcher with OS detection."""
         self.system = platform.system().lower()
+        self.supress_tf_warnings = supress_tf_warnings
+        
+    def set_supress_tf_warnings(self, value: bool) -> None:
+        """Set the supress_tf_warnings attribute.
+
+        Args:
+            value: Boolean indicating whether to suppress TensorFlow warnings.
+        """
+        self.supress_tf_warnings = value
 
     def launch(self, command: List[str], working_dir: str) -> subprocess.Popen:
         """Launch command in new terminal with PID capture.
@@ -30,7 +39,9 @@ class SimpleTerminalLauncher:
         """
         pid_file = tempfile.mktemp(suffix=".pid")
         cmd_str = " ".join(f'"{arg}"' for arg in command)
-        cmd_str = f"{cmd_str} 2> >(awk '!/ptxas/')"
+        
+        if self.supress_tf_warnings:
+            cmd_str = f"{cmd_str} 2> >(awk '!/ptxas/')"
 
         # Simple PID capture without exit code complexity
         full_cmd = f"({cmd_str}) & echo $! > '{pid_file}'; wait"
