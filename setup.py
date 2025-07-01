@@ -6,7 +6,7 @@ with open("README.md", encoding="utf-8") as f:
 
 setup(
     name="araras",
-    version="1.0.0",
+    version="1.0.1",
     description="A collection of tools for Machine Learning and Data Science",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -26,7 +26,7 @@ setup(
         "scikit-learn>=1.0.0",
         "psutil>=5.8.0",
         "scipy>=1.7.0",
-        "fireducks-pandas>=0.9.0",
+        "fireducks>=0.9.0",
         "ipython>=7.0.0",
         "pretty_errors>=1.2.0",
     ],
@@ -35,5 +35,5 @@ setup(
         "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.9",
 )

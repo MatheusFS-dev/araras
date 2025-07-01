@@ -12,3 +12,5 @@ __pycache__/
 # IDE directories
 .vscode/
 
+dist/*
+*.egg-info/
