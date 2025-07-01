@@ -58,7 +58,7 @@ To set up the development environment, follow these steps:
 - Optuna
 - Tensorflow
 - Keras
-- fireducks pandas
+- pandas
 - Git
 
 ### 🪜 Steps

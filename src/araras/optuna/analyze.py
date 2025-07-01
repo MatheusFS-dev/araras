@@ -16,7 +16,7 @@ import os
 import optuna
 import numpy as np
 from typing import *
-import fireducks.pandas as pd
+import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from araras.plot.configs import config_plt

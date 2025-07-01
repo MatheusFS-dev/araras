@@ -1,5 +1,5 @@
-# tensoroo/__init__.py
-"""Top-level API for the tensoroo package."""
+# araras/__init__.py
+"""Top-level API for the araras package."""
 
 import pkgutil
 import importlib
