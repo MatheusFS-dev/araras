@@ -26,6 +26,8 @@ from optuna.importance import get_param_importances
 # Configure matplotlib for IEEE-style single-column figures
 config_plt("single-column")
 
+plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])
+
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
 # ———————————————————————————————————————————————————————————————————————————— #
@@ -423,8 +425,7 @@ def plot_hyperparameter_distributions(
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         plt.savefig(
-            os.path.join(dirs["figs"], "params_numeric_distributions.png"),
-            dpi=300,
+            os.path.join(dirs["figs"], "params_numeric_distributions.pdf"),
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -517,8 +518,7 @@ def plot_hyperparameter_distributions(
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         plt.savefig(
-            os.path.join(dirs["figs"], "params_categorical_distributions.png"),
-            dpi=300,
+            os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
             bbox_inches="tight",
         )
         plt.close(fig)
@@ -543,7 +543,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
         dirs (Dict[str, str]): Directory paths for saving outputs
     
     Returns:
-        None: Saves importance table as CSV and bar chart as PNG
+        None: Saves importance table as CSV and bar chart as pdf
     """
     # Calculate parameter importances using Optuna's algorithm
     importances = get_param_importances(study)
@@ -563,7 +563,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     plt.title("Hyperparameter Importances")  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
-    plt.savefig(os.path.join(dirs["figs"], "params_importances.png"), dpi=300)
+    plt.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
     plt.close()  # Close figure to free memory
 
 
@@ -581,7 +581,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         dirs (Dict[str, str]): Directory paths for saving outputs
     
     Returns:
-        None: Saves correlation heatmap as PNG file
+        None: Saves correlation heatmap as pdf file
     """
     # Include loss column with numeric parameters for correlation analysis
     cols = numeric_cols + ["loss"]
@@ -613,7 +613,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.title("Spearman Correlation")  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.png"), dpi=300)
+    fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"))
     plt.close()  # Close figure to free memory
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
@@ -674,7 +674,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.tight_layout()
 
     # Save parameter-loss correlation bar chart with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "params_study_value_correlations.png"), dpi=300)
+    fig.savefig(os.path.join(dirs["figs"], "params_study_value_correlations.pdf"))
     plt.close()  # Close figure to free memory
 
 
@@ -758,8 +758,8 @@ def plot_parameter_boxplots(
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         # Save the numeric parameters boxplot
-        save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.png")
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+        save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.pdf")
+        plt.savefig(save_path,  bbox_inches="tight")
         plt.close(fig)
     else:
         print("No numeric parameters found for boxplot analysis.")
@@ -779,7 +779,7 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
         dirs (Dict[str, str]): Directory paths for saving outputs
 
     Returns:
-        None: Saves single comprehensive trend plot as PNG file and trend statistics as CSV
+        None: Saves single comprehensive trend plot as pdf file and trend statistics as CSV
     """
     if not numeric_cols:
         print("No numeric parameters to analyze")
@@ -967,8 +967,8 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
     plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
     # Save the comprehensive trend plot
-    save_path = os.path.join(dirs["figs"], "params_trends.png")
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    save_path = os.path.join(dirs["figs"], "params_trends.pdf")
+    plt.savefig(save_path,  bbox_inches="tight")
     plt.close()  # Close figure to free memory
 
 
@@ -1230,8 +1230,8 @@ def plot_optimal_ranges_analysis(
     plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
     # Save the comprehensive plot
-    save_path = os.path.join(dirs["figs"], "params_optimal_ranges.png")
-    plt.savefig(save_path, dpi=300, bbox_inches="tight")
+    save_path = os.path.join(dirs["figs"], "params_optimal_ranges.pdf")
+    plt.savefig(save_path,  bbox_inches="tight")
     plt.close()
 
 
