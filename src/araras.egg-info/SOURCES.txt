@@ -1,0 +1,9 @@
+LICENSE.txt
+README.md
+pyproject.toml
+setup.py
+src/araras.egg-info/PKG-INFO
+src/araras.egg-info/SOURCES.txt
+src/araras.egg-info/dependency_links.txt
+src/araras.egg-info/requires.txt
+src/araras.egg-info/top_level.txt
