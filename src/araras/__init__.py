@@ -6,7 +6,7 @@ import importlib
 import inspect
 
 __all__ = []
-__version__ = "1.1.1"
+__version__ = "1.0.0" 
 
 
 for finder, module_name, ispkg in pkgutil.iter_modules(__path__):
