@@ -28,27 +28,27 @@ from dataclasses import dataclass
 class PlotConfig:
     """Global configuration for matplotlib plots used in this module."""
 
-    max_cols: int = 4
-    numeric_subplot_size: int = 5
-    box_subplot_height: int = 4
-    standalone_size: Tuple[int, int] = (8, 6)
-    importance_size: Tuple[int, int] = (6, 4)
-    heatmap_cell: float = 0.5
-    corr_bar_min_width: int = 6
-    corr_bar_scale: float = 0.6
-    title_fs: int = 14
-    label_fs: int = 10
-    legend_fs: int = 8
-    standalone_legend_fs: int = 10
-    suptitle_fs: int = 16
-    standalone_title_fs: int = 16
-    standalone_label_fs: int = 12
-    annotation_fs: int = 8
-    bar_value_fs: int = 9
+    max_cols: int = 4  # Maximum number of columns in grid layouts for subplots
+    numeric_subplot_size: int = 5  # Size of each subplot for numeric parameter visualizations
+    box_subplot_height: int = 4  # Height of each subplot for boxplot visualizations
+    standalone_size: Tuple[int, int] = (8, 6)  # Size of standalone plots for individual parameters
+    importance_size: Tuple[int, int] = (8, 6)  # Size of the parameter importance bar chart
+    heatmap_cell: float = 0.5  # Size of each cell in the heatmap visualization
+    corr_bar_min_width: int = 6  # Minimum width of the correlation bar chart
+    corr_bar_scale: float = 0.6  # Scaling factor for correlation bar chart width
+    title_fs: int = 20  # Font size for subplot titles
+    label_fs: int = 16  # Font size for axis labels
+    legend_fs: int = 12  # Font size for legends in combined plots
+    standalone_legend_fs: int = 12  # Font size for legends in standalone plots
+    suptitle_fs: int = 16  # Font size for the overall title of combined plots
+    standalone_title_fs: int = 16  # Font size for titles in standalone plots
+    standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
+    annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
+    bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
 
 
 PLOT_CFG = PlotConfig()
-
+plt.rcParams.update({"font.family": "Times New Roman"})
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
@@ -1972,21 +1972,29 @@ def plot_optimal_ranges_analysis(
     plt.close()
 
 
-def print_study_columns(study: optuna.Study, exclude: Optional[List[str]] = None) -> None:
+def print_study_columns(
+    study: optuna.Study,
+    exclude: Optional[List[str]] = None,
+    param_name_mapping: Optional[Dict[str, str]] = None,
+) -> None:
     """
     Print the names of the DataFrame columns from the study as a bullet list.
 
     This function extracts the trial data from the Optuna study and displays
     all available column names in a formatted bullet list, with optional
-    exclusion of specified columns.
+    exclusion of specified columns. If `param_name_mapping` is provided, it
+    prints the side-by-side mapping of original parameter names to display names.
 
     Args:
-        study (optuna.Study): Optuna study object containing trial results
+        study (optuna.Study): Optuna study object containing trial results.
         exclude (List[str], optional): List of column names to exclude from the output.
-                                     Defaults to None (no exclusions).
+                                       Defaults to None (no exclusions).
+        param_name_mapping (Dict[str, str], optional): Mapping from original parameter names
+                                                       to display names for templates.
+                                                       Defaults to None.
 
     Returns:
-        None: Prints the column names to console
+        None: Prints the column names and mappings to console.
     """
     # Set default exclusions if none provided
     if exclude is None:
@@ -2002,44 +2010,35 @@ def print_study_columns(study: optuna.Study, exclude: Optional[List[str]] = None
         # Filter out excluded columns
         filtered_columns = [col for col in all_columns if col not in exclude]
 
-        # Print header information
-        print(f"\nStudy DataFrame Columns:")
-        print(f"Total columns: {len(all_columns)}")
-        if exclude:
-            print(f"Excluded columns: {len(exclude)} ({', '.join(exclude)})")
-            print(f"Displayed columns: {len(filtered_columns)}")
-        print("-" * 50)
-
-        # Print filtered columns as bullet list
-        if filtered_columns:
-            for col in filtered_columns:
-                print(f"• {col}")
-        else:
-            print("No columns to display after applying exclusions.")
-
         # Print additional information about the study
         print("-" * 50)
         print(f"Study info:")
         print(f"• Total trials: {len(df)}")
-
         # Count trials by state if 'state' column exists
         if "state" in df.columns:
             state_counts = df["state"].value_counts()
             for state, count in state_counts.items():
                 print(f"• {state} trials: {count}")
 
-        # Show parameter columns specifically if they exist
-        param_columns = [col for col in filtered_columns if col.startswith("params_")]
-        if param_columns:
-            print(f"• Parameter columns: {len(param_columns)}")
-            for param_col in param_columns:
-                # Remove 'params_' prefix for cleaner display
-                param_name = param_col.replace("params_", "")
-                print(f"  - {param_name}")
-
+        # Print filtered columns as bullet list
+        if filtered_columns:
+            print("Parameter Template:")
+            print("{")
+            for col in filtered_columns:
+                if col.startswith("params_"):
+                    param_name = col
+                    if param_name_mapping:
+                        display_name = param_name_mapping.get(param_name, param_name)
+                        print(f'    "{param_name}": "{display_name}",')
+                    else:
+                        print(f'    "{param_name}": "{param_name}",')
+            print("}")
+            print("-" * 50)
+        else:
+            print("No columns to display after applying exclusions.")
+            
     except Exception as e:
         print(f"Error extracting study information: {str(e)}")
-        print("Please verify that the study contains valid trial data.")
 
 
 def analyze_study(
@@ -2094,11 +2093,25 @@ def analyze_study(
     numeric_cols, categorical_cols = classify_columns(df)
     best, worst = get_trial_subsets(df, top_frac)
 
-    print_study_columns(study, exclude=["loss", "value"])
-    print("\n\n")
+    print_study_columns(
+        study, 
+        exclude=[
+            "loss", 
+            "value", 
+            "number", 
+            "datetime_start", 
+            "datetime_complete", 
+            "duration",
+            "system_attrs_completed_rung_0",
+            "system_attrs_completed_rung_1",
+            "system_attrs_completed_rung_2",
+            "state"
+        ] + [col for col in df.columns if col.startswith("user_")],
+        param_name_mapping=param_name_mapping
+    )
 
     # Generate comprehensive statistical summary tables and plots
-    print("Generating summary tables...")
+    print("\nGenerating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
 
     print("Creating hyperparameter distribution plots...")
@@ -2126,12 +2139,12 @@ def analyze_study(
     print(f"- Figures: {dirs['figs']}")
     if save_data:
         print(f"- Data for LaTeX: {dirs['data']}")
-        print("  * Distributions:", dirs["data_distributions"]) 
-        print("  * Boxplots:", dirs["data_boxplots"]) 
-        print("  * Trends:", dirs["data_trends"]) 
-        print("  * Ranges:", dirs["data_ranges"]) 
-        print("  * Importances:", dirs["data_importances"]) 
-        print("  * Correlations:", dirs["data_correlations"]) 
+        print("  * Distributions:", dirs["data_distributions"])
+        print("  * Boxplots:", dirs["data_boxplots"])
+        print("  * Trends:", dirs["data_trends"])
+        print("  * Ranges:", dirs["data_ranges"])
+        print("  * Importances:", dirs["data_importances"])
+        print("  * Correlations:", dirs["data_correlations"])
     print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
 
     if create_standalone:
