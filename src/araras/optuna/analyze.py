@@ -78,6 +78,7 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
         pd.DataFrame: Cleaned DataFrame with columns for loss and all hyperparameters,
                      containing only successfully completed trials with valid loss values
     """
+    print("Preparing DataFrame from Optuna study...")
     print(
         "Available columns in study:",
         study.trials_dataframe(multi_index=False).columns.tolist(),
