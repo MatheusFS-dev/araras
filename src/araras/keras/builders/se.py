@@ -1,0 +1,65 @@
+"""
+This module provides a function to build a Squeeze-and-Excitation (SE) block
+with hyperparameter tuning using Optuna.
+
+Based on the paper: https://arxiv.org/pdf/1709.01507
+
+
+This paper presents the Squeeze-and-Excitation (SE) block, an architectural unit that enhances convolutional neural networks by modelling and leveraging channel-wise dependencies. Through a two-step mechanism, global “squeeze” pooling followed by adaptive “excitation” gating, the SE block generates per-channel modulation weights that reweight feature maps, improving representational capacity with minimal overhead and achieving state-of-the-art results on multiple benchmarks .
+"""
+
+from typing import List
+import optuna
+import tensorflow as tf
+from tensorflow.keras import layers
+from araras.keras.hparams import HParams
+
+
+def build_squeeze_excite_1d(
+    x: tf.keras.layers.Layer,
+    trial: optuna.Trial,
+    hparams: HParams,
+    ratio_choices: List[int],
+    name_prefix: str = "se_block",
+) -> tf.keras.layers.Layer:
+    """Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
+
+    Args:
+        x: Input 3D tensor (batch, length, channels).
+        trial: Optuna Trial object for suggesting hyperparameters.
+        hparams: HParams object containing hyperparameter choices.
+        ratio_choices: List of integers representing reduction ratios for SE block.
+        name_prefix: Prefix for naming layers and trial parameters.
+
+    Returns:
+        A tensor the same shape as `x`, re-scaled by the SE attention weights.
+
+    Raises:
+        ValueError: If `x.shape[-1]` is None (undefined channel dimension).
+    """
+    # 1. Channel dimension
+    channels = x.shape[-1]
+    if channels is None:
+        raise ValueError(f"Cannot infer channels for SE block with prefix {name_prefix}")
+
+    # 2. Optuna suggestions using ratio_choices and HParams
+    ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
+    act_reduce = hparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+    act_expand = hparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+
+    # 3. Squeeze
+    se = layers.GlobalAveragePooling1D(name=f"{name_prefix}_se_squeeze")(x)
+    # 4. Excitation: reduce → expand
+    se = layers.Dense(
+        units=channels // ratio,
+        activation=act_reduce,
+        name=f"{name_prefix}_se_reduce",
+    )(se)
+    se = layers.Dense(
+        units=channels,
+        activation=act_expand,
+        name=f"{name_prefix}_se_expand",
+    )(se)
+    # 5. Reshape and scale
+    se = layers.Reshape((1, channels), name=f"{name_prefix}_se_reshape")(se)
+    return layers.Multiply(name=f"{name_prefix}_se_scale")([x, se])
