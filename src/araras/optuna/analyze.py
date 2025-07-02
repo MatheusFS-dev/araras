@@ -79,17 +79,33 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
                      containing only successfully completed trials with valid loss values
     """
     # Extract trial data including trial metadata and hyperparameter values
-    df = (
-        study.trials_dataframe(
-            attrs=("number", "value", "state", "params"),
-            multi_index=False,
+    df = study.trials_dataframe(attrs=("number", "value", "state", "params"))
+
+    # Check if required columns exist
+    required_columns = ["state", "value"]
+    available_columns = list(df.columns)
+    missing_columns = [col for col in required_columns if col not in available_columns]
+
+    if missing_columns:
+        error_msg = (
+            f"Missing required columns: {missing_columns}\n"
+            f"Available columns: {available_columns}\n"
+            f"This might indicate an issue with the Optuna study data.\n"
+            f"Please check:\n"
+            f"1. The study.db file path is correct and accessible\n"
+            f"2. The study contains trials with the expected data structure\n"
+            f"3. The Optuna version is compatible with this analysis code"
         )
-        .query("state == 'COMPLETE'")  # Filter to only successfully completed trials
-        .drop(columns=["number", "state"], errors="ignore")  # Remove unnecessary metadata columns
-    )
+        raise ValueError(error_msg)
+
+    # Filter to only successfully completed trials
+    df = df.query("state == 'COMPLETE'")
+    df = df.drop(columns=["number", "state"], errors="ignore")  # Remove unnecessary metadata columns
 
     # Return empty DataFrame if no completed trials exist
     if df.empty:
+        print("Warning: No completed trials found in the study.")
+        print("Please verify that the study contains successful trials.")
         return df
 
     # Rename 'value' column to 'loss' for clarity in analysis
