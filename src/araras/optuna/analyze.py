@@ -45,10 +45,17 @@ class PlotConfig:
     standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
     annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
     bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
+    tick_fs: int = 12  # Font size for axis tick labels
 
 
 PLOT_CFG = PlotConfig()
-plt.rcParams.update({"font.family": "Times New Roman"})
+plt.rcParams.update(
+    {
+        "font.family": "Times New Roman",
+        "xtick.labelsize": PLOT_CFG.tick_fs,
+        "ytick.labelsize": PLOT_CFG.tick_fs,
+    }
+)
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
@@ -705,7 +712,12 @@ def plot_hyperparameter_distributions(
 
             # Customize x-axis labels
             ax.set_xticks(range(len(counts)))
-            ax.set_xticklabels(counts.index.astype(str), rotation=45, ha="right")
+            ax.set_xticklabels(
+                counts.index.astype(str),
+                rotation=45,
+                ha="right",
+                fontsize=PLOT_CFG.tick_fs,
+            )
 
             # Add value and percentage labels on bars
             max_count = max(counts.values)
@@ -752,7 +764,12 @@ def plot_hyperparameter_distributions(
                 )
 
                 standalone_ax.set_xticks(range(len(counts)))
-                standalone_ax.set_xticklabels(counts.index.astype(str), rotation=45, ha="right")
+                standalone_ax.set_xticklabels(
+                    counts.index.astype(str),
+                    rotation=45,
+                    ha="right",
+                    fontsize=PLOT_CFG.tick_fs,
+                )
 
                 for i, (bar, count, pct) in enumerate(
                     zip(standalone_bars, counts.values, percentages.values)
@@ -851,7 +868,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     # Plot bars with parameter names on x-axis and importance values on y-axis
     plt.bar(df_imp["Parameter"], df_imp["Importance"], edgecolor="black")
     # Rotate parameter names for better readability
-    plt.xticks(rotation=45, ha="right")
+    plt.xticks(rotation=45, ha="right", fontsize=PLOT_CFG.tick_fs)
     plt.ylabel("Importance")  # Importance score on y-axis
     plt.title("Hyperparameter Importances")  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
@@ -902,8 +919,13 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Set axis labels to parameter names
     ax.set_xticks(range(len(cols)))
     ax.set_yticks(range(len(cols)))
-    ax.set_xticklabels(cols, rotation=45, ha="right")  # Rotate x-labels for readability
-    ax.set_yticklabels(cols)
+    ax.set_xticklabels(
+        cols,
+        rotation=45,
+        ha="right",
+        fontsize=PLOT_CFG.tick_fs,
+    )  # Rotate x-labels for readability
+    ax.set_yticklabels(cols, fontsize=PLOT_CFG.tick_fs)
 
     # Add correlation values as text on each cell
     for i in range(len(cols)):
@@ -955,7 +977,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Set y-axis labels to parameter names
     ax.set_yticks(range(len(param_loss_corr)))
-    ax.set_yticklabels(param_loss_corr.index)
+    ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.tick_fs)
 
     # Add correlation values as text on each bar
     for i, (param, corr_val) in enumerate(param_loss_corr.items()):
@@ -1150,7 +1172,7 @@ def plot_parameter_boxplots(
             ax.grid(True, alpha=0.3, axis="y")
 
             # Rotate x-axis labels for better readability
-            ax.tick_params(axis="x", rotation=45)
+            ax.tick_params(axis="x", rotation=45, labelsize=PLOT_CFG.tick_fs)
 
             # Create standalone image if requested
             if create_standalone:
@@ -1170,7 +1192,9 @@ def plot_parameter_boxplots(
                 )
                 standalone_ax.set_ylabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
-                standalone_ax.tick_params(axis="x", rotation=45)
+                standalone_ax.tick_params(
+                    axis="x", rotation=45, labelsize=PLOT_CFG.tick_fs
+                )
 
                 plt.tight_layout()
                 standalone_fig.savefig(
