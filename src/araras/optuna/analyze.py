@@ -23,11 +23,6 @@ from araras.plot.configs import config_plt
 from optuna.importance import get_param_importances
 
 
-# Configure matplotlib for IEEE-style single-column figures
-config_plt("single-column")
-
-plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])
-
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
 # ———————————————————————————————————————————————————————————————————————————— #
