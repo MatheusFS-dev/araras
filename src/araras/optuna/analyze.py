@@ -1921,7 +1921,7 @@ def analyze_study(
     top_frac: float = 0.2,
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
-    save_data: bool = True,
+    save_data: bool = False,
 ) -> None:
     """
     Comprehensive analysis of Optuna hyperparameter optimization study results.
