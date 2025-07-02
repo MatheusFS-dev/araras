@@ -34,12 +34,12 @@ def config_plt(style: str = 'single-column') -> None:
         {
             # Font settings
             "font.family": "Times New Roman",
-            "font.size": 8,
-            "axes.labelsize": 9,
-            "xtick.labelsize": 8,
-            "ytick.labelsize": 8,
-            "axes.titlesize": 10,
-            "legend.fontsize": 8,
+            "font.size": 16,
+            "axes.labelsize": 16,
+            "axes.titlesize": 20,
+            "legend.fontsize": 16,
+            "xtick.labelsize": 14,
+            "ytick.labelsize": 14,
             "axes.titleweight": "normal",
             "axes.titlepad": 6,
             "axes.labelpad": 4,
