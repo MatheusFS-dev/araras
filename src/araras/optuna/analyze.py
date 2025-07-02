@@ -33,7 +33,9 @@ plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])
 # ———————————————————————————————————————————————————————————————————————————— #
 
 
-def create_directories(table_dir: str, create_standalone: bool = False) -> Dict[str, str]:
+def create_directories(
+    table_dir: str, create_standalone: bool = False, save_data: bool = True
+) -> Dict[str, str]:
     """
     Create organized subdirectories for storing analysis outputs.
 
@@ -44,19 +46,45 @@ def create_directories(table_dir: str, create_standalone: bool = False) -> Dict[
     Args:
         table_dir (str): Base directory path for saving table/CSV outputs
         create_standalone (bool): Whether to create standalone image directories
+        save_data (bool): Whether to create directories for data intended for
+            LaTeX plotting
 
     Returns:
         Dict[str, str]: Dictionary mapping directory purpose to full path,
-                       with keys like 'fig_boxplots', 'table_best', etc.
+            including keys like 'data_distributions' or 'standalone_boxplots'.
     """
     # Define organized subdirectory structure for different output types
     dirs = {
         "figs": os.path.join(table_dir, "figures"),
-        "data": os.path.join(table_dir, "data"),
         "table_best": os.path.join(table_dir, "best"),
         "table_worst": os.path.join(table_dir, "worst"),
         "table_overall": os.path.join(table_dir, "overall"),
     }
+
+    if save_data:
+        dirs.update(
+            {
+                "data": os.path.join(table_dir, "data"),
+                "data_distributions": os.path.join(table_dir, "data", "distributions"),
+                "data_boxplots": os.path.join(table_dir, "data", "boxplots"),
+                "data_trends": os.path.join(table_dir, "data", "trends"),
+                "data_ranges": os.path.join(table_dir, "data", "ranges"),
+                "data_importances": os.path.join(table_dir, "data", "importances"),
+                "data_correlations": os.path.join(table_dir, "data", "correlations"),
+            }
+        )
+    else:
+        dirs.update(
+            {
+                "data": None,
+                "data_distributions": None,
+                "data_boxplots": None,
+                "data_trends": None,
+                "data_ranges": None,
+                "data_importances": None,
+                "data_correlations": None,
+            }
+        )
 
     # Add standalone directories if requested
     if create_standalone:
@@ -71,7 +99,8 @@ def create_directories(table_dir: str, create_standalone: bool = False) -> Dict[
 
     # Create each directory, allowing existing directories to remain unchanged
     for dir_path in dirs.values():
-        os.makedirs(dir_path, exist_ok=True)
+        if dir_path is not None:
+            os.makedirs(dir_path, exist_ok=True)
 
     return dirs
 
@@ -85,6 +114,9 @@ def save_data_for_latex(data_dict: Dict[str, Any], filename: str, data_dir: str)
         filename (str): Base filename without extension
         data_dir (str): Directory to save data files
     """
+    if data_dir is None:
+        return
+
     filepath = os.path.join(data_dir, f"{filename}.csv")
 
     # Convert data to DataFrame and save
@@ -437,7 +469,11 @@ def plot_hyperparameter_distributions(
 
             # Save data for LaTeX
             bin_centers = (bins[:-1] + bins[1:]) / 2
-            save_data_for_latex({"x": bin_centers, "y": n}, f"numeric_distribution_{col}", dirs["data"])
+            save_data_for_latex(
+                {"x": bin_centers, "y": n},
+                f"numeric_distribution_{col}",
+                dirs["data_distributions"],
+            )
 
             # KDE curve
             kde = gaussian_kde(values)
@@ -446,7 +482,11 @@ def plot_hyperparameter_distributions(
             ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
 
             # Save KDE data for LaTeX
-            save_data_for_latex({"x": x_range, "y": kde_values}, f"numeric_kde_{col}", dirs["data"])
+            save_data_for_latex(
+                {"x": x_range, "y": kde_values},
+                f"numeric_kde_{col}",
+                dirs["data_distributions"],
+            )
 
             # Statistics
             mean_val = values.mean()
@@ -605,7 +645,7 @@ def plot_hyperparameter_distributions(
                     "percentage": percentages.values.tolist(),
                 },
                 f"categorical_distribution_{col}",
-                dirs["data"],
+                dirs["data_distributions"],
             )
 
             # Create enhanced bar chart
@@ -744,9 +784,12 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
 
     # Save data for LaTeX
     save_data_for_latex(
-        {"parameter": df_imp["Parameter"].tolist(), "importance": df_imp["Importance"].tolist()},
+        {
+            "parameter": df_imp["Parameter"].tolist(),
+            "importance": df_imp["Importance"].tolist(),
+        },
         "param_importances",
-        dirs["data"],
+        dirs["data_importances"],
     )
 
     # Create bar chart visualization
@@ -786,7 +829,11 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     corr = df[cols].corr(method="spearman")
 
     # Save correlation matrix data for LaTeX
-    save_data_for_latex(corr.reset_index(), "spearman_correlation_matrix", dirs["data"])
+    save_data_for_latex(
+        corr.reset_index(),
+        "spearman_correlation_matrix",
+        dirs["data_correlations"],
+    )
 
     # ———————————————————————— Complete correlation matrix ——————————————————————— #
     fig, ax = plt.subplots(figsize=(len(cols) * 0.5 + 1, len(cols) * 0.5 + 1))
@@ -821,9 +868,12 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Save parameter-loss correlation data for LaTeX
     save_data_for_latex(
-        {"parameter": param_loss_corr.index.tolist(), "correlation": param_loss_corr.values.tolist()},
+        {
+            "parameter": param_loss_corr.index.tolist(),
+            "correlation": param_loss_corr.values.tolist(),
+        },
         "param_loss_correlations",
-        dirs["data"],
+        dirs["data_correlations"],
     )
 
     # Create figure for parameter-loss correlation bar chart
@@ -928,6 +978,9 @@ def plot_parameter_boxplots(
             worst_data (pd.Series): Worst trials data
             data_dir (str): Directory to save data files
         """
+        if data_dir is None:
+            return
+
         import os
 
         # Clean the data (remove NaN values)
@@ -1004,7 +1057,7 @@ def plot_parameter_boxplots(
             labels = ["All trials", "Best trials", "Worst trials"]
 
             # Save boxplot data for LaTeX (fixed version)
-            save_boxplot_data_for_latex(col, df[col], best[col], worst[col], dirs["data"])
+            save_boxplot_data_for_latex(col, df[col], best[col], worst[col], dirs["data_boxplots"])
 
             # Create boxplot with filled boxes for better visibility
             box_plot = ax.boxplot(data, labels=labels, patch_artist=True)
@@ -1129,7 +1182,9 @@ def plot_trend_analysis(
 
         # Save scatter plot data for LaTeX
         save_data_for_latex(
-            {"x": x_clean.tolist(), "y": y_clean.tolist()}, f"trend_scatter_{col}", dirs["data"]
+            {"x": x_clean.tolist(), "y": y_clean.tolist()},
+            f"trend_scatter_{col}",
+            dirs["data_trends"],
         )
 
         # Check if we have enough valid data points
@@ -1216,7 +1271,9 @@ def plot_trend_analysis(
 
             # Save trend line data for LaTeX
             save_data_for_latex(
-                {"x": [x_min, x_max], "y": [y_at_x_min, y_at_x_max]}, f"trend_line_{col}", dirs["data"]
+                {"x": [x_min, x_max], "y": [y_at_x_min, y_at_x_max]},
+                f"trend_line_{col}",
+                dirs["data_trends"],
             )
 
             # Plot the line using only the endpoints to ensure correct visualization
@@ -1322,7 +1379,11 @@ def plot_trend_analysis(
             plt.close(standalone_fig)
 
     # Save trend statistics
-    save_data_for_latex(pd.DataFrame(stats).to_dict("list"), "trend_statistics", dirs["data"])
+    save_data_for_latex(
+        pd.DataFrame(stats).to_dict("list"),
+        "trend_statistics",
+        dirs["data_trends"],
+    )
 
     # Hide unused subplots if needed
     for idx in range(n_plots, n_rows * n_cols):
@@ -1393,6 +1454,9 @@ def plot_optimal_ranges_analysis(
             best_median: Median of best trials
             data_dir (str): Directory to save data files
         """
+        if data_dir is None:
+            return
+
         import os
 
         # Save histogram data separately for each subset
@@ -1480,7 +1544,7 @@ def plot_optimal_ranges_analysis(
                 aggressive_min=param_data["aggressive_min"],
                 aggressive_max=param_data["aggressive_max"],
                 best_median=param_data["best_median"],
-                data_dir=dirs["data"],
+                data_dir=dirs["data_ranges"],
             )
 
         ranges_data.append(param_data)
@@ -1857,6 +1921,7 @@ def analyze_study(
     top_frac: float = 0.2,
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    save_data: bool = True,
 ) -> None:
     """
     Comprehensive analysis of Optuna hyperparameter optimization study results.
@@ -1882,6 +1947,7 @@ def analyze_study(
                                            to display names for plots and tables
         create_standalone (bool): Whether to create standalone images for each parameter
                                 in addition to combined plots
+        save_data (bool): Whether to export CSV data for creating LaTeX figures
 
     Returns:
         None: Saves all analysis outputs to specified directories and prints progress messages
@@ -1889,7 +1955,7 @@ def analyze_study(
     print("\n\nAnalyzing study...")
 
     # Create organized directory structure for different output types
-    dirs = create_directories(table_dir, create_standalone)
+    dirs = create_directories(table_dir, create_standalone, save_data)
 
     # Extract and clean completed trial data from the study
     df = prepare_dataframe(study)
@@ -1931,7 +1997,14 @@ def analyze_study(
     # Print summary of created outputs
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
-    print(f"- Data for LaTeX: {dirs['data']}")
+    if save_data:
+        print(f"- Data for LaTeX: {dirs['data']}")
+        print("  * Distributions:", dirs["data_distributions"]) 
+        print("  * Boxplots:", dirs["data_boxplots"]) 
+        print("  * Trends:", dirs["data_trends"]) 
+        print("  * Ranges:", dirs["data_ranges"]) 
+        print("  * Importances:", dirs["data_importances"]) 
+        print("  * Correlations:", dirs["data_correlations"]) 
     print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
 
     if create_standalone:
