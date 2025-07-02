@@ -32,18 +32,19 @@ plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])
 #                               Utility Functions                              #
 # ———————————————————————————————————————————————————————————————————————————— #
 
-def create_directories(table_dir: str) -> Dict[str, str]:
+
+def create_directories(table_dir: str, create_standalone: bool = False) -> Dict[str, str]:
     """
     Create organized subdirectories for storing analysis outputs.
-    
+
     This function establishes a structured directory hierarchy to organize
     different types of analysis outputs (figures and tables) into logical
     categories for easy navigation and interpretation.
-    
+
     Args:
-        fig_dir (str): Base directory path for saving figure outputs
         table_dir (str): Base directory path for saving table/CSV outputs
-    
+        create_standalone (bool): Whether to create standalone image directories
+
     Returns:
         Dict[str, str]: Dictionary mapping directory purpose to full path,
                        with keys like 'fig_boxplots', 'table_best', etc.
@@ -51,10 +52,22 @@ def create_directories(table_dir: str) -> Dict[str, str]:
     # Define organized subdirectory structure for different output types
     dirs = {
         "figs": os.path.join(table_dir, "figures"),
+        "data": os.path.join(table_dir, "data"),
         "table_best": os.path.join(table_dir, "best"),
         "table_worst": os.path.join(table_dir, "worst"),
         "table_overall": os.path.join(table_dir, "overall"),
     }
+
+    # Add standalone directories if requested
+    if create_standalone:
+        dirs.update(
+            {
+                "standalone_distributions": os.path.join(table_dir, "figures", "standalone", "distributions"),
+                "standalone_boxplots": os.path.join(table_dir, "figures", "standalone", "boxplots"),
+                "standalone_trends": os.path.join(table_dir, "figures", "standalone", "trends"),
+                "standalone_ranges": os.path.join(table_dir, "figures", "standalone", "ranges"),
+            }
+        )
 
     # Create each directory, allowing existing directories to remain unchanged
     for dir_path in dirs.values():
@@ -63,17 +76,49 @@ def create_directories(table_dir: str) -> Dict[str, str]:
     return dirs
 
 
+def save_data_for_latex(data_dict: Dict[str, Any], filename: str, data_dir: str) -> None:
+    """
+    Save graph data to CSV files for LaTeX plotting.
+
+    Args:
+        data_dict (Dict[str, Any]): Dictionary containing x and y data
+        filename (str): Base filename without extension
+        data_dir (str): Directory to save data files
+    """
+    filepath = os.path.join(data_dir, f"{filename}.csv")
+
+    # Convert data to DataFrame and save
+    df = pd.DataFrame(data_dict)
+    df.to_csv(filepath, index=False)
+
+
+def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] = None) -> str:
+    """
+    Get display name for parameter, using mapping if provided.
+
+    Args:
+        param_name (str): Original parameter name
+        param_name_mapping (Dict[str, str]): Optional mapping from original to display names
+
+    Returns:
+        str: Display name for the parameter
+    """
+    if param_name_mapping and param_name in param_name_mapping:
+        return param_name_mapping[param_name]
+    return param_name
+
+
 def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
     """
     Extract and clean completed trial data from Optuna study.
-    
+
     This function processes the raw Optuna study data to create a clean
     DataFrame suitable for analysis by filtering completed trials,
     renaming columns for clarity, and handling invalid loss values.
-    
+
     Args:
         study (optuna.Study): Optuna study object containing trial results
-    
+
     Returns:
         pd.DataFrame: Cleaned DataFrame with columns for loss and all hyperparameters,
                      containing only successfully completed trials with valid loss values
@@ -115,7 +160,9 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
     # This prevents infinite values from breaking statistical calculations
     finite = df["loss"].replace([np.inf, -np.inf], np.nan)  # Convert inf to NaN for processing
     worst = finite.max()  # Find the worst (highest) finite loss value
-    df["loss"] = df["loss"].replace([np.inf, -np.inf], worst).fillna(worst)  # Replace inf/NaN with worst finite loss
+    df["loss"] = (
+        df["loss"].replace([np.inf, -np.inf], worst).fillna(worst)
+    )  # Replace inf/NaN with worst finite loss
 
     return df
 
@@ -123,64 +170,64 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
 def classify_columns(df: pd.DataFrame) -> Tuple[List[str], List[str]]:
     """
     Split DataFrame columns into numeric and categorical parameter types.
-    
+
     This classification is essential for applying appropriate statistical
     methods and visualizations to different parameter types.
-    
+
     Args:
         df (pd.DataFrame): DataFrame containing hyperparameters and loss values
-    
+
     Returns:
         Tuple[List[str], List[str]]: Two lists containing (numeric_columns, categorical_columns)
                                    excluding the 'loss' column from numeric classification
     """
     # Identify numeric columns (excluding the loss column which is the target variable)
     numeric_cols = [c for c in df.select_dtypes(include=np.number).columns if c != "loss"]
-    
+
     # Identify categorical/object columns (typically string-valued hyperparameters)
     categorical_cols = df.select_dtypes(include="object").columns.tolist()
-    
+
     return numeric_cols, categorical_cols
 
 
 def get_trial_subsets(df: pd.DataFrame, top_frac: float) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Extract best and worst performing trial subsets based on loss values.
-    
+
     This function creates subsets for comparative analysis between
     high-performing and low-performing trials to identify parameter
     patterns that lead to better optimization results.
-    
+
     Args:
         df (pd.DataFrame): Complete DataFrame with loss values and parameters
         top_frac (float): Fraction of trials to include in best/worst subsets (0 < top_frac < 1)
-    
+
     Returns:
         Tuple[pd.DataFrame, pd.DataFrame]: (best_trials, worst_trials) DataFrames
                                          containing top and bottom performing trials respectively
     """
     # Calculate number of trials for each subset, ensuring at least 1 trial
     n_top = max(1, int(len(df) * top_frac))
-    
+
     # Get trials with smallest loss values (best performance)
     best = df.nsmallest(n_top, "loss")
-    
+
     # Get trials with largest loss values (worst performance)
     worst = df.nlargest(n_top, "loss")
-    
+
     return best, worst
 
 
 def format_numeric_value(x: float) -> Union[int, float, str]:
     """
     Format numeric values with appropriate precision for readability.
-    
+
     This function applies dynamic formatting rules to make numeric
     output more readable while preserving important precision information.
-    
+
     Args:
         x (float): Numeric value to format
-    
+
     Returns:
         Union[int, float, str]: Formatted value as integer (if whole number),
                                scientific notation (if very small), or rounded float
@@ -255,15 +302,15 @@ def save_summary_tables(
 def describe_numeric(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     """
     Generate descriptive statistics for numeric hyperparameters.
-    
+
     This function computes comprehensive statistical summaries including
     central tendency, variability, and distribution shape measures
     for numeric hyperparameters.
-    
+
     Args:
         data (pd.DataFrame): DataFrame containing numeric parameters
         cols (List[str]): List of numeric column names to analyze
-    
+
     Returns:
         pd.DataFrame: Statistics table with columns for Parameter, Mean, Std, Median,
                      25th percentile, 75th percentile, Min, Max values
@@ -277,13 +324,13 @@ def describe_numeric(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
         # Compute raw statistical measures
         raw = {
             "Parameter": col,
-            "Mean": arr.mean(), # Average value
-            "Std": arr.std(), # Standard deviation (variability)
-            "Median": arr.median(), # Middle value (robust central tendency)
-            "Min (25% quantile)": arr.quantile(0.25), # First quartile
-            "Max (75% quantile)": arr.quantile(0.75), # Third quartile
-            "Min (5% quantile)": arr.quantile(0.05), # 5th percentile (lower tail)
-            "Max (95% quantile)": arr.quantile(0.95), # 95th percentile (upper tail)
+            "Mean": arr.mean(),  # Average value
+            "Std": arr.std(),  # Standard deviation (variability)
+            "Median": arr.median(),  # Middle value (robust central tendency)
+            "Min (25% quantile)": arr.quantile(0.25),  # First quartile
+            "Max (75% quantile)": arr.quantile(0.75),  # Third quartile
+            "Min (5% quantile)": arr.quantile(0.05),  # 5th percentile (lower tail)
+            "Max (95% quantile)": arr.quantile(0.95),  # 95th percentile (upper tail)
         }
 
         # Apply formatting to all numeric values for readability
@@ -299,15 +346,15 @@ def describe_numeric(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
 def create_frequency_table(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     """
     Generate frequency tables for categorical hyperparameters.
-    
+
     This function computes normalized frequencies and absolute counts
     for categorical parameters to understand their distribution patterns
     and identify commonly selected values.
-    
+
     Args:
         data (pd.DataFrame): DataFrame containing categorical parameters
         cols (List[str]): List of categorical column names to analyze
-    
+
     Returns:
         pd.DataFrame: Frequency table with columns for Parameter, Category,
                      Fraction (normalized frequency), and Count (absolute frequency)
@@ -323,10 +370,10 @@ def create_frequency_table(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
         for cat, frac in counts.items():
             rows.append(
                 {
-                    "Parameter": col, # Parameter name
-                    "Category": cat, # Category value
-                    "Fraction": round(frac, 4), # Normalized frequency (0-1)
-                    "Count": int(data[col].value_counts()[cat]), # Absolute count
+                    "Parameter": col,  # Parameter name
+                    "Category": cat,  # Category value
+                    "Fraction": round(frac, 4),  # Normalized frequency (0-1)
+                    "Count": int(data[col].value_counts()[cat]),  # Absolute count
                 }
             )
 
@@ -334,7 +381,12 @@ def create_frequency_table(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
 
 
 def plot_hyperparameter_distributions(
-    df: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str]
+    df: pd.DataFrame,
+    numeric_cols: List[str],
+    categorical_cols: List[str],
+    dirs: Dict[str, str],
+    param_name_mapping: Dict[str, str] = None,
+    create_standalone: bool = False,
 ) -> None:
     """
     Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
@@ -344,6 +396,8 @@ def plot_hyperparameter_distributions(
         numeric_cols (List[str]): List of numeric column names
         categorical_cols (List[str]): List of categorical column names
         dirs (Dict[str, str]): Dictionary of directory paths for saving plots
+        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
+        create_standalone (bool): Whether to create standalone images for each parameter
     """
 
     # ———————————————————————— Numeric Parameters Figure ——————————————————————— #
@@ -373,6 +427,7 @@ def plot_hyperparameter_distributions(
             col_idx = plot_idx % max_cols
             ax = axes[row, col_idx]
 
+            display_name = get_param_display_name(col, param_name_mapping)
             values = df[col].dropna()
 
             # Main histogram
@@ -380,11 +435,18 @@ def plot_hyperparameter_distributions(
                 values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
             )
 
+            # Save data for LaTeX
+            bin_centers = (bins[:-1] + bins[1:]) / 2
+            save_data_for_latex({"x": bin_centers, "y": n}, f"numeric_distribution_{col}", dirs["data"])
+
             # KDE curve
             kde = gaussian_kde(values)
             x_range = np.linspace(values.min(), values.max(), 200)
             kde_values = kde(x_range)
             ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
+
+            # Save KDE data for LaTeX
+            save_data_for_latex({"x": x_range, "y": kde_values}, f"numeric_kde_{col}", dirs["data"])
 
             # Statistics
             mean_val = values.mean()
@@ -410,8 +472,8 @@ def plot_hyperparameter_distributions(
             )
 
             # Formatting
-            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
-            ax.set_xlabel(col, fontsize=10)
+            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+            ax.set_xlabel(display_name, fontsize=10)
             ax.set_ylabel("Density", fontsize=10)
             ax.legend(loc="upper right", fontsize=8)
             ax.grid(True, alpha=0.3)
@@ -432,6 +494,57 @@ def plot_hyperparameter_distributions(
                 fontsize=8,
                 fontfamily="monospace",
             )
+
+            # Create standalone image if requested
+            if create_standalone:
+                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+
+                # Recreate the plot for standalone
+                standalone_ax.hist(
+                    values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
+                )
+                standalone_ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
+                standalone_ax.axvline(
+                    mean_val,
+                    color="red",
+                    linestyle="--",
+                    linewidth=2,
+                    alpha=0.8,
+                    label=f"Mean: {mean_formatted}",
+                )
+                standalone_ax.axvline(
+                    median_val,
+                    color="green",
+                    linestyle="-",
+                    linewidth=2,
+                    alpha=0.8,
+                    label=f"Median: {median_formatted}",
+                )
+
+                standalone_ax.set_title(f"{display_name} Distribution", fontsize=16, fontweight="bold")
+                standalone_ax.set_xlabel(display_name, fontsize=12)
+                standalone_ax.set_ylabel("Density", fontsize=12)
+                standalone_ax.legend(loc="upper right", fontsize=10)
+                standalone_ax.grid(True, alpha=0.3)
+
+                standalone_ax.text(
+                    0.02,
+                    0.98,
+                    stats_text,
+                    transform=standalone_ax.transAxes,
+                    verticalalignment="top",
+                    horizontalalignment="left",
+                    bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
+                    fontsize=10,
+                    fontfamily="monospace",
+                )
+
+                plt.tight_layout()
+                standalone_fig.savefig(
+                    os.path.join(dirs["standalone_distributions"], f"numeric_distribution_{col}.pdf"),
+                    bbox_inches="tight",
+                )
+                plt.close(standalone_fig)
 
         # Hide unused subplots if needed
         for idx in range(n_plots, n_rows * n_cols):
@@ -478,9 +591,22 @@ def plot_hyperparameter_distributions(
             col_idx = plot_idx % max_cols
             ax = axes[row, col_idx]
 
+            display_name = get_param_display_name(col, param_name_mapping)
+
             # Calculate category frequencies
             counts = df[col].value_counts()
             percentages = counts / counts.sum() * 100
+
+            # Save data for LaTeX
+            save_data_for_latex(
+                {
+                    "category": counts.index.tolist(),
+                    "count": counts.values.tolist(),
+                    "percentage": percentages.values.tolist(),
+                },
+                f"categorical_distribution_{col}",
+                dirs["data"],
+            )
 
             # Create enhanced bar chart
             bars = ax.bar(
@@ -521,10 +647,54 @@ def plot_hyperparameter_distributions(
             ax.set_ylim(0, max_count * 1.15)
 
             # Formatting
-            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
-            ax.set_xlabel(col, fontsize=10)
+            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+            ax.set_xlabel(display_name, fontsize=10)
             ax.set_ylabel("Count", fontsize=10)
             ax.grid(True, alpha=0.3, axis="y")
+
+            # Create standalone image if requested
+            if create_standalone:
+                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+
+                # Recreate the plot for standalone
+                standalone_bars = standalone_ax.bar(
+                    range(len(counts)),
+                    counts.values,
+                    color=plt.cm.Set3(np.linspace(0, 1, len(counts))),
+                    alpha=0.8,
+                    edgecolor="black",
+                    linewidth=1,
+                )
+
+                standalone_ax.set_xticks(range(len(counts)))
+                standalone_ax.set_xticklabels(counts.index.astype(str), rotation=45, ha="right")
+
+                for i, (bar, count, pct) in enumerate(
+                    zip(standalone_bars, counts.values, percentages.values)
+                ):
+                    height = bar.get_height()
+                    standalone_ax.text(
+                        bar.get_x() + bar.get_width() / 2.0,
+                        height + label_offset,
+                        f"{count_formatted}\n({pct_formatted}%)",
+                        ha="center",
+                        va="bottom",
+                        fontweight="bold",
+                        fontsize=10,
+                    )
+
+                standalone_ax.set_ylim(0, max_count * 1.15)
+                standalone_ax.set_title(f"{display_name} Distribution", fontsize=16, fontweight="bold")
+                standalone_ax.set_xlabel(display_name, fontsize=12)
+                standalone_ax.set_ylabel("Count", fontsize=12)
+                standalone_ax.grid(True, alpha=0.3, axis="y")
+
+                plt.tight_layout()
+                standalone_fig.savefig(
+                    os.path.join(dirs["standalone_distributions"], f"categorical_distribution_{col}.pdf"),
+                    bbox_inches="tight",
+                )
+                plt.close(standalone_fig)
 
         # Hide unused subplots if needed
         for idx in range(n_plots, n_rows * n_cols):
@@ -552,24 +722,31 @@ def plot_hyperparameter_distributions(
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     """
     Generate and save parameter importance analysis.
-    
+
     This function computes parameter importances using Optuna's built-in
     importance calculation and creates both a CSV table and bar chart
     visualization to identify which parameters most influence the objective.
-    
+
     Args:
         study (optuna.Study): Optuna study object containing optimization history
         dirs (Dict[str, str]): Directory paths for saving outputs
-    
+
     Returns:
         None: Saves importance table as CSV and bar chart as pdf
     """
     # Calculate parameter importances using Optuna's algorithm
     importances = get_param_importances(study)
-    
+
     # Convert to DataFrame and sort by importance (descending)
     df_imp = pd.DataFrame(list(importances.items()), columns=["Parameter", "Importance"]).sort_values(
         "Importance", ascending=False
+    )
+
+    # Save data for LaTeX
+    save_data_for_latex(
+        {"parameter": df_imp["Parameter"].tolist(), "importance": df_imp["Importance"].tolist()},
+        "param_importances",
+        dirs["data"],
     )
 
     # Create bar chart visualization
@@ -589,16 +766,16 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
 def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
     """
     Generate and save Spearman correlation heatmap for numeric parameters and loss.
-    
+
     This function computes rank-based correlations between all numeric parameters
     and the loss function, creating a heatmap visualization to identify
     relationships between parameters and their impact on optimization performance.
-    
+
     Args:
         df (pd.DataFrame): Dataset containing numeric parameters and loss values
         numeric_cols (List[str]): List of numeric parameter column names
         dirs (Dict[str, str]): Directory paths for saving outputs
-    
+
     Returns:
         None: Saves correlation heatmap as pdf file
     """
@@ -607,6 +784,9 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Calculate Spearman rank correlation matrix (robust to non-linear relationships)
     corr = df[cols].corr(method="spearman")
+
+    # Save correlation matrix data for LaTeX
+    save_data_for_latex(corr.reset_index(), "spearman_correlation_matrix", dirs["data"])
 
     # ———————————————————————— Complete correlation matrix ——————————————————————— #
     fig, ax = plt.subplots(figsize=(len(cols) * 0.5 + 1, len(cols) * 0.5 + 1))
@@ -638,6 +818,13 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # ——————————————————————————— Only loss correlation —————————————————————————— #
     # Extract correlations between each parameter and loss function only
     param_loss_corr = corr.loc[numeric_cols, "loss"].sort_values(key=abs, ascending=False)
+
+    # Save parameter-loss correlation data for LaTeX
+    save_data_for_latex(
+        {"parameter": param_loss_corr.index.tolist(), "correlation": param_loss_corr.values.tolist()},
+        "param_loss_correlations",
+        dirs["data"],
+    )
 
     # Create figure for parameter-loss correlation bar chart
     fig, ax = plt.subplots(figsize=(max(6, len(numeric_cols) * 0.6), 4))
@@ -703,6 +890,8 @@ def plot_parameter_boxplots(
     worst: pd.DataFrame,
     numeric_cols: List[str],
     dirs: Dict[str, str],
+    param_name_mapping: Dict[str, str] = None,
+    create_standalone: bool = False,
 ) -> None:
     """
     Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
@@ -713,12 +902,75 @@ def plot_parameter_boxplots(
         worst (pd.DataFrame): Subset of worst-performing trials
         numeric_cols (List[str]): List of numeric parameter column names
         dirs (Dict[str, str]): Directory paths for saving outputs
+        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
+        create_standalone (bool): Whether to create standalone images for each parameter
 
     Returns:
         None: Saves separate boxplot files for numeric parameters
     """
 
-    # ———————————————————————— Numeric Parameters Boxplots ——————————————————————— #
+    def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] = None) -> str:
+        """Get display name for parameter, using mapping if provided."""
+        if param_name_mapping and param_name in param_name_mapping:
+            return param_name_mapping[param_name]
+        return param_name
+
+    def save_boxplot_data_for_latex(
+        col: str, all_data: pd.Series, best_data: pd.Series, worst_data: pd.Series, data_dir: str
+    ) -> None:
+        """
+        Save boxplot data for LaTeX plotting in separate files for each subset.
+
+        Args:
+            col (str): Parameter column name
+            all_data (pd.Series): All trials data
+            best_data (pd.Series): Best trials data
+            worst_data (pd.Series): Worst trials data
+            data_dir (str): Directory to save data files
+        """
+        import os
+
+        # Clean the data (remove NaN values)
+        all_clean = all_data.dropna()
+        best_clean = best_data.dropna()
+        worst_clean = worst_data.dropna()
+
+        # Save each subset separately since they have different lengths
+        subsets = {"all": all_clean, "best": best_clean, "worst": worst_clean}
+
+        for subset_name, data in subsets.items():
+            if len(data) > 0:
+                # Create DataFrame with single column
+                df_subset = pd.DataFrame({"value": data.tolist(), "subset": [subset_name] * len(data)})
+
+                # Save to CSV
+                filepath = os.path.join(data_dir, f"boxplot_{col}_{subset_name}.csv")
+                df_subset.to_csv(filepath, index=False)
+
+        # Also save summary statistics for each subset
+        summary_data = []
+        for subset_name, data in subsets.items():
+            if len(data) > 0:
+                summary_data.append(
+                    {
+                        "subset": subset_name,
+                        "count": len(data),
+                        "mean": data.mean(),
+                        "std": data.std(),
+                        "min": data.min(),
+                        "q25": data.quantile(0.25),
+                        "median": data.median(),
+                        "q75": data.quantile(0.75),
+                        "max": data.max(),
+                    }
+                )
+
+        if summary_data:
+            summary_df = pd.DataFrame(summary_data)
+            summary_filepath = os.path.join(data_dir, f"boxplot_{col}_summary.csv")
+            summary_df.to_csv(summary_filepath, index=False)
+
+    # Main function logic
     if numeric_cols:
         print(f"Creating numeric parameters boxplots ({len(numeric_cols)} parameters)...")
 
@@ -745,9 +997,14 @@ def plot_parameter_boxplots(
             col_idx = plot_idx % max_cols
             ax = axes[row, col_idx]
 
+            display_name = get_param_display_name(col, param_name_mapping)
+
             # Prepare data for boxplot: overall, best, worst trial subsets
             data = [df[col], best[col], worst[col]]
             labels = ["All trials", "Best trials", "Worst trials"]
+
+            # Save boxplot data for LaTeX (fixed version)
+            save_boxplot_data_for_latex(col, df[col], best[col], worst[col], dirs["data"])
 
             # Create boxplot with filled boxes for better visibility
             box_plot = ax.boxplot(data, labels=labels, patch_artist=True)
@@ -759,12 +1016,34 @@ def plot_parameter_boxplots(
                 patch.set_alpha(0.7)
 
             # Styling
-            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
-            ax.set_ylabel(col, fontsize=10)
+            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+            ax.set_ylabel(display_name, fontsize=10)
             ax.grid(True, alpha=0.3, axis="y")
 
             # Rotate x-axis labels for better readability
             ax.tick_params(axis="x", rotation=45)
+
+            # Create standalone image if requested
+            if create_standalone:
+                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+
+                # Recreate the boxplot for standalone
+                standalone_box_plot = standalone_ax.boxplot(data, labels=labels, patch_artist=True)
+
+                for patch, color in zip(standalone_box_plot["boxes"], colors):
+                    patch.set_facecolor(color)
+                    patch.set_alpha(0.7)
+
+                standalone_ax.set_title(f"{display_name} Boxplot Comparison", fontsize=16, fontweight="bold")
+                standalone_ax.set_ylabel(display_name, fontsize=12)
+                standalone_ax.grid(True, alpha=0.3, axis="y")
+                standalone_ax.tick_params(axis="x", rotation=45)
+
+                plt.tight_layout()
+                standalone_fig.savefig(
+                    os.path.join(dirs["standalone_boxplots"], f"boxplot_{col}.pdf"), bbox_inches="tight"
+                )
+                plt.close(standalone_fig)
 
         # Hide unused subplots if needed
         for idx in range(n_plots, n_rows * n_cols):
@@ -778,13 +1057,19 @@ def plot_parameter_boxplots(
 
         # Save the numeric parameters boxplot
         save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.pdf")
-        plt.savefig(save_path,  bbox_inches="tight")
+        plt.savefig(save_path, bbox_inches="tight")
         plt.close(fig)
     else:
         print("No numeric parameters found for boxplot analysis.")
 
 
-def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
+def plot_trend_analysis(
+    df: pd.DataFrame,
+    numeric_cols: List[str],
+    dirs: Dict[str, str],
+    param_name_mapping: Dict[str, str] = None,
+    create_standalone: bool = False,
+) -> None:
     """
     Create a single comprehensive plot with trend analysis for parameter-loss relationships.
 
@@ -796,6 +1081,8 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
         df (pd.DataFrame): Dataset containing parameters and loss values
         numeric_cols (List[str]): List of numeric parameter column names
         dirs (Dict[str, str]): Directory paths for saving outputs
+        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
+        create_standalone (bool): Whether to create standalone images for each parameter
 
     Returns:
         None: Saves single comprehensive trend plot as pdf file and trend statistics as CSV
@@ -829,6 +1116,8 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
         col_idx = plot_idx % max_cols
         ax = axes[row, col_idx]
 
+        display_name = get_param_display_name(col, param_name_mapping)
+
         # Extract parameter values and corresponding loss values
         x = df[col].values
         y = df["loss"].values
@@ -838,20 +1127,25 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
         x_clean = x[mask]
         y_clean = y[mask]
 
+        # Save scatter plot data for LaTeX
+        save_data_for_latex(
+            {"x": x_clean.tolist(), "y": y_clean.tolist()}, f"trend_scatter_{col}", dirs["data"]
+        )
+
         # Check if we have enough valid data points
         if len(x_clean) < 2:
             print(f"Warning: Not enough valid data points for parameter '{col}'. Skipping trend analysis.")
             ax.text(
                 0.5,
                 0.5,
-                f"Insufficient data\nfor {col}",
+                f"Insufficient data\nfor {display_name}",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
                 fontsize=12,
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.5),
             )
-            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
             stats.append(
                 {"Parameter": col, "Slope": np.nan, "Correlation": np.nan, "Status": "Insufficient data"}
             )
@@ -863,14 +1157,14 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
             ax.text(
                 0.5,
                 0.5,
-                f"No variance in\n{col} or loss",
+                f"No variance in\n{display_name} or loss",
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
                 fontsize=12,
                 bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.5),
             )
-            ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
             stats.append({"Parameter": col, "Slope": 0.0, "Correlation": 0.0, "Status": "No variance"})
             continue
 
@@ -920,6 +1214,11 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
             y_at_x_min = slope * x_min + intercept
             y_at_x_max = slope * x_max + intercept
 
+            # Save trend line data for LaTeX
+            save_data_for_latex(
+                {"x": [x_min, x_max], "y": [y_at_x_min, y_at_x_max]}, f"trend_line_{col}", dirs["data"]
+            )
+
             # Plot the line using only the endpoints to ensure correct visualization
             ax.plot([x_min, x_max], [y_at_x_min, y_at_x_max], linewidth=2, color="red", alpha=0.8)
 
@@ -945,9 +1244,9 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
         else:
             trend_legend = "Higher parameter → LOWER Study Value"
 
-        ax.set_xlabel(col, fontsize=10)
+        ax.set_xlabel(display_name, fontsize=10)
         ax.set_ylabel("Study Value", fontsize=10)
-        ax.set_title(f"{col}", fontsize=14, fontweight="bold")
+        ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
         ax.grid(True, alpha=0.3)
 
         # Add legend with trend information
@@ -975,6 +1274,56 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
             fontfamily="monospace",
         )
 
+        # Create standalone image if requested
+        if create_standalone:
+            standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+
+            # Recreate the scatter plot for standalone
+            standalone_ax.scatter(x_clean, y_clean, s=15, edgecolor="black", linewidth=0.2, alpha=0.6)
+
+            if len(x_clean) > 1 and np.var(x_clean) > 0 and abs(slope) > 1e-12:
+                x_min, x_max = x_clean.min(), x_clean.max()
+                y_at_x_min = slope * x_min + intercept
+                y_at_x_max = slope * x_max + intercept
+                standalone_ax.plot(
+                    [x_min, x_max], [y_at_x_min, y_at_x_max], linewidth=2, color="red", alpha=0.8
+                )
+            else:
+                y_flat = intercept
+                standalone_ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
+
+            if abs(slope) > 1e-6:
+                standalone_ax.plot([], [], linewidth=2, color="red", label=trend_legend)
+            else:
+                standalone_ax.plot([], [], linewidth=2, color="gray", label=trend_legend)
+
+            standalone_ax.set_xlabel(display_name, fontsize=12)
+            standalone_ax.set_ylabel("Study Value", fontsize=12)
+            standalone_ax.set_title(f"{display_name} Trend Analysis", fontsize=16, fontweight="bold")
+            standalone_ax.grid(True, alpha=0.3)
+            standalone_ax.legend(loc="best", fontsize=10)
+
+            standalone_ax.text(
+                0.02,
+                0.98,
+                stats_text,
+                transform=standalone_ax.transAxes,
+                verticalalignment="top",
+                horizontalalignment="left",
+                bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+                fontsize=10,
+                fontfamily="monospace",
+            )
+
+            plt.tight_layout()
+            standalone_fig.savefig(
+                os.path.join(dirs["standalone_trends"], f"trend_{col}.pdf"), bbox_inches="tight"
+            )
+            plt.close(standalone_fig)
+
+    # Save trend statistics
+    save_data_for_latex(pd.DataFrame(stats).to_dict("list"), "trend_statistics", dirs["data"])
+
     # Hide unused subplots if needed
     for idx in range(n_plots, n_rows * n_cols):
         row = idx // max_cols
@@ -987,12 +1336,17 @@ def plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[st
 
     # Save the comprehensive trend plot
     save_path = os.path.join(dirs["figs"], "params_trends.pdf")
-    plt.savefig(save_path,  bbox_inches="tight")
+    plt.savefig(save_path, bbox_inches="tight")
     plt.close()  # Close figure to free memory
 
 
 def plot_optimal_ranges_analysis(
-    df: pd.DataFrame, best: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]
+    df: pd.DataFrame,
+    best: pd.DataFrame,
+    numeric_cols: List[str],
+    dirs: Dict[str, str],
+    param_name_mapping: Dict[str, str] = None,
+    create_standalone: bool = False,
 ) -> None:
     """
     Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
@@ -1006,6 +1360,8 @@ def plot_optimal_ranges_analysis(
         best (pd.DataFrame): Subset of best-performing trials
         numeric_cols (List[str]): List of numeric parameter column names
         dirs (Dict[str, str]): Directory paths for saving outputs
+        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
+        create_standalone (bool): Whether to create standalone images for each parameter
 
     Returns:
         None: Saves the optimal ranges visualization to fig_ranges directory
@@ -1014,6 +1370,65 @@ def plot_optimal_ranges_analysis(
         print("No numeric parameters to analyze")
         return
 
+    def save_ranges_data_for_latex(
+        col: str,
+        all_values: pd.Series,
+        best_values: pd.Series,
+        conservative_min: float,
+        conservative_max: float,
+        aggressive_min: float,
+        aggressive_max: float,
+        best_median: float,
+        data_dir: str,
+    ) -> None:
+        """
+        Save ranges data for LaTeX plotting in separate files.
+
+        Args:
+            col (str): Parameter column name
+            all_values (pd.Series): All trials data
+            best_values (pd.Series): Best trials data
+            conservative_min, conservative_max: 25%-75% range
+            aggressive_min, aggressive_max: 5%-95% range
+            best_median: Median of best trials
+            data_dir (str): Directory to save data files
+        """
+        import os
+
+        # Save histogram data separately for each subset
+        all_clean = all_values.dropna()
+        best_clean = best_values.dropna()
+
+        # Save all trials data
+        if len(all_clean) > 0:
+            all_df = pd.DataFrame({"value": all_clean.tolist(), "subset": ["all"] * len(all_clean)})
+            all_filepath = os.path.join(data_dir, f"ranges_{col}_all_trials.csv")
+            all_df.to_csv(all_filepath, index=False)
+
+        # Save best trials data
+        if len(best_clean) > 0:
+            best_df = pd.DataFrame({"value": best_clean.tolist(), "subset": ["best"] * len(best_clean)})
+            best_filepath = os.path.join(data_dir, f"ranges_{col}_best_trials.csv")
+            best_df.to_csv(best_filepath, index=False)
+
+        # Save range statistics
+        ranges_stats = pd.DataFrame(
+            [
+                {
+                    "parameter": col,
+                    "conservative_min": conservative_min,
+                    "conservative_max": conservative_max,
+                    "aggressive_min": aggressive_min,
+                    "aggressive_max": aggressive_max,
+                    "best_median": best_median,
+                    "all_trials_count": len(all_clean),
+                    "best_trials_count": len(best_clean),
+                }
+            ]
+        )
+        ranges_filepath = os.path.join(data_dir, f"ranges_{col}_statistics.csv")
+        ranges_stats.to_csv(ranges_filepath, index=False)
+
     # Process all parameters, even those with insufficient data
     ranges_data = []
 
@@ -1021,9 +1436,12 @@ def plot_optimal_ranges_analysis(
         best_values = best[col].dropna()  # Remove NaN values
         all_values = df[col].dropna()  # Remove NaN values
 
+        display_name = get_param_display_name(col, param_name_mapping)
+
         # Always add the parameter, but mark status for plotting
         param_data = {
             "parameter": col,
+            "display_name": display_name,
             "all_values": all_values,
             "best_values": best_values,
             "plottable": True,
@@ -1052,6 +1470,19 @@ def plot_optimal_ranges_analysis(
                 }
             )
 
+            # Save ranges data for LaTeX (fixed version)
+            save_ranges_data_for_latex(
+                col=col,
+                all_values=all_values,
+                best_values=best_values,
+                conservative_min=param_data["conservative_min"],
+                conservative_max=param_data["conservative_max"],
+                aggressive_min=param_data["aggressive_min"],
+                aggressive_max=param_data["aggressive_max"],
+                best_median=param_data["best_median"],
+                data_dir=dirs["data"],
+            )
+
         ranges_data.append(param_data)
 
     # Calculate grid dimensions with max 4 columns
@@ -1078,13 +1509,14 @@ def plot_optimal_ranges_analysis(
         ax = axes[row, col_idx]
 
         col = data["parameter"]
+        display_name = data["display_name"]
 
         if not data["plottable"]:
             # Create blank graph with error message
             ax.text(
                 0.5,
                 0.5,
-                f"Parameter: {col}\n\n"
+                f"Parameter: {display_name}\n\n"
                 f"Analysis not possible\n\n"
                 f"Reason:\n{data['error_message']}\n\n"
                 f"Data points:\n"
@@ -1097,8 +1529,8 @@ def plot_optimal_ranges_analysis(
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.8),
                 linespacing=1.5,
             )
-            ax.set_title(f"{col} (No Analysis)", fontsize=14, fontweight="bold", color="red")
-            ax.set_xlabel(col, fontsize=10)
+            ax.set_title(f"{display_name} (No Analysis)", fontsize=14, fontweight="bold", color="red")
+            ax.set_xlabel(display_name, fontsize=10)
             ax.set_ylabel("Analysis not available", fontsize=10)
             ax.grid(True, alpha=0.3)
 
@@ -1185,8 +1617,8 @@ def plot_optimal_ranges_analysis(
                     )
 
                 # Formatting
-                ax.set_title(f"{col}", fontsize=14, fontweight="bold", color="green")
-                ax.set_xlabel(col, fontsize=10)
+                ax.set_title(f"{display_name}", fontsize=14, fontweight="bold", color="green")
+                ax.set_xlabel(display_name, fontsize=10)
                 ax.set_ylabel("Density", fontsize=10)
                 ax.grid(True, alpha=0.3)
                 ax.legend(loc="upper right", fontsize=8)
@@ -1196,7 +1628,9 @@ def plot_optimal_ranges_analysis(
                     return format_numeric_value(value) if np.isfinite(value) else "N/A"
 
                 stats_text = f"25%-75% : [{safe_format(data['conservative_min'])}, {safe_format(data['conservative_max'])}]\n"
-                stats_text += f"5%-95% : [{safe_format(data['aggressive_min'])}, {safe_format(data['aggressive_max'])}]"
+                stats_text += (
+                    f"5%-95% : [{safe_format(data['aggressive_min'])}, {safe_format(data['aggressive_max'])}]"
+                )
 
                 ax.text(
                     0.02,
@@ -1210,13 +1644,106 @@ def plot_optimal_ranges_analysis(
                     fontfamily="monospace",
                 )
 
+                # Create standalone image if requested
+                if create_standalone:
+                    standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+
+                    # Recreate the plot for standalone
+                    standalone_ax.hist(
+                        data["all_values"],
+                        bins=min(50, max(10, len(data["all_values"]) // 2)),
+                        alpha=0.3,
+                        color="gray",
+                        label="All trials",
+                        density=True,
+                        edgecolor="black",
+                        linewidth=0.5,
+                    )
+                    standalone_ax.hist(
+                        data["best_values"],
+                        bins=min(30, max(10, len(data["best_values"]) // 2)),
+                        alpha=0.7,
+                        color="green",
+                        label="Best trials",
+                        density=True,
+                        edgecolor="darkgreen",
+                        linewidth=0.8,
+                    )
+
+                    # Add range indicators
+                    if np.isfinite(data["conservative_min"]) and np.isfinite(data["conservative_max"]):
+                        standalone_ax.axvline(
+                            data["conservative_min"],
+                            color="red",
+                            linestyle="--",
+                            alpha=0.8,
+                            linewidth=2,
+                            label="25%-75%",
+                        )
+                        standalone_ax.axvline(
+                            data["conservative_max"], color="red", linestyle="--", alpha=0.8, linewidth=2
+                        )
+                        standalone_ax.axvspan(
+                            data["conservative_min"], data["conservative_max"], alpha=0.1, color="red"
+                        )
+
+                    if np.isfinite(data["aggressive_min"]) and np.isfinite(data["aggressive_max"]):
+                        standalone_ax.axvline(
+                            data["aggressive_min"],
+                            color="blue",
+                            linestyle=":",
+                            alpha=0.8,
+                            linewidth=2,
+                            label="5%-95%",
+                        )
+                        standalone_ax.axvline(
+                            data["aggressive_max"], color="blue", linestyle=":", alpha=0.8, linewidth=2
+                        )
+                        standalone_ax.axvspan(
+                            data["aggressive_min"], data["aggressive_max"], alpha=0.05, color="blue"
+                        )
+
+                    if np.isfinite(data["best_median"]):
+                        standalone_ax.axvline(
+                            data["best_median"],
+                            color="black",
+                            linestyle="-",
+                            alpha=0.9,
+                            linewidth=2,
+                            label="Median (best)",
+                        )
+
+                    standalone_ax.set_title(f"{display_name} Optimal Ranges", fontsize=16, fontweight="bold")
+                    standalone_ax.set_xlabel(display_name, fontsize=12)
+                    standalone_ax.set_ylabel("Density", fontsize=12)
+                    standalone_ax.grid(True, alpha=0.3)
+                    standalone_ax.legend(loc="upper right", fontsize=10)
+
+                    standalone_ax.text(
+                        0.02,
+                        0.98,
+                        stats_text,
+                        transform=standalone_ax.transAxes,
+                        verticalalignment="top",
+                        horizontalalignment="left",
+                        bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
+                        fontsize=10,
+                        fontfamily="monospace",
+                    )
+
+                    plt.tight_layout()
+                    standalone_fig.savefig(
+                        os.path.join(dirs["standalone_ranges"], f"ranges_{col}.pdf"), bbox_inches="tight"
+                    )
+                    plt.close(standalone_fig)
+
             except Exception as e:
                 print(f"Error plotting parameter '{col}': {e}")
                 # Create an error plot but still show the parameter
                 ax.text(
                     0.5,
                     0.5,
-                    f"Parameter: {col}\n\n"
+                    f"Parameter: {display_name}\n\n"
                     f"Plotting error occurred\n\n"
                     f"Error details:\n{str(e)[:100]}...",
                     ha="center",
@@ -1226,8 +1753,8 @@ def plot_optimal_ranges_analysis(
                     bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.8),
                     linespacing=1.5,
                 )
-                ax.set_title(f"{col} (Error)", fontsize=14, fontweight="bold", color="red")
-                ax.set_xlabel(col, fontsize=10)
+                ax.set_title(f"{display_name} (Error)", fontsize=14, fontweight="bold", color="red")
+                ax.set_xlabel(display_name, fontsize=10)
                 ax.set_ylabel("Error occurred", fontsize=10)
                 ax.grid(True, alpha=0.3)
                 ax.set_xticks([])
@@ -1250,26 +1777,94 @@ def plot_optimal_ranges_analysis(
 
     # Save the comprehensive plot
     save_path = os.path.join(dirs["figs"], "params_optimal_ranges.pdf")
-    plt.savefig(save_path,  bbox_inches="tight")
+    plt.savefig(save_path, bbox_inches="tight")
     plt.close()
 
 
-# ———————————————————————————————————————————————————————————————————————————— #
-#                    Main Function for the Analysis Pipeline                   #
-# ———————————————————————————————————————————————————————————————————————————— #
+def print_study_columns(study: optuna.Study, exclude: Optional[List[str]] = None) -> None:
+    """
+    Print the names of the DataFrame columns from the study as a bullet list.
+
+    This function extracts the trial data from the Optuna study and displays
+    all available column names in a formatted bullet list, with optional
+    exclusion of specified columns.
+
+    Args:
+        study (optuna.Study): Optuna study object containing trial results
+        exclude (List[str], optional): List of column names to exclude from the output.
+                                     Defaults to None (no exclusions).
+
+    Returns:
+        None: Prints the column names to console
+    """
+    # Set default exclusions if none provided
+    if exclude is None:
+        exclude = []
+
+    try:
+        # Extract trial data including all available attributes
+        df = study.trials_dataframe()
+
+        # Get all column names
+        all_columns = list(df.columns)
+
+        # Filter out excluded columns
+        filtered_columns = [col for col in all_columns if col not in exclude]
+
+        # Print header information
+        print(f"\nStudy DataFrame Columns:")
+        print(f"Total columns: {len(all_columns)}")
+        if exclude:
+            print(f"Excluded columns: {len(exclude)} ({', '.join(exclude)})")
+            print(f"Displayed columns: {len(filtered_columns)}")
+        print("-" * 50)
+
+        # Print filtered columns as bullet list
+        if filtered_columns:
+            for col in filtered_columns:
+                print(f"• {col}")
+        else:
+            print("No columns to display after applying exclusions.")
+
+        # Print additional information about the study
+        print("-" * 50)
+        print(f"Study info:")
+        print(f"• Total trials: {len(df)}")
+
+        # Count trials by state if 'state' column exists
+        if "state" in df.columns:
+            state_counts = df["state"].value_counts()
+            for state, count in state_counts.items():
+                print(f"• {state} trials: {count}")
+
+        # Show parameter columns specifically if they exist
+        param_columns = [col for col in filtered_columns if col.startswith("params_")]
+        if param_columns:
+            print(f"• Parameter columns: {len(param_columns)}")
+            for param_col in param_columns:
+                # Remove 'params_' prefix for cleaner display
+                param_name = param_col.replace("params_", "")
+                print(f"  - {param_name}")
+
+    except Exception as e:
+        print(f"Error extracting study information: {str(e)}")
+        print("Please verify that the study contains valid trial data.")
+
 
 def analyze_study(
     study: optuna.Study,
     table_dir: str,
     top_frac: float = 0.2,
+    param_name_mapping: Dict[str, str] = None,
+    create_standalone: bool = False,
 ) -> None:
     """
     Comprehensive analysis of Optuna hyperparameter optimization study results.
-    
+
     This main function orchestrates a complete analysis pipeline that generates
     statistical summaries, visualizations, and comparative analyses to understand
     hyperparameter optimization performance and identify important parameter patterns.
-    
+
     The analysis includes:
     - Parameter importance rankings and visualizations
     - Statistical summaries for overall, best, and worst performing trials
@@ -1277,12 +1872,16 @@ def analyze_study(
     - Correlation analysis between parameters and performance
     - Statistical significance tests comparing high vs low performing trials
     - Comprehensive visualizations for all parameter types
-    
+
     Args:
         study (optuna.Study): Optuna Study object containing completed optimization trials
         table_dir (str): Base directory path for saving CSV tables.
         top_frac (float): Fraction of trials to include in best/worst subsets for comparison.
                          Should be between 0 and 1 (default: 0.2 for top/bottom 20%)
+        param_name_mapping (Dict[str, str]): Optional mapping from original parameter names
+                                           to display names for plots and tables
+        create_standalone (bool): Whether to create standalone images for each parameter
+                                in addition to combined plots
 
     Returns:
         None: Saves all analysis outputs to specified directories and prints progress messages
@@ -1290,7 +1889,7 @@ def analyze_study(
     print("\n\nAnalyzing study...")
 
     # Create organized directory structure for different output types
-    dirs = create_directories(table_dir)
+    dirs = create_directories(table_dir, create_standalone)
 
     # Extract and clean completed trial data from the study
     df = prepare_dataframe(study)
@@ -1302,20 +1901,52 @@ def analyze_study(
     numeric_cols, categorical_cols = classify_columns(df)
     best, worst = get_trial_subsets(df, top_frac)
 
+    print_study_columns(study, exclude=["loss", "value"])
+    print("\n\n")
+
     # Generate comprehensive statistical summary tables and plots
     print("Generating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
+
     print("Creating hyperparameter distribution plots...")
-    plot_hyperparameter_distributions(df, numeric_cols, categorical_cols, dirs)
+    plot_hyperparameter_distributions(
+        df, numeric_cols, categorical_cols, dirs, param_name_mapping, create_standalone
+    )
+
     print("Calculating parameter importances...")
     plot_param_importances(study, dirs)
+
     print("Analyzing Spearman correlations...")
     plot_spearman_correlation(df, numeric_cols, dirs)
+
     print("Creating boxplots for parameter distributions...")
-    plot_parameter_boxplots(df, best, worst, numeric_cols, dirs)
+    plot_parameter_boxplots(df, best, worst, numeric_cols, dirs, param_name_mapping, create_standalone)
+
     print("Performing trend analysis...")
-    plot_trend_analysis(df, numeric_cols, dirs)
+    plot_trend_analysis(df, numeric_cols, dirs, param_name_mapping, create_standalone)
+
     print("Creating optimal ranges analysis...")
-    plot_optimal_ranges_analysis(df, best, numeric_cols, dirs)
-    
-    print("Analysis complete! All results saved to the specified directories.")
+    plot_optimal_ranges_analysis(df, best, numeric_cols, dirs, param_name_mapping, create_standalone)
+
+    # Print summary of created outputs
+    print(f"\nAnalysis complete! Results saved to: {table_dir}")
+    print(f"- Figures: {dirs['figs']}")
+    print(f"- Data for LaTeX: {dirs['data']}")
+    print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
+
+    if create_standalone:
+        print("- Standalone images:")
+        print(f"  * Distributions: {dirs['standalone_distributions']}")
+        print(f"  * Boxplots: {dirs['standalone_boxplots']}")
+        print(f"  * Trends: {dirs['standalone_trends']}")
+        print(f"  * Ranges: {dirs['standalone_ranges']}")
+
+    # Print parameter mapping info if provided
+    if param_name_mapping:
+        print(f"\nParameter name mappings applied:")
+        for orig, display in param_name_mapping.items():
+            print(f"  {orig} -> {display}")
+
+    print(
+        f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
+    )
