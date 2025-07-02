@@ -757,6 +757,10 @@ class FlagBasedRestartManager:
             )
         finally:
             # Ensure all cleanup operations are performed
+            # Explicitly mark the manager as no longer running.  This prevents
+            # any background wait/sleep loops from continuing if the restart
+            # loop wraps the call in a thread and forces a shutdown.
+            self.running = False
             self._cleanup_all()
             self._cleanup_converted_file()
             total_runtime = time.time() - self.start_time if self.start_time else None
@@ -1251,13 +1255,15 @@ def run_auto_restart(
                             else:
                                 print_process_status(
                                     "Process ended before restart_after_delay, restarting..."
-                                )     
+                                )
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
                     stop_event.set()
                     print_process_status("Restart loop interrupted by user, cleaning up")
                     manager._cleanup_all()
                     manager._cleanup_converted_file()
+                # Ensure the worker thread has completely finished before returning
+                thread.join()
                 print_process_status("Restart-after-delay loop done")
 
             restart_loop()
