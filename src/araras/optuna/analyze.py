@@ -78,6 +78,9 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
         pd.DataFrame: Cleaned DataFrame with columns for loss and all hyperparameters,
                      containing only successfully completed trials with valid loss values
     """
+    # Print all column names in the study for debugging purposes
+    print("Available columns in study:", study.trials_dataframe().columns.tolist())
+    
     # Extract trial data including trial metadata and hyperparameter values
     df = (
         study.trials_dataframe(attrs=("number", "value", "state", "params"))
