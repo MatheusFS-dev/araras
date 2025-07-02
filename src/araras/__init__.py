@@ -4,9 +4,15 @@
 import pkgutil
 import importlib
 import inspect
+from importlib.metadata import version, PackageNotFoundError
 
 __all__ = []
-__version__ = "1.0.0" 
+
+try:
+    __version__ = version(__name__)
+except PackageNotFoundError:  # package not installed
+    print(f"Package '{__name__}' is not installed.")
+    __version__ = "0.0.0"
 
 
 for finder, module_name, ispkg in pkgutil.iter_modules(__path__):
