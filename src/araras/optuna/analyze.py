@@ -19,7 +19,6 @@ from typing import *
 import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
-from araras.plot.configs import config_plt
 from optuna.importance import get_param_importances
 from dataclasses import dataclass
 
@@ -38,14 +37,14 @@ class PlotConfig:
     corr_bar_scale: float = 0.6  # Scaling factor for correlation bar chart width
     title_fs: int = 20  # Font size for subplot titles
     label_fs: int = 16  # Font size for axis labels
-    legend_fs: int = 12  # Font size for legends in combined plots
-    standalone_legend_fs: int = 12  # Font size for legends in standalone plots
-    suptitle_fs: int = 16  # Font size for the overall title of combined plots
-    standalone_title_fs: int = 16  # Font size for titles in standalone plots
+    legend_fs: int = 16  # Font size for legends in combined plots
+    standalone_legend_fs: int = 16  # Font size for legends in standalone plots
+    suptitle_fs: int = 18  # Font size for the overall title of combined plots
+    standalone_title_fs: int = 20  # Font size for titles in standalone plots
     standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
     annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
     bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
-    tick_fs: int = 12  # Font size for axis tick labels
+    tick_fs: int = 14  # Font size for axis tick labels
 
 
 PLOT_CFG = PlotConfig()
