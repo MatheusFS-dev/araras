@@ -33,6 +33,7 @@ def config_plt(style: str = 'single-column') -> None:
     plt.rcParams.update(
         {
             # Font settings
+            "font.family": "Times New Roman",
             "font.size": 8,
             "axes.labelsize": 9,
             "xtick.labelsize": 8,
@@ -86,19 +87,3 @@ def config_plt(style: str = 'single-column') -> None:
             "ps.fonttype": 42,
         }
     )
-
-# def sample_plot() -> None:
-#     """Generate a sample sine and cosine plot using IEEE‑style settings."""
-#     x = np.linspace(0, 2 * np.pi, 100)
-#     fig, ax = plt.subplots()
-#     ax.plot(x, np.sin(x), label='sin(x)', marker='o',
-#             mfc='none', mec='k', mew=1.0)
-#     ax.plot(x, np.cos(x), label='cos(x)', marker='s',
-#             mfc='none', mec='k', mew=1.0)
-#     ax.set_xlabel('X (radians)')
-#     ax.set_ylabel('Amplitude')
-#     ax.set_title('Sine and Cosine')
-#     ax.legend(loc='best')
-#     ax.minorticks_on()
-#     plt.tight_layout()
-#     plt.show()
