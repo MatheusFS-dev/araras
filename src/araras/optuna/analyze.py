@@ -21,6 +21,33 @@ import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 from araras.plot.configs import config_plt
 from optuna.importance import get_param_importances
+from dataclasses import dataclass
+
+
+@dataclass
+class PlotConfig:
+    """Global configuration for matplotlib plots used in this module."""
+
+    max_cols: int = 4
+    numeric_subplot_size: int = 5
+    box_subplot_height: int = 4
+    standalone_size: Tuple[int, int] = (8, 6)
+    importance_size: Tuple[int, int] = (6, 4)
+    heatmap_cell: float = 0.5
+    corr_bar_min_width: int = 6
+    corr_bar_scale: float = 0.6
+    title_fs: int = 14
+    label_fs: int = 10
+    legend_fs: int = 8
+    standalone_legend_fs: int = 10
+    suptitle_fs: int = 16
+    standalone_title_fs: int = 16
+    standalone_label_fs: int = 12
+    annotation_fs: int = 8
+    bar_value_fs: int = 9
+
+
+PLOT_CFG = PlotConfig()
 
 
 # ———————————————————————————————————————————————————————————————————————————— #
@@ -432,13 +459,20 @@ def plot_hyperparameter_distributions(
         print(f"Creating numeric parameters distribution plot ({len(numeric_cols)} parameters)...")
 
         # Calculate grid dimensions with max 4 columns
-        max_cols = 4
+        max_cols = PLOT_CFG.max_cols
         n_plots = len(numeric_cols)
         n_cols = min(n_plots, max_cols)
         n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
         # Create grid layout for numeric parameters
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(
+                PLOT_CFG.numeric_subplot_size * n_cols,
+                PLOT_CFG.numeric_subplot_size * n_rows,
+            ),
+        )
 
         # Handle different array shapes
         if n_plots == 1:
@@ -507,10 +541,10 @@ def plot_hyperparameter_distributions(
             )
 
             # Formatting
-            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
-            ax.set_xlabel(display_name, fontsize=10)
-            ax.set_ylabel("Density", fontsize=10)
-            ax.legend(loc="upper right", fontsize=8)
+            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+            ax.set_ylabel("Density", fontsize=PLOT_CFG.label_fs)
+            ax.legend(loc="upper right", fontsize=PLOT_CFG.legend_fs)
             ax.grid(True, alpha=0.3)
 
             # Statistics text box
@@ -526,13 +560,13 @@ def plot_hyperparameter_distributions(
                 verticalalignment="top",
                 horizontalalignment="left",
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
-                fontsize=8,
+                fontsize=PLOT_CFG.annotation_fs,
                 fontfamily="monospace",
             )
 
             # Create standalone image if requested
             if create_standalone:
-                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+                standalone_fig, standalone_ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
                 # Recreate the plot for standalone
                 standalone_ax.hist(
@@ -556,10 +590,14 @@ def plot_hyperparameter_distributions(
                     label=f"Median: {median_formatted}",
                 )
 
-                standalone_ax.set_title(f"{display_name} Distribution", fontsize=16, fontweight="bold")
-                standalone_ax.set_xlabel(display_name, fontsize=12)
-                standalone_ax.set_ylabel("Density", fontsize=12)
-                standalone_ax.legend(loc="upper right", fontsize=10)
+                standalone_ax.set_title(
+                    f"{display_name} Distribution",
+                    fontsize=PLOT_CFG.standalone_title_fs,
+                    fontweight="bold",
+                )
+                standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
+                standalone_ax.set_ylabel("Density", fontsize=PLOT_CFG.standalone_label_fs)
+                standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
                 standalone_ax.grid(True, alpha=0.3)
 
                 standalone_ax.text(
@@ -570,7 +608,7 @@ def plot_hyperparameter_distributions(
                     verticalalignment="top",
                     horizontalalignment="left",
                     bbox=dict(boxstyle="round", facecolor="white", alpha=0.9),
-                    fontsize=10,
+                    fontsize=PLOT_CFG.standalone_legend_fs,
                     fontfamily="monospace",
                 )
 
@@ -588,7 +626,12 @@ def plot_hyperparameter_distributions(
             axes[row, col_idx].set_visible(False)
 
         # Adjust layout and save
-        plt.suptitle("Numeric Parameters Distributions", fontsize=16, fontweight="bold", y=0.98)
+        plt.suptitle(
+            "Numeric Parameters Distributions",
+            fontsize=PLOT_CFG.suptitle_fs,
+            fontweight="bold",
+            y=0.98,
+        )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         plt.savefig(
@@ -604,13 +647,20 @@ def plot_hyperparameter_distributions(
         print(f"Creating categorical parameters distribution plot ({len(categorical_cols)} parameters)...")
 
         # Calculate grid dimensions with max 4 columns
-        max_cols = 4
+        max_cols = PLOT_CFG.max_cols
         n_plots = len(categorical_cols)
         n_cols = min(n_plots, max_cols)
         n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
         # Create grid layout for categorical parameters
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 5 * n_rows))
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(
+                PLOT_CFG.numeric_subplot_size * n_cols,
+                PLOT_CFG.numeric_subplot_size * n_rows,
+            ),
+        )
 
         # Handle different array shapes
         if n_plots == 1:
@@ -675,21 +725,21 @@ def plot_hyperparameter_distributions(
                     ha="center",
                     va="bottom",
                     fontweight="bold",
-                    fontsize=8,
+                    fontsize=PLOT_CFG.bar_value_fs,
                 )
 
             # Adjust y-axis to accommodate labels
             ax.set_ylim(0, max_count * 1.15)
 
             # Formatting
-            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
-            ax.set_xlabel(display_name, fontsize=10)
-            ax.set_ylabel("Count", fontsize=10)
+            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+            ax.set_ylabel("Count", fontsize=PLOT_CFG.label_fs)
             ax.grid(True, alpha=0.3, axis="y")
 
             # Create standalone image if requested
             if create_standalone:
-                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+                standalone_fig, standalone_ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
                 # Recreate the plot for standalone
                 standalone_bars = standalone_ax.bar(
@@ -715,13 +765,17 @@ def plot_hyperparameter_distributions(
                         ha="center",
                         va="bottom",
                         fontweight="bold",
-                        fontsize=10,
+                        fontsize=PLOT_CFG.standalone_legend_fs,
                     )
 
                 standalone_ax.set_ylim(0, max_count * 1.15)
-                standalone_ax.set_title(f"{display_name} Distribution", fontsize=16, fontweight="bold")
-                standalone_ax.set_xlabel(display_name, fontsize=12)
-                standalone_ax.set_ylabel("Count", fontsize=12)
+                standalone_ax.set_title(
+                    f"{display_name} Distribution",
+                    fontsize=PLOT_CFG.standalone_title_fs,
+                    fontweight="bold",
+                )
+                standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
+                standalone_ax.set_ylabel("Count", fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
 
                 plt.tight_layout()
@@ -738,7 +792,12 @@ def plot_hyperparameter_distributions(
             axes[row, col_idx].set_visible(False)
 
         # Adjust layout and save
-        plt.suptitle("Categorical Parameters Distributions", fontsize=16, fontweight="bold", y=0.98)
+        plt.suptitle(
+            "Categorical Parameters Distributions",
+            fontsize=PLOT_CFG.suptitle_fs,
+            fontweight="bold",
+            y=0.98,
+        )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         plt.savefig(
@@ -788,7 +847,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     )
 
     # Create bar chart visualization
-    plt.figure(figsize=(6, 4))
+    plt.figure(figsize=PLOT_CFG.importance_size)
     # Plot bars with parameter names on x-axis and importance values on y-axis
     plt.bar(df_imp["Parameter"], df_imp["Importance"], edgecolor="black")
     # Rotate parameter names for better readability
@@ -831,7 +890,9 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     )
 
     # ———————————————————————— Complete correlation matrix ——————————————————————— #
-    fig, ax = plt.subplots(figsize=(len(cols) * 0.5 + 1, len(cols) * 0.5 + 1))
+    fig, ax = plt.subplots(
+        figsize=(len(cols) * PLOT_CFG.heatmap_cell + 1, len(cols) * PLOT_CFG.heatmap_cell + 1)
+    )
 
     # Create heatmap with correlation values mapped to colors (-1 to +1 range)
     im = ax.imshow(corr, vmin=-1, vmax=1)
@@ -872,7 +933,12 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     )
 
     # Create figure for parameter-loss correlation bar chart
-    fig, ax = plt.subplots(figsize=(max(6, len(numeric_cols) * 0.6), 4))
+    fig, ax = plt.subplots(
+        figsize=(
+            max(PLOT_CFG.corr_bar_min_width, len(numeric_cols) * PLOT_CFG.corr_bar_scale),
+            PLOT_CFG.box_subplot_height,
+        )
+    )
 
     # Create color map based on correlation values (red for negative, blue for positive)
     colors = ["red" if x < 0 else "blue" for x in param_loss_corr.values]
@@ -895,7 +961,15 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     for i, (param, corr_val) in enumerate(param_loss_corr.items()):
         # Position text inside bar for better visibility
         text_x = corr_val * 0.5 if abs(corr_val) > 0.1 else corr_val + 0.05 * (1 if corr_val >= 0 else -1)
-        ax.text(text_x, i, f"{corr_val:.3f}", ha="center", va="center", fontweight="bold", fontsize=9)
+        ax.text(
+            text_x,
+            i,
+            f"{corr_val:.3f}",
+            ha="center",
+            va="center",
+            fontweight="bold",
+            fontsize=PLOT_CFG.bar_value_fs,
+        )
 
     # Add vertical line at x=0 for reference
     ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8, alpha=0.8)
@@ -1023,13 +1097,20 @@ def plot_parameter_boxplots(
         print(f"Creating numeric parameters boxplots ({len(numeric_cols)} parameters)...")
 
         # Calculate grid dimensions with max 4 columns
-        max_cols = 4
+        max_cols = PLOT_CFG.max_cols
         n_plots = len(numeric_cols)
         n_cols = min(n_plots, max_cols)
         n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
         # Create grid layout for numeric parameters
-        fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+        fig, axes = plt.subplots(
+            n_rows,
+            n_cols,
+            figsize=(
+                PLOT_CFG.numeric_subplot_size * n_cols,
+                PLOT_CFG.box_subplot_height * n_rows,
+            ),
+        )
 
         # Handle different array shapes
         if n_plots == 1:
@@ -1064,8 +1145,8 @@ def plot_parameter_boxplots(
                 patch.set_alpha(0.7)
 
             # Styling
-            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
-            ax.set_ylabel(display_name, fontsize=10)
+            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_ylabel(display_name, fontsize=PLOT_CFG.label_fs)
             ax.grid(True, alpha=0.3, axis="y")
 
             # Rotate x-axis labels for better readability
@@ -1073,7 +1154,7 @@ def plot_parameter_boxplots(
 
             # Create standalone image if requested
             if create_standalone:
-                standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+                standalone_fig, standalone_ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
                 # Recreate the boxplot for standalone
                 standalone_box_plot = standalone_ax.boxplot(data, labels=labels, patch_artist=True)
@@ -1082,8 +1163,12 @@ def plot_parameter_boxplots(
                     patch.set_facecolor(color)
                     patch.set_alpha(0.7)
 
-                standalone_ax.set_title(f"{display_name} Boxplot Comparison", fontsize=16, fontweight="bold")
-                standalone_ax.set_ylabel(display_name, fontsize=12)
+                standalone_ax.set_title(
+                    f"{display_name} Boxplot Comparison",
+                    fontsize=PLOT_CFG.standalone_title_fs,
+                    fontweight="bold",
+                )
+                standalone_ax.set_ylabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
                 standalone_ax.tick_params(axis="x", rotation=45)
 
@@ -1100,7 +1185,12 @@ def plot_parameter_boxplots(
             axes[row, col_idx].set_visible(False)
 
         # Adjust layout and save
-        plt.suptitle("Numeric Parameters Boxplots Comparison", fontsize=16, fontweight="bold", y=0.98)
+        plt.suptitle(
+            "Numeric Parameters Boxplots Comparison",
+            fontsize=PLOT_CFG.suptitle_fs,
+            fontweight="bold",
+            y=0.98,
+        )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
         # Save the numeric parameters boxplot
@@ -1142,13 +1232,20 @@ def plot_trend_analysis(
     stats = []
 
     # Calculate grid dimensions with max 4 columns
-    max_cols = 4
+    max_cols = PLOT_CFG.max_cols
     n_plots = len(numeric_cols)
     n_cols = min(n_plots, max_cols)
     n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
     # Create grid layout
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(
+            PLOT_CFG.numeric_subplot_size * n_cols,
+            PLOT_CFG.box_subplot_height * n_rows,
+        ),
+    )
 
     # Handle different array shapes
     if n_plots == 1:
@@ -1192,10 +1289,10 @@ def plot_trend_analysis(
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
-                fontsize=12,
+                fontsize=PLOT_CFG.standalone_label_fs,
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.5),
             )
-            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
             stats.append(
                 {"Parameter": col, "Slope": np.nan, "Correlation": np.nan, "Status": "Insufficient data"}
             )
@@ -1211,10 +1308,10 @@ def plot_trend_analysis(
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
-                fontsize=12,
+                fontsize=PLOT_CFG.standalone_label_fs,
                 bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.5),
             )
-            ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
             stats.append({"Parameter": col, "Slope": 0.0, "Correlation": 0.0, "Status": "No variance"})
             continue
 
@@ -1296,9 +1393,9 @@ def plot_trend_analysis(
         else:
             trend_legend = "Higher parameter → LOWER Study Value"
 
-        ax.set_xlabel(display_name, fontsize=10)
-        ax.set_ylabel("Study Value", fontsize=10)
-        ax.set_title(f"{display_name}", fontsize=14, fontweight="bold")
+        ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+        ax.set_ylabel("Study Value", fontsize=PLOT_CFG.label_fs)
+        ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
         ax.grid(True, alpha=0.3)
 
         # Add legend with trend information
@@ -1306,7 +1403,7 @@ def plot_trend_analysis(
             ax.plot([], [], linewidth=2, color="red", label=trend_legend)  # Dummy plot for legend
         else:
             ax.plot([], [], linewidth=2, color="gray", label=trend_legend)  # Dummy plot for legend
-        ax.legend(loc="best", fontsize=8)
+        ax.legend(loc="best", fontsize=PLOT_CFG.legend_fs)
 
         # Add text box with statistics
         stats_text = f"Slope: {slope:.6f}\n"  # Show more decimal places for slope
@@ -1322,13 +1419,13 @@ def plot_trend_analysis(
             verticalalignment="top",
             horizontalalignment="left",
             bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-            fontsize=8,
+            fontsize=PLOT_CFG.annotation_fs,
             fontfamily="monospace",
         )
 
         # Create standalone image if requested
         if create_standalone:
-            standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+            standalone_fig, standalone_ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
             # Recreate the scatter plot for standalone
             standalone_ax.scatter(x_clean, y_clean, s=15, edgecolor="black", linewidth=0.2, alpha=0.6)
@@ -1349,11 +1446,15 @@ def plot_trend_analysis(
             else:
                 standalone_ax.plot([], [], linewidth=2, color="gray", label=trend_legend)
 
-            standalone_ax.set_xlabel(display_name, fontsize=12)
-            standalone_ax.set_ylabel("Study Value", fontsize=12)
-            standalone_ax.set_title(f"{display_name} Trend Analysis", fontsize=16, fontweight="bold")
+            standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
+            standalone_ax.set_ylabel("Study Value", fontsize=PLOT_CFG.standalone_label_fs)
+            standalone_ax.set_title(
+                f"{display_name} Trend Analysis",
+                fontsize=PLOT_CFG.standalone_title_fs,
+                fontweight="bold",
+            )
             standalone_ax.grid(True, alpha=0.3)
-            standalone_ax.legend(loc="best", fontsize=10)
+            standalone_ax.legend(loc="best", fontsize=PLOT_CFG.standalone_legend_fs)
 
             standalone_ax.text(
                 0.02,
@@ -1363,7 +1464,7 @@ def plot_trend_analysis(
                 verticalalignment="top",
                 horizontalalignment="left",
                 bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-                fontsize=10,
+                fontsize=PLOT_CFG.standalone_legend_fs,
                 fontfamily="monospace",
             )
 
@@ -1387,7 +1488,12 @@ def plot_trend_analysis(
         axes[row, col_idx].set_visible(False)
 
     # Adjust layout and save
-    plt.suptitle("Parameter-Study Value Trend Analysis", fontsize=16, fontweight="bold", y=0.98)
+    plt.suptitle(
+        "Parameter-Study Value Trend Analysis",
+        fontsize=PLOT_CFG.suptitle_fs,
+        fontweight="bold",
+        y=0.98,
+    )
     plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
     # Save the comprehensive trend plot
@@ -1545,13 +1651,20 @@ def plot_optimal_ranges_analysis(
         ranges_data.append(param_data)
 
     # Calculate grid dimensions with max 4 columns
-    max_cols = 4
+    max_cols = PLOT_CFG.max_cols
     n_plots = len(numeric_cols)  # Use all parameters, not just valid ones
     n_cols = min(n_plots, max_cols)
     n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
 
     # Create grid layout
-    fig, axes = plt.subplots(n_rows, n_cols, figsize=(5 * n_cols, 4 * n_rows))
+    fig, axes = plt.subplots(
+        n_rows,
+        n_cols,
+        figsize=(
+            PLOT_CFG.numeric_subplot_size * n_cols,
+            PLOT_CFG.box_subplot_height * n_rows,
+        ),
+    )
 
     # Handle different array shapes
     if n_plots == 1:
@@ -1584,13 +1697,18 @@ def plot_optimal_ranges_analysis(
                 ha="center",
                 va="center",
                 transform=ax.transAxes,
-                fontsize=10,
+                fontsize=PLOT_CFG.label_fs,
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.8),
                 linespacing=1.5,
             )
-            ax.set_title(f"{display_name} (No Analysis)", fontsize=14, fontweight="bold", color="red")
-            ax.set_xlabel(display_name, fontsize=10)
-            ax.set_ylabel("Analysis not available", fontsize=10)
+            ax.set_title(
+                f"{display_name} (No Analysis)",
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                color="red",
+            )
+            ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+            ax.set_ylabel("Analysis not available", fontsize=PLOT_CFG.label_fs)
             ax.grid(True, alpha=0.3)
 
             # Remove ticks for cleaner look
@@ -1676,11 +1794,16 @@ def plot_optimal_ranges_analysis(
                     )
 
                 # Formatting
-                ax.set_title(f"{display_name}", fontsize=14, fontweight="bold", color="green")
-                ax.set_xlabel(display_name, fontsize=10)
-                ax.set_ylabel("Density", fontsize=10)
+                ax.set_title(
+                    f"{display_name}",
+                    fontsize=PLOT_CFG.title_fs,
+                    fontweight="bold",
+                    color="green",
+                )
+                ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+                ax.set_ylabel("Density", fontsize=PLOT_CFG.label_fs)
                 ax.grid(True, alpha=0.3)
-                ax.legend(loc="upper right", fontsize=8)
+                ax.legend(loc="upper right", fontsize=PLOT_CFG.legend_fs)
 
                 # Add text box with statistics - format values safely
                 def safe_format(value):
@@ -1699,13 +1822,13 @@ def plot_optimal_ranges_analysis(
                     verticalalignment="top",
                     horizontalalignment="left",
                     bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-                    fontsize=8,
+                    fontsize=PLOT_CFG.annotation_fs,
                     fontfamily="monospace",
                 )
 
                 # Create standalone image if requested
                 if create_standalone:
-                    standalone_fig, standalone_ax = plt.subplots(figsize=(8, 6))
+                    standalone_fig, standalone_ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
                     # Recreate the plot for standalone
                     standalone_ax.hist(
@@ -1772,11 +1895,15 @@ def plot_optimal_ranges_analysis(
                             label="Median (best)",
                         )
 
-                    standalone_ax.set_title(f"{display_name} Optimal Ranges", fontsize=16, fontweight="bold")
-                    standalone_ax.set_xlabel(display_name, fontsize=12)
-                    standalone_ax.set_ylabel("Density", fontsize=12)
+                    standalone_ax.set_title(
+                        f"{display_name} Optimal Ranges",
+                        fontsize=PLOT_CFG.standalone_title_fs,
+                        fontweight="bold",
+                    )
+                    standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
+                    standalone_ax.set_ylabel("Density", fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.grid(True, alpha=0.3)
-                    standalone_ax.legend(loc="upper right", fontsize=10)
+                    standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
 
                     standalone_ax.text(
                         0.02,
@@ -1786,7 +1913,7 @@ def plot_optimal_ranges_analysis(
                         verticalalignment="top",
                         horizontalalignment="left",
                         bbox=dict(boxstyle="round", facecolor="white", alpha=0.8),
-                        fontsize=10,
+                        fontsize=PLOT_CFG.standalone_legend_fs,
                         fontfamily="monospace",
                     )
 
@@ -1808,13 +1935,18 @@ def plot_optimal_ranges_analysis(
                     ha="center",
                     va="center",
                     transform=ax.transAxes,
-                    fontsize=10,
+                    fontsize=PLOT_CFG.label_fs,
                     bbox=dict(boxstyle="round", facecolor="lightcoral", alpha=0.8),
                     linespacing=1.5,
                 )
-                ax.set_title(f"{display_name} (Error)", fontsize=14, fontweight="bold", color="red")
-                ax.set_xlabel(display_name, fontsize=10)
-                ax.set_ylabel("Error occurred", fontsize=10)
+                ax.set_title(
+                    f"{display_name} (Error)",
+                    fontsize=PLOT_CFG.title_fs,
+                    fontweight="bold",
+                    color="red",
+                )
+                ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
+                ax.set_ylabel("Error occurred", fontsize=PLOT_CFG.label_fs)
                 ax.grid(True, alpha=0.3)
                 ax.set_xticks([])
                 ax.set_yticks([])
@@ -1828,7 +1960,7 @@ def plot_optimal_ranges_analysis(
     # Adjust layout and save
     plt.suptitle(
         f"Parameter Optimal Ranges Analysis ({plottable_count}/{len(numeric_cols)} parameters analyzed)",
-        fontsize=16,
+        fontsize=PLOT_CFG.suptitle_fs,
         fontweight="bold",
         y=0.98,
     )
