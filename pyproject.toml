@@ -9,7 +9,6 @@ description = "A collection of tools for Machine Learning and Data Science"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "GPL-3.0-only"
-license-files = ["LICENSE.txt"]
 authors = [
   { name = "Matheus Ferreira Silva", email = "matheusferreiravga@gmail.com" },
 ]
