@@ -14,6 +14,7 @@ def get_model_usage_stats(
     n_trials: int = 10000,
     device: str = "cpu",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
+    verbose: bool = False
     
 ) -> Tuple[float, float, float]:
     """
@@ -35,6 +36,7 @@ def get_model_usage_stats(
         n_trials (int): Number of inference trials to perform. Defaults to 100000.
         device (str): Device for power measurement; must be 'cpu' or 'gpu'. Defaults to 'cpu'.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
+        verbose (bool): If True, prints additional information during execution.
 
     Raises:
         RuntimeError: If GPU NVML initialization fails when device='gpu'.
@@ -129,6 +131,9 @@ def get_model_usage_stats(
 
     print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
     for _ in range(n_trials):
+        if verbose:
+            print(f"Trial {_ + 1}/{n_trials}... ", end="", flush=True)
+        
         start_time = time.time()  # mark start of trial
 
         # Begin energy measurement depending on device
