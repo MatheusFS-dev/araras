@@ -14,8 +14,8 @@ __pycache__/
 
 # Build and distribution directories
 dist/*
+build/*
 *.egg-info/
 
 # Others
 tests/
-!src/tests/
