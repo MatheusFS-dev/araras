@@ -13,6 +13,7 @@ Example usage:
 """
 
 import os
+import re
 import optuna
 import numpy as np
 from typing import *
@@ -27,26 +28,40 @@ from dataclasses import dataclass
 class PlotConfig:
     """Global configuration for matplotlib plots used in this module."""
 
+    # Layout and sizing configurations for combined plots
     max_cols: int = 4  # Maximum number of columns in grid layouts for subplots
     numeric_subplot_size: int = 5  # Size of each subplot for numeric parameter visualizations
     box_subplot_height: int = 4  # Height of each subplot for boxplot visualizations
-    standalone_size: Tuple[int, int] = (8, 6)  # Size of standalone plots for individual parameters
-    importance_size: Tuple[int, int] = (8, 6)  # Size of the parameter importance bar chart
     heatmap_cell: float = 0.5  # Size of each cell in the heatmap visualization
     corr_bar_min_width: int = 6  # Minimum width of the correlation bar chart
     corr_bar_scale: float = 0.6  # Scaling factor for correlation bar chart width
-    title_fs: int = 20  # Font size for subplot titles
-    label_fs: int = 16  # Font size for axis labels
-    legend_fs: int = 16  # Font size for legends in combined plots
-    standalone_legend_fs: int = 16  # Font size for legends in standalone plots
-    suptitle_fs: int = 18  # Font size for the overall title of combined plots
+
+    # Layout and sizing configurations for standalone plots
+    standalone_size: Tuple[int, int] = (8, 6)  # Size of standalone plots for individual parameters
+    importance_size: Tuple[int, int] = (8, 6)  # Size of the parameter importance bar chart
+
+    # Font sizes for combined plots
+    title_fs: int = 16  # Font size for subplot titles
+    label_fs: int = 12  # Font size for axis labels
+    legend_fs: int = 12  # Font size for legends in combined plots
+    suptitle_fs: int = 12  # Font size for the overall title of combined plots
+    annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
+    bar_value_fs: int = 9  # Font size for values displayed on bars in bar charts
+    x_tick_fs: int = 12  # Font size for x-axis tick labels
+    y_tick_fs: int = 12  # Font size for y-axis tick labels
+
+    # Font sizes for standalone plots
     standalone_title_fs: int = 20  # Font size for titles in standalone plots
     standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
-    annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
-    bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
-    x_tick_fs: int = 14  # Font size for x-axis tick labels
-    y_tick_fs: int = 14  # Font size for y-axis tick labels
-    title_pad: int = 6  # Extra space between titles and plots
+    standalone_legend_fs: int = 16  # Font size for legends in standalone plots
+    standalone_x_tick_fs: int = 14  # Font size for x-axis tick labels in standalone plots
+    standalone_y_tick_fs: int = 14  # Font size for y-axis tick labels in standalone plots
+
+    # Padding configurations for combined plots
+    title_pad: int = 10  # Extra space between titles and plots
+
+    # Padding configurations for standalone plots
+    standalone_title_pad: int = 6  # Extra space between titles and plots in standalone
 
     # Common label/title strings used across plots
     density_label: str = "Density"
@@ -63,6 +78,13 @@ class PlotConfig:
     param_corr_ylabel: str = "Parameters"
     trend_suptitle: str = "Parameter-Study Value Trend Analysis"
 
+    # Dynamic title templates
+    param_title_tpl: str = "{display_name}"
+    dist_standalone_title_tpl: str = "Distribution for {display_name}"
+    box_standalone_title_tpl: str = "Boxplot Comparison for {display_name}"
+    trend_standalone_title_tpl: str = "Trend Analysis for {display_name}"
+    ranges_standalone_title_tpl: str = "Optimal Ranges for {display_name}"
+
 
 PLOT_CFG = PlotConfig()
 plt.rcParams.update(
@@ -72,6 +94,12 @@ plt.rcParams.update(
         "ytick.labelsize": PLOT_CFG.y_tick_fs,
     }
 )
+
+
+def format_title(template: str, display_name: str) -> str:
+    """Format a title template with the given display name."""
+    return template.format(display_name=display_name)
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
@@ -182,7 +210,11 @@ def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] =
     """
     if param_name_mapping and param_name in param_name_mapping:
         return param_name_mapping[param_name]
-    return param_name
+
+    # Remove common prefixes like "params_" and convert underscores to spaces
+    cleaned = re.sub(r"^params_", "", param_name)
+    cleaned = cleaned.replace("_", " ")
+    return cleaned.title()
 
 
 def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
@@ -565,7 +597,7 @@ def plot_hyperparameter_distributions(
 
             # Formatting
             ax.set_title(
-                f"{display_name}",
+                format_title(PLOT_CFG.param_title_tpl, display_name),
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 pad=PLOT_CFG.title_pad,
@@ -619,15 +651,26 @@ def plot_hyperparameter_distributions(
                 )
 
                 standalone_ax.set_title(
-                    f"{display_name} Distribution",
+                    format_title(
+                        PLOT_CFG.dist_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
                 standalone_ax.grid(True, alpha=0.3)
+                standalone_ax.tick_params(
+                    axis="x",
+                    labelsize=PLOT_CFG.standalone_x_tick_fs,
+                )
+                standalone_ax.tick_params(
+                    axis="y",
+                    labelsize=PLOT_CFG.standalone_y_tick_fs,
+                )
 
                 standalone_ax.text(
                     0.02,
@@ -767,7 +810,7 @@ def plot_hyperparameter_distributions(
 
             # Formatting
             ax.set_title(
-                f"{display_name}",
+                format_title(PLOT_CFG.param_title_tpl, display_name),
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 pad=PLOT_CFG.title_pad,
@@ -814,14 +857,19 @@ def plot_hyperparameter_distributions(
 
                 standalone_ax.set_ylim(0, max_count * 1.15)
                 standalone_ax.set_title(
-                    f"{display_name} Distribution",
+                    format_title(
+                        PLOT_CFG.dist_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.set_ylabel(PLOT_CFG.count_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
+                standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+                standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
                 plt.tight_layout()
                 standalone_fig.savefig(
@@ -1079,12 +1127,6 @@ def plot_parameter_boxplots(
         None: Saves separate boxplot files for numeric parameters
     """
 
-    def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] = None) -> str:
-        """Get display name for parameter, using mapping if provided."""
-        if param_name_mapping and param_name in param_name_mapping:
-            return param_name_mapping[param_name]
-        return param_name
-
     def save_boxplot_data_for_latex(
         col: str, all_data: pd.Series, best_data: pd.Series, worst_data: pd.Series, data_dir: str
     ) -> None:
@@ -1197,7 +1239,7 @@ def plot_parameter_boxplots(
 
             # Styling
             ax.set_title(
-                f"{display_name}",
+                format_title(PLOT_CFG.param_title_tpl, display_name),
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 pad=PLOT_CFG.title_pad,
@@ -1220,16 +1262,18 @@ def plot_parameter_boxplots(
                     patch.set_alpha(0.7)
 
                 standalone_ax.set_title(
-                    f"{display_name} Boxplot Comparison",
+                    format_title(
+                        PLOT_CFG.box_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_ylabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
-                standalone_ax.tick_params(
-                    axis="x", rotation=45, labelsize=PLOT_CFG.x_tick_fs
-                )
+                standalone_ax.tick_params(axis="x", rotation=45, labelsize=PLOT_CFG.standalone_x_tick_fs)
+                standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
                 plt.tight_layout()
                 standalone_fig.savefig(
@@ -1352,7 +1396,7 @@ def plot_trend_analysis(
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.5),
             )
             ax.set_title(
-                f"{display_name}",
+                format_title(PLOT_CFG.param_title_tpl, display_name),
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 pad=PLOT_CFG.title_pad,
@@ -1376,7 +1420,7 @@ def plot_trend_analysis(
                 bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.5),
             )
             ax.set_title(
-                f"{display_name}",
+                format_title(PLOT_CFG.param_title_tpl, display_name),
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 pad=PLOT_CFG.title_pad,
@@ -1465,7 +1509,7 @@ def plot_trend_analysis(
         ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
         ax.set_title(
-            f"{display_name}",
+            format_title(PLOT_CFG.param_title_tpl, display_name),
             fontsize=PLOT_CFG.title_fs,
             fontweight="bold",
             pad=PLOT_CFG.title_pad,
@@ -1523,12 +1567,17 @@ def plot_trend_analysis(
             standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_title(
-                f"{display_name} Trend Analysis",
+                format_title(
+                    PLOT_CFG.trend_standalone_title_tpl,
+                    display_name,
+                ),
                 fontsize=PLOT_CFG.standalone_title_fs,
                 fontweight="bold",
-                pad=PLOT_CFG.title_pad,
+                pad=PLOT_CFG.standalone_title_pad,
             )
             standalone_ax.grid(True, alpha=0.3)
+            standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+            standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
             standalone_ax.legend(loc="best", fontsize=PLOT_CFG.standalone_legend_fs)
 
             standalone_ax.text(
@@ -1871,7 +1920,7 @@ def plot_optimal_ranges_analysis(
 
                 # Formatting
                 ax.set_title(
-                    f"{display_name}",
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
                     fontsize=PLOT_CFG.title_fs,
                     fontweight="bold",
                     color="green",
@@ -1973,14 +2022,19 @@ def plot_optimal_ranges_analysis(
                         )
 
                     standalone_ax.set_title(
-                        f"{display_name} Optimal Ranges",
+                        format_title(
+                            PLOT_CFG.ranges_standalone_title_tpl,
+                            display_name,
+                        ),
                         fontsize=PLOT_CFG.standalone_title_fs,
                         fontweight="bold",
-                        pad=PLOT_CFG.title_pad,
+                        pad=PLOT_CFG.standalone_title_pad,
                     )
                     standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.grid(True, alpha=0.3)
+                    standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+                    standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
                     standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
 
                     standalone_ax.text(
@@ -2115,7 +2169,7 @@ def print_study_columns(
             print("-" * 50)
         else:
             print("No columns to display after applying exclusions.")
-            
+
     except Exception as e:
         print(f"Error extracting study information: {str(e)}")
 
@@ -2173,20 +2227,21 @@ def analyze_study(
     best, worst = get_trial_subsets(df, top_frac)
 
     print_study_columns(
-        study, 
+        study,
         exclude=[
-            "loss", 
-            "value", 
-            "number", 
-            "datetime_start", 
-            "datetime_complete", 
+            "loss",
+            "value",
+            "number",
+            "datetime_start",
+            "datetime_complete",
             "duration",
             "system_attrs_completed_rung_0",
             "system_attrs_completed_rung_1",
             "system_attrs_completed_rung_2",
-            "state"
-        ] + [col for col in df.columns if col.startswith("user_")],
-        param_name_mapping=param_name_mapping
+            "state",
+        ]
+        + [col for col in df.columns if col.startswith("user_")],
+        param_name_mapping=param_name_mapping,
     )
 
     # Generate comprehensive statistical summary tables and plots
