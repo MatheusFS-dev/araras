@@ -96,6 +96,44 @@ plt.rcParams.update(
 )
 
 
+def set_plot_config_param(param_name: str, value: Any) -> None:
+    """Set a single parameter in :data:`PLOT_CFG`.
+
+    Parameters
+    ----------
+    param_name:
+        Name of the attribute to modify.
+    value:
+        New value for the parameter.
+
+    Raises
+    ------
+    AttributeError
+        If ``param_name`` is not a valid attribute of :class:`PlotConfig`.
+    """
+
+    if not hasattr(PLOT_CFG, param_name):
+        raise AttributeError(f"PlotConfig has no attribute {param_name!r}")
+
+    setattr(PLOT_CFG, param_name, value)
+
+    if param_name == "x_tick_fs":
+        plt.rcParams["xtick.labelsize"] = value
+    elif param_name == "y_tick_fs":
+        plt.rcParams["ytick.labelsize"] = value
+
+
+def set_plot_config_params(**kwargs: Any) -> None:
+    """Set multiple parameters in :data:`PLOT_CFG`.
+
+    Each keyword argument corresponds to a parameter of :class:`PlotConfig`.
+    Unknown parameter names will raise :class:`AttributeError`.
+    """
+
+    for name, val in kwargs.items():
+        set_plot_config_param(name, val)
+
+
 def format_title(template: str, display_name: str) -> str:
     """Format a title template with the given display name."""
     return template.format(display_name=display_name)
