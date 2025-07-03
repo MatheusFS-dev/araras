@@ -14,8 +14,7 @@ def get_model_usage_stats(
     n_trials: int = 10000,
     device: str = "cpu",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
-    verbose: bool = False
-    
+    verbose: bool = False,
 ) -> Tuple[float, float, float]:
     """
     Estimate average power draw and energy usage.
@@ -44,12 +43,14 @@ def get_model_usage_stats(
 
     Returns:
         Tuple[float, float, float]:
-            - per_run_time (float): 
-                Average run time in seconds. Measures a mix of tracing, initialization, 
+            - per_run_time (float):
+                Average run time in seconds. Measures a mix of tracing, initialization,
                 asynchronous queuing, Python overhead, and power-reading delays,
                 so its “average” can be dominated by non-inference costs.
-            - avg_power (float): Average power draw in watts.
-            - avg_energy (float): Average energy consumed per inference in joules.
+            - avg_power (float): Average power draw in watts. If a negative value is
+              measured repeatedly, the function returns 0 after two retries.
+            - avg_energy (float): Average energy consumed per inference in joules. This
+              will also be ``0`` if ``avg_power`` could not be measured correctly.
     """
 
     # Decide how we will run inference
@@ -66,16 +67,7 @@ def get_model_usage_stats(
         )
         is_keras_model = True
 
-    # Initialize NVML for GPU power measurement if requested
-    if device == "gpu":
-        try:
-            import pynvml
-
-            pynvml.nvmlInit()  # initialize NVML library
-            handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # get first GPU handle
-        except Exception as e:
-            # propagate error if NVML cannot be set up
-            raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
+    # NVML will be initialized lazily inside the measurement loop when needed
 
     def read_cpu_power_rapl() -> Optional[float]:
         """Read CPU package energy via Intel RAPL interface.
@@ -126,66 +118,72 @@ def get_model_usage_stats(
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
-    powers: list[float] = []  # store measured power values
-    times: list[float] = []  # store inference durations
+    MAX_RETRIES = 2
+    attempt = 0
+    while True:
+        powers: list[float] = []  # store measured power values
+        times: list[float] = []  # store inference durations
 
-    print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
-    for i in range(n_trials):
+        # Initialize NVML each attempt if required
+        if device == "gpu":
+            try:
+                import pynvml
+
+                pynvml.nvmlInit()
+                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+            except Exception as e:
+                raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
+
+        print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
+        for i in range(n_trials):
+            if verbose:
+                progress = (i + 1) / n_trials
+                bar_len = 30
+                filled = int(progress * bar_len)
+                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                print(f"\r[{bar}] {i + 1}/{n_trials}", end="", flush=True)
+
+            start_time = time.time()
+
+            if device == "gpu":
+                start_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
+            elif device == "cpu":
+                start_energy = read_cpu_power_rapl()
+            else:
+                raise ValueError("Unsupported device: choose 'gpu' or 'cpu'")
+
+            _ = infer()
+
+            elapsed = time.time() - start_time
+
+            if device == "gpu":
+                end_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
+                avg_instant_power = (start_power + end_power) / 2
+                powers.append(avg_instant_power)
+            elif device == "cpu" and start_energy is not None:
+                end_energy = read_cpu_power_rapl()
+                if end_energy is not None:
+                    energy_used = end_energy - start_energy
+                    avg_power = energy_used / elapsed if elapsed > 0 else 0
+                    powers.append(avg_power)
+
+            times.append(elapsed)
+
         if verbose:
-            progress = (i + 1) / n_trials
-            bar_len = 30
-            filled = int(progress * bar_len)
-            bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-            print(f"\r[{bar}] {i + 1}/{n_trials}", end="", flush=True)
-        
-        start_time = time.time()  # mark start of trial
+            print()
 
-        # Begin energy measurement depending on device
         if device == "gpu":
-            # GPU: measure instantaneous power (milliwatts → watts)
-            start_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-        elif device == "cpu":
-            # CPU: read cumulative energy counter at start
-            start_energy = read_cpu_power_rapl()
-        else:
-            # invalid device selection
-            raise ValueError("Unsupported device: choose 'gpu' or 'cpu'")
+            pynvml.nvmlShutdown()
 
-        # Run inference
-        _ = infer()
+        per_run_time = sum(times) / len(times)
+        avg_power = sum(powers) / len(powers) if powers else 0
+        avg_energy = sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0
 
-        # Compute how long the inference took
-        elapsed = time.time() - start_time
+        if avg_power >= 0:
+            return per_run_time, avg_power, avg_energy
 
-        # Complete energy measurement and compute average power
-        if device == "gpu":
-            # GPU: measure end instantaneous power and average the two readings
-            end_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-            avg_instant_power = (start_power + end_power) / 2
-            powers.append(avg_instant_power)
-        elif device == "cpu" and start_energy is not None:
-            # CPU: read end energy counter and compute power
-            end_energy = read_cpu_power_rapl()
-            if end_energy is not None:
-                energy_used = end_energy - start_energy  # joules consumed
-                avg_power = energy_used / elapsed if elapsed > 0 else 0
-                powers.append(avg_power)
-
-        # Record inference duration
-        times.append(elapsed)
-
-    if verbose:
-        print()
-
-    # Shutdown NVML if used
-    if device == "gpu":
-        pynvml.nvmlShutdown()
-
-    per_run_time = sum(times) / len(times)
-
-    # Compute overall averages
-    avg_power = sum(powers) / len(powers) if powers else 0
-    # Total energy = sum(power_i * time_i) / trials
-    avg_energy = sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0
-
-    return per_run_time, avg_power, avg_energy
+        attempt += 1
+        if attempt > MAX_RETRIES:
+            print("\033[31mWarning: Average power measurement failed, returning 0.\033[0m")
+            return per_run_time, 0.0, 0.0
+        print("\033[33mWarning: Negative average power measured, retrying measurement...\033[0m")
