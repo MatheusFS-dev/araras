@@ -50,24 +50,20 @@ def get_model_usage_stats(
             - avg_energy (float): Average energy consumed per inference in joules.
     """
 
-    # If user passed a Keras Model instance, build a tf.function directly
-    if isinstance(saved_model, tf.keras.Model):
-        keras_model = saved_model
-        specs: list[tf.TensorSpec] = []
-        for inp in keras_model.inputs:
-            shape = [d if d is not None else 1 for d in inp.shape.as_list()]
-            name = inp.name.split(":")[0]
-            specs.append(tf.TensorSpec(shape, inp.dtype, name=name))
-        infer = tf.function(keras_model).get_concrete_function(*specs)
-        dummy_inputs = {spec.name: tf.random.normal(spec.shape, dtype=spec.dtype) for spec in specs}
-
-    else:
-        # If given a .keras file, load it and export to a temporary SavedModel
-        if isinstance(saved_model, str) and saved_model.endswith(".keras"):
+    # If user passed a Keras Model instance or a .keras file, convert to a TF SavedModel
+    if isinstance(saved_model, tf.keras.Model) or (
+        isinstance(saved_model, str) and saved_model.endswith(".keras")
+    ):
+        # Load or use the provided Keras model
+        if isinstance(saved_model, str):
             keras_model = tf.keras.models.load_model(saved_model)
-            tmp_dir = tempfile.mkdtemp()
-            tf.saved_model.save(keras_model, tmp_dir)
-            saved_model = tmp_dir
+        else:
+            keras_model = saved_model
+        # Export to a temporary SavedModel directory
+        tmp_dir = tempfile.mkdtemp()
+        tf.saved_model.save(keras_model, tmp_dir)
+        # Point to the newly created SavedModel for the rest of the logic
+        saved_model = tmp_dir
 
     # Initialize NVML for GPU power measurement if requested
     if device == "gpu":
