@@ -132,7 +132,7 @@ def get_model_usage_stats(
     print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
     for _ in range(n_trials):
         if verbose:
-            print(f"Trial {_ + 1}/{n_trials}... ", end="", flush=True)
+            print(f"Running trial {_ + 1}/{n_trials}...")
         
         start_time = time.time()  # mark start of trial
 
