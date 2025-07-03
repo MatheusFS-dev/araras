@@ -103,6 +103,11 @@ def get_memory_and_time(
         graph compilation once, so your timed loop measures only the optimized graph
         execution path.
 
+    The CPU memory probe occasionally reports zero usage. When this happens, the
+    measurement is retried up to two additional times. If all attempts still
+    report zero memory, the function returns ``0`` for the peak usage and emits a
+    warning in red.
+
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
@@ -113,7 +118,10 @@ def get_memory_and_time(
         verbose (bool): If True, displays a progress bar during test runs.
 
     Returns:
-        Tuple[int, float]: (peak memory usage in bytes, average inference time in seconds)
+        Tuple[int, float]:
+            - peak memory usage in bytes (0 if CPU measurement fails after
+              several attempts)
+            - average inference time in seconds
     """
     # Prepare dummy inputs matching model.inputs
     shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
@@ -168,35 +176,55 @@ def get_memory_and_time(
     if not tf.config.list_physical_devices("CPU"):
         raise RuntimeError("No CPU device found")
 
-    proc = psutil.Process()
-    baseline = proc.memory_info().rss
+    def _measure_cpu() -> Tuple[int, float]:
+        """Run the CPU measurement loop and return (peak_mem, avg_time)."""
+        proc = psutil.Process()
+        baseline = proc.memory_info().rss
 
-    # warmup on CPU
-    with tf.device(f"/CPU:{device_index}"):
-        _ = infer(*dummy_inputs)
-        for _ in range(warmup_runs - 1):
+        # warmup on CPU
+        with tf.device(f"/CPU:{device_index}"):
             _ = infer(*dummy_inputs)
+            for _ in range(warmup_runs - 1):
+                _ = infer(*dummy_inputs)
 
-    peak_rss = baseline
-    times = []
-    with tf.device(f"/CPU:{device_index}"):
-        for i in range(test_runs):
+        peak_rss = baseline
+        times = []
+        with tf.device(f"/CPU:{device_index}"):
+            for i in range(test_runs):
+                if verbose:
+                    progress = (i + 1) / test_runs
+                    bar_len = 30
+                    filled = int(progress * bar_len)
+                    bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                    print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
+                t0 = time.perf_counter()
+                out = infer(*dummy_inputs)
+                _ = out.numpy()
+                times.append(time.perf_counter() - t0)
+                rss = proc.memory_info().rss
+                if rss > peak_rss:
+                    peak_rss = rss
             if verbose:
-                progress = (i + 1) / test_runs
-                bar_len = 30
-                filled = int(progress * bar_len)
-                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
-            t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            _ = out.numpy()
-            times.append(time.perf_counter() - t0)
-            rss = proc.memory_info().rss
-            if rss > peak_rss:
-                peak_rss = rss
-        if verbose:
-            print()
+                print()
 
-    avg_time = sum(times) / len(times)
-    peak_mem = peak_rss - baseline
+        avg_time = sum(times) / len(times)
+        peak_mem = peak_rss - baseline
+        return peak_mem, avg_time
+
+    max_retries = 2
+    peak_mem = 0
+    avg_time = 0.0
+    for attempt in range(max_retries + 1):
+        peak_mem, avg_time = _measure_cpu()
+        if peak_mem != 0:
+            break
+        if attempt < max_retries:
+            print(
+                "\033[33mWarning: CPU memory usage measured as 0 bytes, retrying measurement...\033[0m"
+            )
+        else:
+            print(
+                "\033[31mWarning: CPU memory usage could not be measured, returning 0.\033[0m"
+            )
+
     return peak_mem, avg_time
