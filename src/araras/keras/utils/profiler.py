@@ -168,35 +168,44 @@ def get_memory_and_time(
     if not tf.config.list_physical_devices("CPU"):
         raise RuntimeError("No CPU device found")
 
-    proc = psutil.Process()
-    baseline = proc.memory_info().rss
+    def _measure_cpu() -> Tuple[int, float]:
+        """Run the CPU measurement loop and return (peak_mem, avg_time)."""
+        proc = psutil.Process()
+        baseline = proc.memory_info().rss
 
-    # warmup on CPU
-    with tf.device(f"/CPU:{device_index}"):
-        _ = infer(*dummy_inputs)
-        for _ in range(warmup_runs - 1):
+        # warmup on CPU
+        with tf.device(f"/CPU:{device_index}"):
             _ = infer(*dummy_inputs)
+            for _ in range(warmup_runs - 1):
+                _ = infer(*dummy_inputs)
 
-    peak_rss = baseline
-    times = []
-    with tf.device(f"/CPU:{device_index}"):
-        for i in range(test_runs):
+        peak_rss = baseline
+        times = []
+        with tf.device(f"/CPU:{device_index}"):
+            for i in range(test_runs):
+                if verbose:
+                    progress = (i + 1) / test_runs
+                    bar_len = 30
+                    filled = int(progress * bar_len)
+                    bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                    print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
+                t0 = time.perf_counter()
+                out = infer(*dummy_inputs)
+                _ = out.numpy()
+                times.append(time.perf_counter() - t0)
+                rss = proc.memory_info().rss
+                if rss > peak_rss:
+                    peak_rss = rss
             if verbose:
-                progress = (i + 1) / test_runs
-                bar_len = 30
-                filled = int(progress * bar_len)
-                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
-            t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            _ = out.numpy()
-            times.append(time.perf_counter() - t0)
-            rss = proc.memory_info().rss
-            if rss > peak_rss:
-                peak_rss = rss
-        if verbose:
-            print()
+                print()
 
-    avg_time = sum(times) / len(times)
-    peak_mem = peak_rss - baseline
+        avg_time = sum(times) / len(times)
+        peak_mem = peak_rss - baseline
+        return peak_mem, avg_time
+
+    peak_mem, avg_time = _measure_cpu()
+    if peak_mem == 0:
+        print("\033[33mWarning: CPU memory usage measured as 0 bytes, retrying measurement...\033[0m")
+        peak_mem, avg_time = _measure_cpu()
+
     return peak_mem, avg_time
