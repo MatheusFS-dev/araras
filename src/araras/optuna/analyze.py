@@ -47,7 +47,10 @@ class PlotConfig:
     bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
     x_tick_fs: int = 14  # Font size for x-axis tick labels
     y_tick_fs: int = 14  # Font size for y-axis tick labels
+    standalone_x_tick_fs: int = 14  # Font size for x-axis tick labels in standalone plots
+    standalone_y_tick_fs: int = 14  # Font size for y-axis tick labels in standalone plots
     title_pad: int = 6  # Extra space between titles and plots
+    standalone_title_pad: int = 6  # Extra space between titles and plots in standalone mode
 
     # Common label/title strings used across plots
     density_label: str = "Density"
@@ -642,12 +645,20 @@ def plot_hyperparameter_distributions(
                     ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
                 standalone_ax.grid(True, alpha=0.3)
+                standalone_ax.tick_params(
+                    axis="x",
+                    labelsize=PLOT_CFG.standalone_x_tick_fs,
+                )
+                standalone_ax.tick_params(
+                    axis="y",
+                    labelsize=PLOT_CFG.standalone_y_tick_fs,
+                )
 
                 standalone_ax.text(
                     0.02,
@@ -840,11 +851,13 @@ def plot_hyperparameter_distributions(
                     ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.set_ylabel(PLOT_CFG.count_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
+                standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+                standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
                 plt.tight_layout()
                 standalone_fig.savefig(
@@ -1243,12 +1256,15 @@ def plot_parameter_boxplots(
                     ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
+                    pad=PLOT_CFG.standalone_title_pad,
                 )
                 standalone_ax.set_ylabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
                 standalone_ax.tick_params(
-                    axis="x", rotation=45, labelsize=PLOT_CFG.x_tick_fs
+                    axis="x", rotation=45, labelsize=PLOT_CFG.standalone_x_tick_fs
+                )
+                standalone_ax.tick_params(
+                    axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs
                 )
 
                 plt.tight_layout()
@@ -1549,9 +1565,11 @@ def plot_trend_analysis(
                 ),
                 fontsize=PLOT_CFG.standalone_title_fs,
                 fontweight="bold",
-                pad=PLOT_CFG.title_pad,
+                pad=PLOT_CFG.standalone_title_pad,
             )
             standalone_ax.grid(True, alpha=0.3)
+            standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+            standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
             standalone_ax.legend(loc="best", fontsize=PLOT_CFG.standalone_legend_fs)
 
             standalone_ax.text(
@@ -2002,11 +2020,13 @@ def plot_optimal_ranges_analysis(
                         ),
                         fontsize=PLOT_CFG.standalone_title_fs,
                         fontweight="bold",
-                        pad=PLOT_CFG.title_pad,
+                        pad=PLOT_CFG.standalone_title_pad,
                     )
                     standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.grid(True, alpha=0.3)
+                    standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+                    standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
                     standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
 
                     standalone_ax.text(
