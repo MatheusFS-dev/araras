@@ -14,7 +14,7 @@ def get_model_usage_stats(
     n_trials: int = 10000,
     device: str = "cpu",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> Tuple[float, float, float]:
     """
     Estimate average power draw and energy usage.

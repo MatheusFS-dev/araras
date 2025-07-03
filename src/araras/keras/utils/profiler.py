@@ -84,7 +84,7 @@ def get_memory_and_time(
     device: str = "GPU:0",
     warmup_runs: int = 10,
     test_runs: int = 50,
-    verbose: bool = False,
+    verbose: bool = True,
 ) -> Tuple[int, float]:
     """
     Measures the peak memory usage and average inference time of a Keras model
