@@ -1,12 +1,12 @@
 """
 Module for estimating average power and energy consumption
-of a TensorFlow SavedModel on CPU or GPU using NVML (GPU) or RAPL (CPU).
+of a TensorFlow model (SavedModel or Keras model) on CPU or GPU using NVML (GPU)
+or RAPL (CPU).
 """
 
 import time
-import tempfile
 import tensorflow as tf
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Callable
 
 
 def get_model_usage_stats(
@@ -50,20 +50,19 @@ def get_model_usage_stats(
             - avg_energy (float): Average energy consumed per inference in joules.
     """
 
-    # If user passed a Keras Model instance or a .keras file, convert to a TF SavedModel
+    # Decide how we will run inference
+    is_keras_model = False
+    keras_model: Optional[tf.keras.Model] = None
     if isinstance(saved_model, tf.keras.Model) or (
         isinstance(saved_model, str) and saved_model.endswith(".keras")
     ):
-        # Load or use the provided Keras model
-        if isinstance(saved_model, str):
-            keras_model = tf.keras.models.load_model(saved_model)
-        else:
-            keras_model = saved_model
-        # Export to a temporary SavedModel directory
-        tmp_dir = tempfile.mkdtemp()
-        tf.saved_model.save(keras_model, tmp_dir)
-        # Point to the newly created SavedModel for the rest of the logic
-        saved_model = tmp_dir
+        # We were given a Keras model or a path to a `.keras` file
+        keras_model = (
+            saved_model
+            if isinstance(saved_model, tf.keras.Model)
+            else tf.keras.models.load_model(saved_model)
+        )
+        is_keras_model = True
 
     # Initialize NVML for GPU power measurement if requested
     if device == "gpu":
@@ -93,17 +92,34 @@ def get_model_usage_stats(
                 "Ensure the path is correct and accessible, or run with sudo.\033[0m"
             )
 
-    # Load the SavedModel and obtain the serving_default signature for inference
-    reloaded_model: tf.Module = tf.saved_model.load(saved_model)
-    infer = reloaded_model.signatures["serving_default"]
+    dummy_inputs = None
+    infer: Callable[[], tf.Tensor]
 
-    # Build dummy inputs only for the real TensorSpecs
-    args, kwargs = infer.structured_input_signature
-    dummy_inputs = {}
-    for name, spec in kwargs.items():
-        # replace any None dims with 1
-        shape = [d if d is not None else 1 for d in spec.shape.as_list()]
-        dummy_inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
+    if is_keras_model:
+        # Build random tensors based on the keras model input shapes
+        tensors = []
+        for tensor in keras_model.inputs:
+            shape = [d if d is not None else 1 for d in tensor.shape]
+            tensors.append(tf.random.normal(shape, dtype=tensor.dtype))
+        dummy_inputs = tensors[0] if len(tensors) == 1 else tensors
+
+        def infer():
+            return keras_model(dummy_inputs, training=False)
+
+    else:
+        # Load the SavedModel and obtain the serving_default signature for inference
+        reloaded_model: tf.Module = tf.saved_model.load(saved_model)
+        signature = reloaded_model.signatures["serving_default"]
+
+        _, kwargs = signature.structured_input_signature
+        inputs = {}
+        for name, spec in kwargs.items():
+            shape = [d if d is not None else 1 for d in spec.shape.as_list()]
+            inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
+        dummy_inputs = inputs
+
+        def infer():
+            return signature(**dummy_inputs)
 
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
@@ -127,7 +143,7 @@ def get_model_usage_stats(
             raise ValueError("Unsupported device: choose 'gpu' or 'cpu'")
 
         # Run inference
-        _ = infer(**dummy_inputs)
+        _ = infer()
 
         # Compute how long the inference took
         elapsed = time.time() - start_time
