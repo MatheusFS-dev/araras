@@ -51,11 +51,11 @@ class PlotConfig:
     y_tick_fs: int = 12  # Font size for y-axis tick labels
 
     # Font sizes for standalone plots
-    standalone_title_fs: int = 20  # Font size for titles in standalone plots
-    standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
+    standalone_title_fs: int = 22  # Font size for titles in standalone plots
+    standalone_label_fs: int = 20  # Font size for axis labels in standalone plots
     standalone_legend_fs: int = 16  # Font size for legends in standalone plots
-    standalone_x_tick_fs: int = 14  # Font size for x-axis tick labels in standalone plots
-    standalone_y_tick_fs: int = 14  # Font size for y-axis tick labels in standalone plots
+    standalone_x_tick_fs: int = 16  # Font size for x-axis tick labels in standalone plots
+    standalone_y_tick_fs: int = 16  # Font size for y-axis tick labels in standalone plots
 
     # Padding configurations for combined plots
     title_pad: int = 10  # Extra space between titles and plots
