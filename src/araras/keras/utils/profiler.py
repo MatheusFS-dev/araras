@@ -84,6 +84,7 @@ def get_memory_and_time(
     device: str = "GPU:0",
     warmup_runs: int = 10,
     test_runs: int = 50,
+    verbose: bool = False,
 ) -> Tuple[int, float]:
     """
     Measures the peak memory usage and average inference time of a Keras model
@@ -109,6 +110,7 @@ def get_memory_and_time(
         device (str): The device to run the model on, e.g. "GPU:0" or "CPU:0".
         warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
         test_runs (int): Number of runs to measure average inference time. Defaults to 50.
+        verbose (bool): If True, displays a progress bar during test runs.
 
     Returns:
         Tuple[int, float]: (peak memory usage in bytes, average inference time in seconds)
@@ -144,11 +146,19 @@ def get_memory_and_time(
 
         # Timed inference with forced sync
         times = []
-        for _ in range(test_runs):
+        for i in range(test_runs):
+            if verbose:
+                progress = (i + 1) / test_runs
+                bar_len = 30
+                filled = int(progress * bar_len)
+                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             _ = out.numpy()
             times.append(time.perf_counter() - t0)
+        if verbose:
+            print()
         avg_time = sum(times) / len(times)
 
         peak_mem = tf.config.experimental.get_memory_info(device)["peak"]
@@ -170,7 +180,13 @@ def get_memory_and_time(
     peak_rss = baseline
     times = []
     with tf.device(f"/CPU:{device_index}"):
-        for _ in range(test_runs):
+        for i in range(test_runs):
+            if verbose:
+                progress = (i + 1) / test_runs
+                bar_len = 30
+                filled = int(progress * bar_len)
+                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+                print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             _ = out.numpy()
@@ -178,6 +194,8 @@ def get_memory_and_time(
             rss = proc.memory_info().rss
             if rss > peak_rss:
                 peak_rss = rss
+        if verbose:
+            print()
 
     avg_time = sum(times) / len(times)
     peak_mem = peak_rss - baseline
