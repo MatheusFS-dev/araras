@@ -103,6 +103,11 @@ def get_memory_and_time(
         graph compilation once, so your timed loop measures only the optimized graph
         execution path.
 
+    The CPU memory probe occasionally reports zero usage. When this happens, the
+    measurement is retried up to two additional times. If all attempts still
+    report zero memory, the function returns ``0`` for the peak usage and emits a
+    warning in red.
+
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
@@ -113,7 +118,10 @@ def get_memory_and_time(
         verbose (bool): If True, displays a progress bar during test runs.
 
     Returns:
-        Tuple[int, float]: (peak memory usage in bytes, average inference time in seconds)
+        Tuple[int, float]:
+            - peak memory usage in bytes (0 if CPU measurement fails after
+              several attempts)
+            - average inference time in seconds
     """
     # Prepare dummy inputs matching model.inputs
     shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
@@ -203,9 +211,20 @@ def get_memory_and_time(
         peak_mem = peak_rss - baseline
         return peak_mem, avg_time
 
-    peak_mem, avg_time = _measure_cpu()
-    if peak_mem == 0:
-        print("\033[33mWarning: CPU memory usage measured as 0 bytes, retrying measurement...\033[0m")
+    max_retries = 2
+    peak_mem = 0
+    avg_time = 0.0
+    for attempt in range(max_retries + 1):
         peak_mem, avg_time = _measure_cpu()
+        if peak_mem != 0:
+            break
+        if attempt < max_retries:
+            print(
+                "\033[33mWarning: CPU memory usage measured as 0 bytes, retrying measurement...\033[0m"
+            )
+        else:
+            print(
+                "\033[31mWarning: CPU memory usage could not be measured, returning 0.\033[0m"
+            )
 
     return peak_mem, avg_time
