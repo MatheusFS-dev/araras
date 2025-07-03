@@ -76,16 +76,16 @@ class HParams:
 
     lr_value: float = None # Can be set for fixed learning rate
 
-    def get_activation(self, trial: optuna.Trial, name: str) -> str:
+    def get_activation(self, trial: optuna.Trial, name: str) -> Optional[str]:
         """
-        Samples an activation function from the predefined list.
+        Samples an activation function from the predefined list, including support for None.
 
         Args:
             trial (optuna.Trial): The Optuna trial object for sampling.
             name (str): The unique name for the activation parameter.
 
         Returns:
-            str: The selected activation function.
+            Optional[str]: The selected activation function or None.
         """
 
         # If length of is 1, return the the only option (So, no trial)
@@ -93,7 +93,13 @@ class HParams:
             return self.activation_choices[0]
 
         # Selects an activation function from the candidate list using Optuna's categorical sampler
-        return trial.suggest_categorical(name, self.activation_choices)
+        choice = trial.suggest_categorical(name, self.activation_choices)
+
+        # Convert choice to lowercase and return None if the choice is "none"
+        if choice.lower() == "none":
+            return None
+
+        return choice
 
     def get_regularizer(
         self,
