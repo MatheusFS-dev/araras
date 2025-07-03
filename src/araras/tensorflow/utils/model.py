@@ -36,7 +36,7 @@ def get_model_usage_stats(
         n_trials (int): Number of inference trials to perform. Defaults to 100000.
         device (str): Device for power measurement; must be 'cpu' or 'gpu'. Defaults to 'cpu'.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
-        verbose (bool): If True, prints additional information during execution.
+        verbose (bool): If True, displays a progress bar during the trials.
 
     Raises:
         RuntimeError: If GPU NVML initialization fails when device='gpu'.
@@ -130,9 +130,13 @@ def get_model_usage_stats(
     times: list[float] = []  # store inference durations
 
     print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
-    for _ in range(n_trials):
+    for i in range(n_trials):
         if verbose:
-            print(f"Running trial {_ + 1}/{n_trials}...")
+            progress = (i + 1) / n_trials
+            bar_len = 30
+            filled = int(progress * bar_len)
+            bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+            print(f"\r[{bar}] {i + 1}/{n_trials}", end="", flush=True)
         
         start_time = time.time()  # mark start of trial
 
@@ -169,6 +173,9 @@ def get_model_usage_stats(
 
         # Record inference duration
         times.append(elapsed)
+
+    if verbose:
+        print()
 
     # Shutdown NVML if used
     if device == "gpu":
