@@ -13,6 +13,7 @@ Example usage:
 """
 
 import os
+import re
 import optuna
 import numpy as np
 from typing import *
@@ -44,17 +45,46 @@ class PlotConfig:
     standalone_label_fs: int = 16  # Font size for axis labels in standalone plots
     annotation_fs: int = 12  # Font size for annotations (e.g., statistics text boxes)
     bar_value_fs: int = 12  # Font size for values displayed on bars in bar charts
-    tick_fs: int = 14  # Font size for axis tick labels
+    x_tick_fs: int = 14  # Font size for x-axis tick labels
+    y_tick_fs: int = 14  # Font size for y-axis tick labels
+    title_pad: int = 6  # Extra space between titles and plots
+
+    # Common label/title strings used across plots
+    density_label: str = "Density"
+    count_label: str = "Count"
+    study_value_label: str = "Study Value"
+    importance_ylabel: str = "Importance"
+    importance_title: str = "Hyperparameter Importances"
+    spearman_heatmap_title: str = "Spearman Correlation"
+    param_corr_title: str = (
+        "Parameter-Study Value Correlations\n"
+        "(Red: Negative correlation = Lower values improve performance)"
+    )
+    param_corr_xlabel: str = "Spearman Correlation with Study Value"
+    param_corr_ylabel: str = "Parameters"
+    trend_suptitle: str = "Parameter-Study Value Trend Analysis"
+
+    # Dynamic title templates
+    param_title_tpl: str = "{display_name}"
+    dist_standalone_title_tpl: str = "{display_name} Distribution"
+    box_standalone_title_tpl: str = "{display_name} Boxplot Comparison"
+    trend_standalone_title_tpl: str = "{display_name} Trend Analysis"
+    ranges_standalone_title_tpl: str = "{display_name} Optimal Ranges"
 
 
 PLOT_CFG = PlotConfig()
 plt.rcParams.update(
     {
         "font.family": "Times New Roman",
-        "xtick.labelsize": PLOT_CFG.tick_fs,
-        "ytick.labelsize": PLOT_CFG.tick_fs,
+        "xtick.labelsize": PLOT_CFG.x_tick_fs,
+        "ytick.labelsize": PLOT_CFG.y_tick_fs,
     }
 )
+
+
+def format_title(template: str, display_name: str) -> str:
+    """Format a title template with the given display name."""
+    return template.format(display_name=display_name)
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
@@ -165,7 +195,11 @@ def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] =
     """
     if param_name_mapping and param_name in param_name_mapping:
         return param_name_mapping[param_name]
-    return param_name
+
+    # Remove common prefixes like "params_" and convert underscores to spaces
+    cleaned = re.sub(r"^params_", "", param_name)
+    cleaned = cleaned.replace("_", " ")
+    return cleaned.title()
 
 
 def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
@@ -547,9 +581,14 @@ def plot_hyperparameter_distributions(
             )
 
             # Formatting
-            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, display_name),
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                pad=PLOT_CFG.title_pad,
+            )
             ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
-            ax.set_ylabel("Density", fontsize=PLOT_CFG.label_fs)
+            ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.label_fs)
             ax.legend(loc="upper right", fontsize=PLOT_CFG.legend_fs)
             ax.grid(True, alpha=0.3)
 
@@ -597,12 +636,16 @@ def plot_hyperparameter_distributions(
                 )
 
                 standalone_ax.set_title(
-                    f"{display_name} Distribution",
+                    format_title(
+                        PLOT_CFG.dist_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
-                standalone_ax.set_ylabel("Density", fontsize=PLOT_CFG.standalone_label_fs)
+                standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
                 standalone_ax.grid(True, alpha=0.3)
 
@@ -715,7 +758,7 @@ def plot_hyperparameter_distributions(
                 counts.index.astype(str),
                 rotation=45,
                 ha="right",
-                fontsize=PLOT_CFG.tick_fs,
+                fontsize=PLOT_CFG.x_tick_fs,
             )
 
             # Add value and percentage labels on bars
@@ -743,9 +786,14 @@ def plot_hyperparameter_distributions(
             ax.set_ylim(0, max_count * 1.15)
 
             # Formatting
-            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, display_name),
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                pad=PLOT_CFG.title_pad,
+            )
             ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
-            ax.set_ylabel("Count", fontsize=PLOT_CFG.label_fs)
+            ax.set_ylabel(PLOT_CFG.count_label, fontsize=PLOT_CFG.label_fs)
             ax.grid(True, alpha=0.3, axis="y")
 
             # Create standalone image if requested
@@ -767,7 +815,7 @@ def plot_hyperparameter_distributions(
                     counts.index.astype(str),
                     rotation=45,
                     ha="right",
-                    fontsize=PLOT_CFG.tick_fs,
+                    fontsize=PLOT_CFG.x_tick_fs,
                 )
 
                 for i, (bar, count, pct) in enumerate(
@@ -786,12 +834,16 @@ def plot_hyperparameter_distributions(
 
                 standalone_ax.set_ylim(0, max_count * 1.15)
                 standalone_ax.set_title(
-                    f"{display_name} Distribution",
+                    format_title(
+                        PLOT_CFG.dist_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
                 )
                 standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
-                standalone_ax.set_ylabel("Count", fontsize=PLOT_CFG.standalone_label_fs)
+                standalone_ax.set_ylabel(PLOT_CFG.count_label, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
 
                 plt.tight_layout()
@@ -867,9 +919,9 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     # Plot bars with parameter names on x-axis and importance values on y-axis
     plt.bar(df_imp["Parameter"], df_imp["Importance"], edgecolor="black")
     # Rotate parameter names for better readability
-    plt.xticks(rotation=45, ha="right", fontsize=PLOT_CFG.tick_fs)
-    plt.ylabel("Importance")  # Importance score on y-axis
-    plt.title("Hyperparameter Importances")  # Descriptive title
+    plt.xticks(rotation=45, ha="right", fontsize=PLOT_CFG.x_tick_fs)
+    plt.ylabel(PLOT_CFG.importance_ylabel)  # Importance score on y-axis
+    plt.title(PLOT_CFG.importance_title, pad=PLOT_CFG.title_pad)  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
     plt.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
@@ -922,9 +974,9 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         cols,
         rotation=45,
         ha="right",
-        fontsize=PLOT_CFG.tick_fs,
+        fontsize=PLOT_CFG.x_tick_fs,
     )  # Rotate x-labels for readability
-    ax.set_yticklabels(cols, fontsize=PLOT_CFG.tick_fs)
+    ax.set_yticklabels(cols, fontsize=PLOT_CFG.y_tick_fs)
 
     # Add correlation values as text on each cell
     for i in range(len(cols)):
@@ -933,7 +985,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Add colorbar to show correlation scale
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    plt.title("Spearman Correlation")  # Descriptive title
+    plt.title(PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad)  # Descriptive title
     plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
     fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"))
@@ -976,7 +1028,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Set y-axis labels to parameter names
     ax.set_yticks(range(len(param_loss_corr)))
-    ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.tick_fs)
+    ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.y_tick_fs)
 
     # Add correlation values as text on each bar
     for i, (param, corr_val) in enumerate(param_loss_corr.items()):
@@ -1000,10 +1052,11 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.axvline(x=-0.3, color="gray", linestyle="--", linewidth=0.6, alpha=0.6)
 
     # Set axis labels and title
-    ax.set_xlabel("Spearman Correlation with Study Value")
-    ax.set_ylabel("Parameters")
+    ax.set_xlabel(PLOT_CFG.param_corr_xlabel)
+    ax.set_ylabel(PLOT_CFG.param_corr_ylabel)
     ax.set_title(
-        "Parameter-Study Value Correlations\n(Red: Negative correlation = Lower values improve performance)"
+        PLOT_CFG.param_corr_title,
+        pad=PLOT_CFG.title_pad,
     )
 
     # Set x-axis limits with padding for better visualization
@@ -1048,12 +1101,6 @@ def plot_parameter_boxplots(
     Returns:
         None: Saves separate boxplot files for numeric parameters
     """
-
-    def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] = None) -> str:
-        """Get display name for parameter, using mapping if provided."""
-        if param_name_mapping and param_name in param_name_mapping:
-            return param_name_mapping[param_name]
-        return param_name
 
     def save_boxplot_data_for_latex(
         col: str, all_data: pd.Series, best_data: pd.Series, worst_data: pd.Series, data_dir: str
@@ -1166,12 +1213,17 @@ def plot_parameter_boxplots(
                 patch.set_alpha(0.7)
 
             # Styling
-            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, display_name),
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                pad=PLOT_CFG.title_pad,
+            )
             ax.set_ylabel(display_name, fontsize=PLOT_CFG.label_fs)
             ax.grid(True, alpha=0.3, axis="y")
 
             # Rotate x-axis labels for better readability
-            ax.tick_params(axis="x", rotation=45, labelsize=PLOT_CFG.tick_fs)
+            ax.tick_params(axis="x", rotation=45, labelsize=PLOT_CFG.x_tick_fs)
 
             # Create standalone image if requested
             if create_standalone:
@@ -1185,14 +1237,18 @@ def plot_parameter_boxplots(
                     patch.set_alpha(0.7)
 
                 standalone_ax.set_title(
-                    f"{display_name} Boxplot Comparison",
+                    format_title(
+                        PLOT_CFG.box_standalone_title_tpl,
+                        display_name,
+                    ),
                     fontsize=PLOT_CFG.standalone_title_fs,
                     fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
                 )
                 standalone_ax.set_ylabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
                 standalone_ax.grid(True, alpha=0.3, axis="y")
                 standalone_ax.tick_params(
-                    axis="x", rotation=45, labelsize=PLOT_CFG.tick_fs
+                    axis="x", rotation=45, labelsize=PLOT_CFG.x_tick_fs
                 )
 
                 plt.tight_layout()
@@ -1315,7 +1371,12 @@ def plot_trend_analysis(
                 fontsize=PLOT_CFG.standalone_label_fs,
                 bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.5),
             )
-            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, display_name),
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                pad=PLOT_CFG.title_pad,
+            )
             stats.append(
                 {"Parameter": col, "Slope": np.nan, "Correlation": np.nan, "Status": "Insufficient data"}
             )
@@ -1334,7 +1395,12 @@ def plot_trend_analysis(
                 fontsize=PLOT_CFG.standalone_label_fs,
                 bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.5),
             )
-            ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, display_name),
+                fontsize=PLOT_CFG.title_fs,
+                fontweight="bold",
+                pad=PLOT_CFG.title_pad,
+            )
             stats.append({"Parameter": col, "Slope": 0.0, "Correlation": 0.0, "Status": "No variance"})
             continue
 
@@ -1417,8 +1483,13 @@ def plot_trend_analysis(
             trend_legend = "Higher parameter → LOWER Study Value"
 
         ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
-        ax.set_ylabel("Study Value", fontsize=PLOT_CFG.label_fs)
-        ax.set_title(f"{display_name}", fontsize=PLOT_CFG.title_fs, fontweight="bold")
+        ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
+        ax.set_title(
+            format_title(PLOT_CFG.param_title_tpl, display_name),
+            fontsize=PLOT_CFG.title_fs,
+            fontweight="bold",
+            pad=PLOT_CFG.title_pad,
+        )
         ax.grid(True, alpha=0.3)
 
         # Add legend with trend information
@@ -1470,11 +1541,15 @@ def plot_trend_analysis(
                 standalone_ax.plot([], [], linewidth=2, color="gray", label=trend_legend)
 
             standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
-            standalone_ax.set_ylabel("Study Value", fontsize=PLOT_CFG.standalone_label_fs)
+            standalone_ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_title(
-                f"{display_name} Trend Analysis",
+                format_title(
+                    PLOT_CFG.trend_standalone_title_tpl,
+                    display_name,
+                ),
                 fontsize=PLOT_CFG.standalone_title_fs,
                 fontweight="bold",
+                pad=PLOT_CFG.title_pad,
             )
             standalone_ax.grid(True, alpha=0.3)
             standalone_ax.legend(loc="best", fontsize=PLOT_CFG.standalone_legend_fs)
@@ -1512,7 +1587,7 @@ def plot_trend_analysis(
 
     # Adjust layout and save
     plt.suptitle(
-        "Parameter-Study Value Trend Analysis",
+        PLOT_CFG.trend_suptitle,
         fontsize=PLOT_CFG.suptitle_fs,
         fontweight="bold",
         y=0.98,
@@ -1729,6 +1804,7 @@ def plot_optimal_ranges_analysis(
                 fontsize=PLOT_CFG.title_fs,
                 fontweight="bold",
                 color="red",
+                pad=PLOT_CFG.title_pad,
             )
             ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
             ax.set_ylabel("Analysis not available", fontsize=PLOT_CFG.label_fs)
@@ -1818,13 +1894,14 @@ def plot_optimal_ranges_analysis(
 
                 # Formatting
                 ax.set_title(
-                    f"{display_name}",
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
                     fontsize=PLOT_CFG.title_fs,
                     fontweight="bold",
                     color="green",
+                    pad=PLOT_CFG.title_pad,
                 )
                 ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
-                ax.set_ylabel("Density", fontsize=PLOT_CFG.label_fs)
+                ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.label_fs)
                 ax.grid(True, alpha=0.3)
                 ax.legend(loc="upper right", fontsize=PLOT_CFG.legend_fs)
 
@@ -1919,12 +1996,16 @@ def plot_optimal_ranges_analysis(
                         )
 
                     standalone_ax.set_title(
-                        f"{display_name} Optimal Ranges",
+                        format_title(
+                            PLOT_CFG.ranges_standalone_title_tpl,
+                            display_name,
+                        ),
                         fontsize=PLOT_CFG.standalone_title_fs,
                         fontweight="bold",
+                        pad=PLOT_CFG.title_pad,
                     )
                     standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
-                    standalone_ax.set_ylabel("Density", fontsize=PLOT_CFG.standalone_label_fs)
+                    standalone_ax.set_ylabel(PLOT_CFG.density_label, fontsize=PLOT_CFG.standalone_label_fs)
                     standalone_ax.grid(True, alpha=0.3)
                     standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
 
@@ -1967,6 +2048,7 @@ def plot_optimal_ranges_analysis(
                     fontsize=PLOT_CFG.title_fs,
                     fontweight="bold",
                     color="red",
+                    pad=PLOT_CFG.title_pad,
                 )
                 ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
                 ax.set_ylabel("Error occurred", fontsize=PLOT_CFG.label_fs)
