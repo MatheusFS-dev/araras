@@ -166,6 +166,8 @@ def create_directories(
                 "standalone_boxplots": os.path.join(table_dir, "figures", "standalone", "boxplots"),
                 "standalone_trends": os.path.join(table_dir, "figures", "standalone", "trends"),
                 "standalone_ranges": os.path.join(table_dir, "figures", "standalone", "ranges"),
+                "standalone_contours": os.path.join(table_dir, "figures", "standalone", "contours"),
+                "standalone_slices": os.path.join(table_dir, "figures", "standalone", "slices"),
             }
         )
 
@@ -281,6 +283,12 @@ from .plot_spearman_correlation import plot_spearman_correlation
 from .plot_parameter_boxplots import plot_parameter_boxplots
 from .plot_trend_analysis import plot_trend_analysis
 from .plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
+from .plot_contour import plot_contour
+from .plot_edf import plot_edf
+from .plot_intermediate_values import plot_intermediate_values
+from .plot_parallel_coordinate import plot_parallel_coordinate
+from .plot_rank import plot_rank
+from .plot_slice import plot_slice
 
 
 def print_study_columns(
@@ -383,6 +391,24 @@ def analyze_study(
     print("Creating optimal ranges analysis...")
     plot_optimal_ranges_analysis(df, best, numeric_cols, dirs, param_name_mapping, create_standalone)
 
+    print("Generating contour plots...")
+    plot_contour(study, numeric_cols, dirs, create_standalone)
+
+    print("Plotting EDF of study values...")
+    plot_edf(study, dirs)
+
+    print("Plotting intermediate values...")
+    plot_intermediate_values(study, dirs)
+
+    print("Creating parallel coordinate plot...")
+    plot_parallel_coordinate(study, numeric_cols + categorical_cols, dirs)
+
+    print("Creating rank plot...")
+    plot_rank(study, numeric_cols + categorical_cols, dirs)
+
+    print("Creating slice plots...")
+    plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
+
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
     if save_data:
@@ -401,6 +427,8 @@ def analyze_study(
         print(f"  * Boxplots: {dirs['standalone_boxplots']}")
         print(f"  * Trends: {dirs['standalone_trends']}")
         print(f"  * Ranges: {dirs['standalone_ranges']}")
+        print(f"  * Contours: {dirs['standalone_contours']}")
+        print(f"  * Slices: {dirs['standalone_slices']}")
 
     if param_name_mapping:
         print(f"\nParameter name mappings applied:")
