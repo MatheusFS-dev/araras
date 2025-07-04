@@ -17,12 +17,22 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
         return
 
     fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
-    for t in trials:
+    cmap = plt.get_cmap("tab10")
+    for idx, t in enumerate(trials):
         if not t.intermediate_values:
             continue
         steps = sorted(t.intermediate_values.keys())
         values = [t.intermediate_values[s] for s in steps]
-        ax.plot(steps, values, alpha=0.6)
+        color = cmap(idx % 10)
+        ax.plot(
+            steps,
+            values,
+            marker="o",
+            markersize=4,
+            linewidth=2,
+            color=color,
+            alpha=0.8,
+        )
 
     ax.set_xlabel("Step", fontsize=PLOT_CFG.label_fs)
     ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)

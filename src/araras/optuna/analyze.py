@@ -171,6 +171,7 @@ def create_directories(
                 "standalone_ranges": os.path.join(table_dir, "figures", "standalone", "ranges"),
                 "standalone_contours": os.path.join(table_dir, "figures", "standalone", "contours"),
                 "standalone_slices": os.path.join(table_dir, "figures", "standalone", "slices"),
+                "standalone_ranks": os.path.join(table_dir, "figures", "standalone", "ranks"),
             }
         )
 
@@ -294,6 +295,7 @@ from .plot_rank import plot_rank
 from .plot_slice import plot_slice
 from .plot_optimization_history import plot_optimization_history
 from .plot_timeline import plot_timeline
+from .plot_terminator_improvement import plot_terminator_improvement
 
 
 def print_study_columns(
@@ -356,7 +358,8 @@ def analyze_study(
         plots: List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
-            'parallel_coordinate', 'rank', 'slice', 'history', 'timeline'.
+            'parallel_coordinate', 'rank', 'slice', 'history', 'timeline',
+            'terminator'.
             If None, generates all plots.
     """
     print("\n\nAnalyzing study...")
@@ -377,6 +380,7 @@ def analyze_study(
         "slice",
         "history",
         "timeline",
+        "terminator",
     }
 
     # Set plots to generate (default: all plots)
@@ -464,7 +468,7 @@ def analyze_study(
 
     if "rank" in plots_to_generate:
         print("Generating rank plots...")
-        plot_rank(study, numeric_cols + categorical_cols, dirs)
+        plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
 
     if "slice" in plots_to_generate:
         print("Generating slice plots...")
@@ -477,6 +481,10 @@ def analyze_study(
     if "timeline" in plots_to_generate:
         print("Generating timeline plot...")
         plot_timeline(study, dirs)
+
+    if "terminator" in plots_to_generate:
+        print("Generating terminator improvement plot...")
+        plot_terminator_improvement(study, dirs)
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
@@ -498,6 +506,7 @@ def analyze_study(
         print(f"  * Ranges: {dirs['standalone_ranges']}")
         print(f"  * Contours: {dirs['standalone_contours']}")
         print(f"  * Slices: {dirs['standalone_slices']}")
+        print(f"  * Ranks: {dirs['standalone_ranks']}")
 
     if param_name_mapping:
         print(f"\nParameter name mappings applied:")
