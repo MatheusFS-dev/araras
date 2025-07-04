@@ -36,7 +36,7 @@ def plot_contour(
         print("Need at least two parameters for contour plot.")
         return
 
-    max_cols = PLOT_CFG.max_cols
+    max_cols = PLOT_CFG.max_cols + 2
     n_plots = len(pairs)
     n_cols = min(n_plots, max_cols)
     n_rows = (n_plots + max_cols - 1) // max_cols

@@ -157,7 +157,7 @@ def plot_hyperparameter_distributions(
             stats_text += f"Median: {median_formatted}"
 
             ax.text(
-                0.02,
+                0.05,
                 0.98,
                 stats_text,
                 transform=ax.transAxes,
@@ -217,8 +217,8 @@ def plot_hyperparameter_distributions(
                 )
 
                 standalone_ax.text(
-                    0.02,
-                    0.98,
+                    0.05,
+                    0.95,
                     stats_text,
                     transform=standalone_ax.transAxes,
                     verticalalignment="top",

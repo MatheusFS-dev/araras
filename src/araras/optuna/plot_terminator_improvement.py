@@ -45,7 +45,7 @@ def plot_terminator_improvement(
     ax.plot(x, improvement, label="Improvement potential", color="blue", linewidth=2)
 
     if plot_error:
-        ax.plot(x, error_curve, label="Evaluation error", color="orange", linewidth=2)
+        ax.plot(x, error_curve, label="Evaluation error", color="red", linewidth=2)
 
     ax.axvspan(0, min_n_trials, color="gray", alpha=0.15)
     ax.set_xlabel("Number of Trials", fontsize=PLOT_CFG.label_fs)

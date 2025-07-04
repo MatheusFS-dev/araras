@@ -40,9 +40,9 @@ class PlotConfig:
 
     # Font sizes for combined plots
     title_fs: int = 16
-    label_fs: int = 12
+    label_fs: int = 14
     legend_fs: int = 12
-    suptitle_fs: int = 12
+    suptitle_fs: int = 24
     annotation_fs: int = 12
     bar_value_fs: int = 9
     x_tick_fs: int = 12

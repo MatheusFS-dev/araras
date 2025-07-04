@@ -226,7 +226,7 @@ def plot_trend_analysis(
             stats_text += f"\nStatus: {fit_status}"
 
         ax.text(
-            0.02,
+            0.05,
             0.95,
             stats_text,
             transform=ax.transAxes,
@@ -273,7 +273,7 @@ def plot_trend_analysis(
 
 
             standalone_ax.text(
-                0.02,
+                0.05,
                 0.98,
                 stats_text,
                 transform=standalone_ax.transAxes,

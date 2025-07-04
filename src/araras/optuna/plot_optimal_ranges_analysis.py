@@ -328,8 +328,8 @@ def plot_optimal_ranges_analysis(
                 )
 
                 ax.text(
-                    0.02,
-                    0.98,
+                    0.05,
+                    0.95,
                     stats_text,
                     transform=ax.transAxes,
                     verticalalignment="top",
@@ -425,7 +425,7 @@ def plot_optimal_ranges_analysis(
                     standalone_ax.legend(loc="upper right", fontsize=PLOT_CFG.standalone_legend_fs)
 
                     standalone_ax.text(
-                        0.02,
+                        0.05,
                         0.98,
                         stats_text,
                         transform=standalone_ax.transAxes,
