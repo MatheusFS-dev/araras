@@ -65,13 +65,42 @@ def plot_contour(
         mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
         x, y, z = x[mask], y[mask], z[mask]
 
-        if len(x) < 3 or np.unique(x).size < 2 or np.unique(y).size < 2:
-            ax.text(0.5, 0.5, "Insufficient data", ha="center", va="center")
+        unique_points = np.unique(np.column_stack((x, y)), axis=0)
+        if unique_points.shape[0] < 3:
+            ax.text(
+                0.5,
+                0.5,
+                "No Data or Error Generating",
+                ha="center",
+                va="center",
+                fontsize=PLOT_CFG.label_fs,
+            )
         else:
-            tri = Triangulation(x, y)
-            cf = ax.tricontourf(tri, z, levels=20, cmap="coolwarm")
-            ax.scatter(x, y, c=z, cmap="coolwarm", s=15, edgecolor="black", linewidth=0.2)
-            fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
+            try:
+                tri = Triangulation(x, y)
+                cf = ax.tricontourf(tri, z, levels=20, cmap="coolwarm")
+                ax.scatter(
+                    x,
+                    y,
+                    c=z,
+                    cmap="coolwarm",
+                    s=15,
+                    edgecolor="black",
+                    linewidth=0.2,
+                )
+                fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
+            except Exception as e:
+                print(
+                    f"Warning: could not generate contour for {p1} vs {p2}: {e}"
+                )
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No Data or Error Generating",
+                    ha="center",
+                    va="center",
+                    fontsize=PLOT_CFG.label_fs,
+                )
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.label_fs)
@@ -102,20 +131,42 @@ def plot_contour(
             mask = np.isfinite(x) & np.isfinite(y) & np.isfinite(z)
             x, y, z = x[mask], y[mask], z[mask]
 
-            if len(x) >= 3 and np.unique(x).size >= 2 and np.unique(y).size >= 2:
-                tri = Triangulation(x, y)
-                cf = ax.tricontourf(tri, z, levels=20, cmap="coolwarm")
-                ax.scatter(x, y, c=z, cmap="coolwarm", s=20, edgecolor="black", linewidth=0.2)
-                fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
-            else:
+            unique_points = np.unique(np.column_stack((x, y)), axis=0)
+            if unique_points.shape[0] < 3:
                 ax.text(
                     0.5,
                     0.5,
-                    "Insufficient data",
+                    "No Data or Error Generating",
                     ha="center",
                     va="center",
                     fontsize=PLOT_CFG.standalone_label_fs,
                 )
+            else:
+                try:
+                    tri = Triangulation(x, y)
+                    cf = ax.tricontourf(tri, z, levels=20, cmap="coolwarm")
+                    ax.scatter(
+                        x,
+                        y,
+                        c=z,
+                        cmap="coolwarm",
+                        s=20,
+                        edgecolor="black",
+                        linewidth=0.2,
+                    )
+                    fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
+                except Exception as e:
+                    print(
+                        f"Warning: could not generate standalone contour for {p1} vs {p2}: {e}"
+                    )
+                    ax.text(
+                        0.5,
+                        0.5,
+                        "No Data or Error Generating",
+                        ha="center",
+                        va="center",
+                        fontsize=PLOT_CFG.standalone_label_fs,
+                    )
 
             ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.standalone_label_fs)
             ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.standalone_label_fs)

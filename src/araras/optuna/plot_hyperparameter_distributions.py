@@ -24,6 +24,11 @@ def plot_hyperparameter_distributions(
     """
     Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
 
+    For numeric parameters, a KDE curve is estimated prior to plotting. If the
+    KDE computation fails (e.g., due to singular covariance or insufficient
+    unique values), the parameter plot is replaced with a placeholder message so
+    that the remaining plots can still be generated.
+
     Args:
         df (pd.DataFrame): DataFrame containing hyperparameter data
         numeric_cols (List[str]): List of numeric column names
@@ -90,6 +95,34 @@ def plot_hyperparameter_distributions(
                 )
                 continue
 
+            # Attempt KDE estimation first so that we can skip the plot entirely
+            try:
+                if values.nunique() < 2:
+                    raise ValueError("insufficient unique values")
+
+                kde = gaussian_kde(values)
+                x_range = np.linspace(values.min(), values.max(), 200)
+                kde_values = kde(x_range)
+            except Exception as e:
+                print(f"Warning: could not generate KDE for {col}: {e}")
+                ax.text(
+                    0.5,
+                    0.5,
+                    "No Data or Error Generating",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=PLOT_CFG.label_fs,
+                    style="italic",
+                )
+                ax.set_title(
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
+                    fontsize=PLOT_CFG.title_fs,
+                    fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
+                )
+                continue
+
             # Main histogram
             n, bins, patches = ax.hist(
                 values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
@@ -104,9 +137,6 @@ def plot_hyperparameter_distributions(
             )
 
             # KDE curve
-            kde = gaussian_kde(values)
-            x_range = np.linspace(values.min(), values.max(), 200)
-            kde_values = kde(x_range)
             ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
 
             # Save KDE data for LaTeX
