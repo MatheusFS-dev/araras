@@ -44,8 +44,10 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         print("Need at least two numeric parameters for rank plot.")
         return
 
-    rank = df["loss"].rank(method="dense", ascending=True)
-    cmap = plt.cm.viridis
+    loss_vals = df["loss"].replace([np.inf, -np.inf], np.nan)
+    cmap = plt.cm.coolwarm
+    vmin = loss_vals.min()
+    vmax = loss_vals.max()
 
     max_cols = PLOT_CFG.max_cols
     n_plots = len(pairs)
@@ -78,16 +80,18 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         valid_mask = ~(x_data.isna() | y_data.isna())
         x_data = x_data[valid_mask]
         y_data = y_data[valid_mask]
-        rank_data = rank[valid_mask]
+        c_data = loss_vals[valid_mask]
 
         sc = ax.scatter(
             x_data,
             y_data,
-            c=rank_data,
+            c=c_data,
             cmap=cmap,
             s=20,
             edgecolor="black",
             linewidth=0.2,
+            vmin=vmin,
+            vmax=vmax,
         )
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.label_fs)
@@ -98,7 +102,7 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
             pad=PLOT_CFG.title_pad,
         )
         ax.grid(True, alpha=0.3)
-        fig.colorbar(sc, ax=ax, label="Rank")
+        fig.colorbar(sc, ax=ax, label=PLOT_CFG.study_value_label)
 
     for idx in range(n_plots, n_rows * n_cols):
         row = idx // max_cols
