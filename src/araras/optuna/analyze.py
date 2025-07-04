@@ -336,9 +336,51 @@ def analyze_study(
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
     save_data: bool = False,
+    plots: Optional[List[str]] = None,
 ) -> None:
-    """Comprehensive analysis of Optuna hyperparameter optimization study results."""
+    """Comprehensive analysis of Optuna hyperparameter optimization study results.
+
+    Args:
+        study: Optuna study object containing trials to analyze.
+        table_dir: Directory to save analysis results and figures.
+        top_frac: Fraction of best/worst trials to analyze (default: 0.2).
+        param_name_mapping: Optional mapping of parameter names to display names.
+            Example: {'params_learning_rate': 'Learning Rate'}
+        create_standalone: If True, generates standalone images for each plot type.
+        save_data: If True, saves data for LaTeX plotting into CSV files.
+        plots: List of plot types to generate. Available options:
+            'distributions', 'importances', 'correlations', 'boxplots',
+            'trends', 'ranges', 'contours', 'edf', 'intermediate',
+            'parallel_coordinate', 'rank', 'slice'
+            If None, generates all plots.
+    """
     print("\n\nAnalyzing study...")
+
+    # Define all available plot types
+    all_plots = {
+        "distributions",
+        "importances",
+        "correlations",
+        "boxplots",
+        "trends",
+        "ranges",
+        "contours",
+        "edf",
+        "intermediate",
+        "parallel_coordinate",
+        "rank",
+        "slice",
+    }
+
+    # Set plots to generate (default: all plots)
+    if plots is None:
+        plots_to_generate = all_plots
+    else:
+        plots_to_generate = set(plots)
+        invalid_plots = plots_to_generate - all_plots
+        if invalid_plots:
+            print(f"Warning: Invalid plot types ignored: {invalid_plots}")
+            plots_to_generate = plots_to_generate & all_plots
 
     dirs = create_directories(table_dir, create_standalone, save_data)
 
@@ -371,43 +413,55 @@ def analyze_study(
     print("\nGenerating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
 
-    print("Creating hyperparameter distribution plots...")
-    plot_hyperparameter_distributions(
-        df, numeric_cols, categorical_cols, dirs, param_name_mapping, create_standalone
-    )
+    if "distributions" in plots_to_generate:
+        print("Generating hyperparameter distribution plots...")
+        plot_hyperparameter_distributions(
+            df, numeric_cols, categorical_cols, dirs, param_name_mapping, create_standalone
+        )
 
-    print("Calculating parameter importances...")
-    plot_param_importances(study, dirs)
+    if "importances" in plots_to_generate:
+        print("Generating parameter importances...")
+        plot_param_importances(study, dirs)
 
-    print("Analyzing Spearman correlations...")
-    plot_spearman_correlation(df, numeric_cols, dirs)
+    if "correlations" in plots_to_generate:
+        print("Generating Spearman correlations...")
+        plot_spearman_correlation(df, numeric_cols, dirs)
 
-    print("Creating boxplots for parameter distributions...")
-    plot_parameter_boxplots(df, best, worst, numeric_cols, dirs, param_name_mapping, create_standalone)
+    if "boxplots" in plots_to_generate:
+        print("Generating boxplots for parameter distributions...")
+        plot_parameter_boxplots(df, best, worst, numeric_cols, dirs, param_name_mapping, create_standalone)
 
-    print("Performing trend analysis...")
-    plot_trend_analysis(df, numeric_cols, dirs, param_name_mapping, create_standalone)
+    if "trends" in plots_to_generate:
+        print("Generating trend analysis...")
+        plot_trend_analysis(df, numeric_cols, dirs, param_name_mapping, create_standalone)
 
-    print("Creating optimal ranges analysis...")
-    plot_optimal_ranges_analysis(df, best, numeric_cols, dirs, param_name_mapping, create_standalone)
+    if "ranges" in plots_to_generate:
+        print("Generating optimal ranges analysis...")
+        plot_optimal_ranges_analysis(df, best, numeric_cols, dirs, param_name_mapping, create_standalone)
 
-    print("Generating contour plots...")
-    plot_contour(study, numeric_cols, dirs, create_standalone)
+    if "contours" in plots_to_generate:
+        print("Generating contour plots...")
+        plot_contour(study, numeric_cols, dirs, create_standalone)
 
-    print("Plotting EDF of study values...")
-    plot_edf(study, dirs)
+    if "edf" in plots_to_generate:
+        print("Generating EDF of study values...")
+        plot_edf(study, dirs)
 
-    print("Plotting intermediate values...")
-    plot_intermediate_values(study, dirs)
+    if "intermediate" in plots_to_generate:
+        print("Generating intermediate values plots...")
+        plot_intermediate_values(study, dirs)
 
-    print("Creating parallel coordinate plot...")
-    plot_parallel_coordinate(study, numeric_cols + categorical_cols, dirs)
+    if "parallel_coordinate" in plots_to_generate:
+        print("Generating parallel coordinate plots...")
+        plot_parallel_coordinate(study, numeric_cols + categorical_cols, dirs)
 
-    print("Creating rank plot...")
-    plot_rank(study, numeric_cols + categorical_cols, dirs)
+    if "rank" in plots_to_generate:
+        print("Generating rank plots...")
+        plot_rank(study, numeric_cols + categorical_cols, dirs)
 
-    print("Creating slice plots...")
-    plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
+    if "slice" in plots_to_generate:
+        print("Generating slice plots...")
+        plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
@@ -438,3 +492,6 @@ def analyze_study(
     print(
         f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
     )
+
+    if plots is not None:
+        print(f"Generated plots: {sorted(plots_to_generate)}")

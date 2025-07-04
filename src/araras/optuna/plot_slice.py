@@ -24,13 +24,27 @@ def plot_slice(
         return
 
     df = study.trials_dataframe()
-    df = df.query("state == 'COMPLETE'").rename(columns={'value': 'loss'})
+    df = df.query("state == 'COMPLETE'").rename(columns={"value": "loss"})
     if df.empty:
         print("No completed trials for slice plot.")
         return
 
+    # Filter to only numeric parameters for slice plots
+    numeric_params = []
+    for param in params:
+        if param in df.columns:
+            try:
+                pd.to_numeric(df[param].dropna(), errors="raise")
+                numeric_params.append(param)
+            except (ValueError, TypeError):
+                continue  # Skip categorical parameters
+
+    if not numeric_params:
+        print("No numeric parameters available for slice plot.")
+        return
+
     max_cols = PLOT_CFG.max_cols
-    n_plots = len(params)
+    n_plots = len(numeric_params)
     n_cols = min(n_plots, max_cols)
     n_rows = (n_plots + max_cols - 1) // max_cols
 
@@ -47,12 +61,13 @@ def plot_slice(
     elif n_cols == 1:
         axes = axes.reshape(-1, 1)
 
-    for idx, p in enumerate(params):
+    for idx, p in enumerate(numeric_params):
         row = idx // max_cols
         col = idx % max_cols
         ax = axes[row, col]
 
-        x = df[p].to_numpy()
+        # Convert to numeric and handle NaN values
+        x = pd.to_numeric(df[p], errors="coerce").to_numpy()
         y = df["loss"].to_numpy()
         mask = np.isfinite(x) & np.isfinite(y)
         x = x[mask]

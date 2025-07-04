@@ -29,8 +29,36 @@ def plot_parallel_coordinate(
     cols = params + ["loss"]
     data = df[cols]
 
-    # Normalize each column to 0-1 for plotting
-    norm = data.apply(lambda x: (x - x.min()) / (x.max() - x.min()) if x.max() != x.min() else 0)
+    # Separate numeric and categorical columns
+    numeric_cols = []
+    categorical_cols = []
+
+    for col in cols:
+        if col == "loss" or data[col].dtype in ["int64", "float64"]:
+            numeric_cols.append(col)
+        else:
+            categorical_cols.append(col)
+
+    # Create normalized data
+    norm = data.copy()
+
+    # Normalize numeric columns
+    for col in numeric_cols:
+        col_data = data[col]
+        if col_data.max() != col_data.min():
+            norm[col] = (col_data - col_data.min()) / (col_data.max() - col_data.min())
+        else:
+            norm[col] = 0
+
+    # Encode categorical columns
+    for col in categorical_cols:
+        unique_vals = data[col].unique()
+        val_to_idx = {val: idx for idx, val in enumerate(unique_vals)}
+        encoded = data[col].map(val_to_idx)
+        if len(unique_vals) > 1:
+            norm[col] = encoded / (len(unique_vals) - 1)
+        else:
+            norm[col] = 0
 
     color_vals = data["loss"].rank(method="dense", ascending=True)
     cmap = plt.cm.viridis

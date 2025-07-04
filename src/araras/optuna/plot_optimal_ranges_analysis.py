@@ -11,6 +11,8 @@ from .analyze import (
     save_data_for_latex,
 )
 
+from araras.utils.misc import format_scientific
+
 def plot_optimal_ranges_analysis(
     df: pd.DataFrame,
     best: pd.DataFrame,
@@ -318,7 +320,7 @@ def plot_optimal_ranges_analysis(
 
                 # Add text box with statistics - format values safely
                 def safe_format(value):
-                    return format_numeric_value(value) if np.isfinite(value) else "N/A"
+                    return format_scientific(value) if np.isfinite(value) else "N/A"
 
                 stats_text = f"25%-75% : [{safe_format(data['conservative_min'])}, {safe_format(data['conservative_max'])}]\n"
                 stats_text += (
@@ -488,5 +490,3 @@ def plot_optimal_ranges_analysis(
     save_path = os.path.join(dirs["figs"], "params_optimal_ranges.pdf")
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()
-
-

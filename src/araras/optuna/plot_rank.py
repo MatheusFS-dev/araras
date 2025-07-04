@@ -4,10 +4,12 @@ import matplotlib.pyplot as plt
 import optuna
 import numpy as np
 from itertools import combinations
+import pandas as pd
 
 from .analyze import (
     PLOT_CFG,
     get_param_display_name,
+    format_title,
 )
 
 
@@ -18,14 +20,28 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         return
 
     df = study.trials_dataframe()
-    df = df.query("state == 'COMPLETE'").rename(columns={'value': 'loss'})
+    df = df.query("state == 'COMPLETE'").rename(columns={"value": "loss"})
     if df.empty:
         print("No completed trials for rank plot.")
         return
 
-    pairs = list(combinations(params, 2))
+    # Separate numeric and categorical parameters
+    numeric_params = []
+    categorical_params = []
+
+    for param in params:
+        if param in df.columns:
+            # Check if parameter values are numeric
+            try:
+                pd.to_numeric(df[param].dropna())
+                numeric_params.append(param)
+            except (ValueError, TypeError):
+                categorical_params.append(param)
+
+    # Only create pairs from numeric parameters for scatter plots
+    pairs = list(combinations(numeric_params, 2))
     if not pairs:
-        print("Need at least two parameters for rank plot.")
+        print("Need at least two numeric parameters for rank plot.")
         return
 
     rank = df["loss"].rank(method="dense", ascending=True)
@@ -53,10 +69,21 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         row = idx // max_cols
         col = idx % max_cols
         ax = axes[row, col]
+
+        # Ensure data is numeric
+        x_data = pd.to_numeric(df[p1], errors="coerce")
+        y_data = pd.to_numeric(df[p2], errors="coerce")
+
+        # Remove NaN values
+        valid_mask = ~(x_data.isna() | y_data.isna())
+        x_data = x_data[valid_mask]
+        y_data = y_data[valid_mask]
+        rank_data = rank[valid_mask]
+
         sc = ax.scatter(
-            df[p1],
-            df[p2],
-            c=rank,
+            x_data,
+            y_data,
+            c=rank_data,
             cmap=cmap,
             s=20,
             edgecolor="black",
