@@ -1,5 +1,5 @@
 import os
-from typing import List, Dict
+from typing import Any, Dict, List, Tuple
 import matplotlib.pyplot as plt
 import optuna
 import numpy as np
@@ -42,18 +42,26 @@ def plot_parallel_coordinate(
     # Create normalized data
     norm = data.copy()
 
+    # Keep track of numeric min/max and categorical mapping for annotations
+    num_minmax: Dict[str, Tuple[float, float]] = {}
+    cat_maps: Dict[str, Dict[Any, float]] = {}
+
     # Normalize numeric columns
     for col in numeric_cols:
         col_data = data[col]
-        if col_data.max() != col_data.min():
-            norm[col] = (col_data - col_data.min()) / (col_data.max() - col_data.min())
+        col_min = float(col_data.min())
+        col_max = float(col_data.max())
+        num_minmax[col] = (col_min, col_max)
+        if col_max != col_min:
+            norm[col] = (col_data - col_min) / (col_max - col_min)
         else:
             norm[col] = 0
 
     # Encode categorical columns
     for col in categorical_cols:
-        unique_vals = data[col].unique()
+        unique_vals = list(data[col].unique())
         val_to_idx = {val: idx for idx, val in enumerate(unique_vals)}
+        cat_maps[col] = {val: idx / (len(unique_vals) - 1) if len(unique_vals) > 1 else 0 for val, idx in val_to_idx.items()}
         encoded = data[col].map(val_to_idx)
         if len(unique_vals) > 1:
             norm[col] = encoded / (len(unique_vals) - 1)
@@ -67,7 +75,13 @@ def plot_parallel_coordinate(
         figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height * 2)
     )
     for idx, (_, row) in enumerate(norm.iterrows()):
-        ax.plot(range(len(cols)), row.values, color=cmap(color_vals.iloc[idx] / color_vals.max()), alpha=0.5)
+        ax.plot(
+            range(len(cols)),
+            row.values,
+            color=cmap(color_vals.iloc[idx] / color_vals.max()),
+            alpha=0.5,
+            marker="o",
+        )
 
     ax.set_xticks(range(len(cols)))
     labels = [get_param_display_name(c) if c != "loss" else PLOT_CFG.study_value_label for c in cols]
@@ -77,6 +91,17 @@ def plot_parallel_coordinate(
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vals.min(), vmax=color_vals.max()))
     fig.colorbar(sm, ax=ax, label="Objective Rank")
     ax.set_yticks(np.linspace(0, 1, 5))
+
+    # Annotate axes with original values
+    for i, col in enumerate(cols):
+        if col in num_minmax:
+            col_min, col_max = num_minmax[col]
+            ax.text(i, 0, f"{col_min:.3g}", ha="center", va="top", fontsize=8)
+            ax.text(i, 1, f"{col_max:.3g}", ha="center", va="bottom", fontsize=8)
+        elif col in cat_maps:
+            for val, pos in cat_maps[col].items():
+                ax.text(i, pos, str(val), ha="center", va="center", fontsize=8)
+
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")

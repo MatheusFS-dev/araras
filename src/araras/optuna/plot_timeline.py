@@ -30,6 +30,7 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     start_nums = mdates.date2num(starts)
     end_nums = mdates.date2num(ends)
     durations = end_nums - start_nums
+    durations_sec = [(e - s).total_seconds() for s, e in zip(starts, ends)]
 
     colors = []
     for s in states:
@@ -46,15 +47,28 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
 
     ax.barh(numbers, durations, left=start_nums, height=0.8, color=colors, edgecolor="black")
 
-    ax.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d %H:%M:%S"))
+    locator = mdates.AutoDateLocator()
+    ax.xaxis.set_major_locator(locator)
     ax.xaxis_date()
 
-    avg_duration = np.mean(durations) * 24 * 3600
-    avg_text = f"Avg duration: {timedelta(seconds=int(avg_duration))}"
+    avg_duration = float(np.mean(durations_sec))
+    avg_text = f"Avg duration per trial: {timedelta(seconds=int(avg_duration))}"
 
     ax.set_xlabel("Time", fontsize=PLOT_CFG.label_fs)
     ax.set_ylabel("Trial", fontsize=PLOT_CFG.label_fs)
     ax.set_title("Timeline", pad=PLOT_CFG.title_pad)
+    tick_dates = mdates.num2date(ax.get_xticks())
+    labels = []
+    prev_date = None
+    for d in tick_dates:
+        time_str = d.strftime("%H:%M:%S.%f")[:-3]
+        date_str = d.strftime("%b %d, %Y")
+        if prev_date == date_str:
+            labels.append(time_str)
+        else:
+            labels.append(time_str + "\n" + date_str)
+            prev_date = date_str
+    ax.set_xticklabels(labels)
     fig.autofmt_xdate()
 
     from matplotlib.patches import Patch
