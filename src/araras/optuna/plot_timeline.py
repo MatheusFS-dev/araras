@@ -60,24 +60,28 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     # Format average text with all metrics
     avg_lines = []
 
+    # Total study duration (from first start to last completion)
+    total_study_duration = (max(ends) - min(starts)).total_seconds()
+    avg_lines.append(f"Total study duration: {timedelta(seconds=int(total_study_duration))}\n")
+
     # Total average
     avg_total = float(np.mean(durations_sec))
-    avg_lines.append(f"Mean duration [TOTAL]: {timedelta(seconds=int(avg_total))}")
+    avg_lines.append(f"Avg duration [TOTAL]: {timedelta(seconds=int(avg_total))}")
 
     # Complete trials average
     if complete_durations:
         avg_complete = float(np.mean(complete_durations))
-        avg_lines.append(f"Mean duration [COMPLETE]: {timedelta(seconds=int(avg_complete))}")
+        avg_lines.append(f"Avg duration [COMPLETE]: {timedelta(seconds=int(avg_complete))}")
 
     # Pruned trials average
     if pruned_durations:
         avg_pruned = float(np.mean(pruned_durations))
-        avg_lines.append(f"Mean duration [PRUNED]: {timedelta(seconds=int(avg_pruned))}")
+        avg_lines.append(f"Avg duration [PRUNED]: {timedelta(seconds=int(avg_pruned))}")
 
     # Failed trials average
     if fail_durations:
         avg_fail = float(np.mean(fail_durations))
-        avg_lines.append(f"Mean duration [FAIL]: {timedelta(seconds=int(avg_fail))}")
+        avg_lines.append(f"Avg duration [FAIL]: {timedelta(seconds=int(avg_fail))}")
 
     avg_text = "\n".join(avg_lines)
 
