@@ -26,7 +26,7 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
     high_res_values = np.linspace(values.min(), values.max(), num=1000)  # Increase resolution
     high_res_ecdf = interp_func(high_res_values)
 
-    fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
+    fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
     ax.step(high_res_values, high_res_ecdf, where="post", color="black")
     ax.set_xlabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_ylabel("Cumulative Proportion", fontsize=PLOT_CFG.standalone_label_fs)

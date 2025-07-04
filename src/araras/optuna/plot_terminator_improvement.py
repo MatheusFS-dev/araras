@@ -41,7 +41,7 @@ def plot_terminator_improvement(
         error_curve = pd.Series(values).expanding().std().fillna(0).to_numpy()
 
     x = np.arange(1, len(values) + 1)
-    fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
+    fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
     ax.plot(x, improvement, label="Improvement potential", color="blue", linewidth=2)
 
     if plot_error:

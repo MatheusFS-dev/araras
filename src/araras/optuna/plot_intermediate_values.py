@@ -16,7 +16,7 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
         print("No completed trials for intermediate values plot.")
         return
 
-    fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
+    fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
     cmap = plt.get_cmap("tab10")
     for idx, t in enumerate(trials):
         if not t.intermediate_values:

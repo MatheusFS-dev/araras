@@ -41,18 +41,45 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
         else:
             colors.append("red")
 
-    fig_width = PLOT_CFG.importance_size[0] * 2
-    fig_height = PLOT_CFG.importance_size[1]
+    fig_width = PLOT_CFG.standalone_size[0]
+    fig_height = PLOT_CFG.standalone_size[1]
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-    ax.barh(numbers, durations, left=start_nums, height=2.0, color=colors)
+    ax.barh(numbers, durations, left=start_nums, height=1.0, color=colors)
+    ax.set_ylim(min(numbers) - 1, max(numbers) + 1)
 
     locator = mdates.AutoDateLocator()
     ax.xaxis.set_major_locator(locator)
     ax.xaxis_date()
 
-    avg_duration = float(np.mean(durations_sec))
-    avg_text = f"Avg duration per trial: {timedelta(seconds=int(avg_duration))}"
+    # Calculate averages by state
+    complete_durations = [d for d, s in zip(durations_sec, states) if s == optuna.trial.TrialState.COMPLETE]
+    pruned_durations = [d for d, s in zip(durations_sec, states) if s == optuna.trial.TrialState.PRUNED]
+    fail_durations = [d for d, s in zip(durations_sec, states) if s == optuna.trial.TrialState.FAIL]
+
+    # Format average text with all metrics
+    avg_lines = []
+
+    # Total average
+    avg_total = float(np.mean(durations_sec))
+    avg_lines.append(f"Mean duration [TOTAL]: {timedelta(seconds=int(avg_total))}")
+
+    # Complete trials average
+    if complete_durations:
+        avg_complete = float(np.mean(complete_durations))
+        avg_lines.append(f"Mean duration [COMPLETE]: {timedelta(seconds=int(avg_complete))}")
+
+    # Pruned trials average
+    if pruned_durations:
+        avg_pruned = float(np.mean(pruned_durations))
+        avg_lines.append(f"Mean duration [PRUNED]: {timedelta(seconds=int(avg_pruned))}")
+
+    # Failed trials average
+    if fail_durations:
+        avg_fail = float(np.mean(fail_durations))
+        avg_lines.append(f"Mean duration [FAIL]: {timedelta(seconds=int(avg_fail))}")
+
+    avg_text = "\n".join(avg_lines)
 
     ax.set_xlabel("Time", fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_ylabel("Trial", fontsize=PLOT_CFG.standalone_label_fs)
@@ -61,7 +88,7 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     labels = []
     prev_date = None
     for d in tick_dates:
-        time_str = d.strftime("%H:%M:%S.%f")[:-3]
+        time_str = d.strftime("%H") + " H"
         date_str = d.strftime("%b %d, %Y")
         if prev_date == date_str:
             labels.append(time_str)
@@ -69,7 +96,7 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
             labels.append(time_str + "\n" + date_str)
             prev_date = date_str
     ax.set_xticklabels(labels)
-    fig.autofmt_xdate()
+    # fig.autofmt_xdate()
 
     from matplotlib.patches import Patch
 

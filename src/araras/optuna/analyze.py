@@ -21,25 +21,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-from .describe_numeric import describe_numeric
-from .create_frequency_table import create_frequency_table
-from .plot_hyperparameter_distributions import plot_hyperparameter_distributions
-from .plot_param_importances import plot_param_importances
-from .plot_spearman_correlation import plot_spearman_correlation
-from .plot_parameter_boxplots import plot_parameter_boxplots
-from .plot_trend_analysis import plot_trend_analysis
-from .plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
-from .plot_contour import plot_contour
-from .plot_edf import plot_edf
-from .plot_intermediate_values import plot_intermediate_values
-from .plot_parallel_coordinate import plot_parallel_coordinate
-from .plot_rank import plot_rank
-from .plot_slice import plot_slice
-from .plot_optimization_history import plot_optimization_history
-from .plot_timeline import plot_timeline
-from .plot_terminator_improvement import plot_terminator_improvement
-
-
 @dataclass
 class PlotConfig:
     """Global configuration for matplotlib plots used in this module."""
@@ -54,7 +35,6 @@ class PlotConfig:
 
     # Layout and sizing configurations for standalone plots
     standalone_size: Tuple[int, int] = (8, 6)
-    importance_size: Tuple[int, int] = (8, 6)
 
     # Font sizes for combined plots
     title_fs: int = 16
@@ -297,6 +277,26 @@ def save_summary_tables(
             os.path.join(target_dir, f"{label}_categorical_frequencies.csv"), index=False
         )
 
+
+# Adding import statements for all plot functions
+#! Must be done after the utility functions to ensure no circular imports
+from .describe_numeric import describe_numeric
+from .create_frequency_table import create_frequency_table
+from .plot_hyperparameter_distributions import plot_hyperparameter_distributions
+from .plot_param_importances import plot_param_importances
+from .plot_spearman_correlation import plot_spearman_correlation
+from .plot_parameter_boxplots import plot_parameter_boxplots
+from .plot_trend_analysis import plot_trend_analysis
+from .plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
+from .plot_contour import plot_contour
+from .plot_edf import plot_edf
+from .plot_intermediate_values import plot_intermediate_values
+from .plot_parallel_coordinate import plot_parallel_coordinate
+from .plot_rank import plot_rank
+from .plot_slice import plot_slice
+from .plot_optimization_history import plot_optimization_history
+from .plot_timeline import plot_timeline
+from .plot_terminator_improvement import plot_terminator_improvement
 
 def print_study_columns(
     study: optuna.Study,

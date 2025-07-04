@@ -21,7 +21,7 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
 
     best = loss.cummin()
 
-    fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
+    fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
     ax.scatter(df["number"], loss, color="blue", edgecolor="black", linewidth=0.3, alpha=0.7)
     ax.plot(df["number"], best, color="red", linewidth=2, label="Best so far")
 
