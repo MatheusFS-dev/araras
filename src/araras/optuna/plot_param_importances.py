@@ -45,8 +45,10 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     display_names = [get_param_display_name(p) for p in df_imp["Parameter"]]
     bars = plt.bar(display_names, df_imp["Importance"])
     plt.xticks(rotation=45, ha="right", fontsize=PLOT_CFG.x_tick_fs)
-    plt.ylabel(PLOT_CFG.standalone_label_fs)  # Importance score on y-axis
-    plt.title(PLOT_CFG.standalone_title_fs, pad=PLOT_CFG.title_pad)
+    plt.ylabel(
+        PLOT_CFG.importance_ylabel, fontsize=PLOT_CFG.standalone_label_fs
+    )  # Importance score on y-axis
+    plt.title(PLOT_CFG.importance_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     for bar in bars:
         height = bar.get_height()
         plt.text(
