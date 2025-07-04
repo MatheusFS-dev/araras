@@ -67,8 +67,8 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.legend(handles=legend_elems, fontsize=PLOT_CFG.legend_fs)
 
     ax.text(
-        0.01,
-        0.99,
+        0.05,
+        0.95,
         avg_text,
         transform=ax.transAxes,
         verticalalignment="top",
