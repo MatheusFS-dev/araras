@@ -69,8 +69,8 @@ def plot_contour(
             ax.text(0.5, 0.5, "Insufficient data", ha="center", va="center")
         else:
             tri = Triangulation(x, y)
-            cf = ax.tricontourf(tri, z, levels=20, cmap="viridis")
-            ax.scatter(x, y, c=z, cmap="viridis", s=15, edgecolor="black", linewidth=0.2)
+            cf = ax.tricontourf(tri, z, levels=20, cmap="Blues")
+            ax.scatter(x, y, c=z, cmap="Blues", s=15, edgecolor="black", linewidth=0.2)
             fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
@@ -104,8 +104,8 @@ def plot_contour(
 
             if len(x) >= 3 and np.unique(x).size >= 2 and np.unique(y).size >= 2:
                 tri = Triangulation(x, y)
-                cf = ax.tricontourf(tri, z, levels=20, cmap="viridis")
-                ax.scatter(x, y, c=z, cmap="viridis", s=20, edgecolor="black", linewidth=0.2)
+                cf = ax.tricontourf(tri, z, levels=20, cmap="Blues")
+                ax.scatter(x, y, c=z, cmap="Blues", s=20, edgecolor="black", linewidth=0.2)
                 fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
             else:
                 ax.text(

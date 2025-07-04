@@ -61,9 +61,11 @@ def plot_parallel_coordinate(
             norm[col] = 0
 
     color_vals = data["loss"].rank(method="dense", ascending=True)
-    cmap = plt.cm.viridis
+    cmap = plt.cm.Blues
 
-    fig, ax = plt.subplots(figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height))
+    fig, ax = plt.subplots(
+        figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height * 1.5)
+    )
     for idx, (_, row) in enumerate(norm.iterrows()):
         ax.plot(range(len(cols)), row.values, color=cmap(color_vals.iloc[idx] / color_vals.max()), alpha=0.5)
 
@@ -74,6 +76,7 @@ def plot_parallel_coordinate(
     ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad)
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vals.min(), vmax=color_vals.max()))
     fig.colorbar(sm, ax=ax, label="Objective Rank")
+    ax.set_yticks(np.linspace(0, 1, 5))
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")

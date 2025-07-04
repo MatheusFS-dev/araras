@@ -93,6 +93,9 @@ plt.rcParams.update(
     }
 )
 
+# Regex used across plots to clean parameter names for titles and labels
+PARAM_NAME_CLEAN_RE = re.compile(r"^params_")
+
 
 def set_plot_config_param(param_name: str, value: Any) -> None:
     """Set a single parameter in :data:`PLOT_CFG`."""
@@ -191,7 +194,7 @@ def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] =
     """Get display name for parameter, using mapping if provided."""
     if param_name_mapping and param_name in param_name_mapping:
         return param_name_mapping[param_name]
-    cleaned = re.sub(r"^params_", "", param_name)
+    cleaned = PARAM_NAME_CLEAN_RE.sub("", param_name)
     cleaned = cleaned.replace("_", " ")
     return cleaned.title()
 
@@ -289,6 +292,8 @@ from .plot_intermediate_values import plot_intermediate_values
 from .plot_parallel_coordinate import plot_parallel_coordinate
 from .plot_rank import plot_rank
 from .plot_slice import plot_slice
+from .plot_optimization_history import plot_optimization_history
+from .plot_timeline import plot_timeline
 
 
 def print_study_columns(
@@ -370,6 +375,8 @@ def analyze_study(
         "parallel_coordinate",
         "rank",
         "slice",
+        "history",
+        "timeline",
     }
 
     # Set plots to generate (default: all plots)
@@ -462,6 +469,14 @@ def analyze_study(
     if "slice" in plots_to_generate:
         print("Generating slice plots...")
         plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
+
+    if "history" in plots_to_generate:
+        print("Generating optimization history plot...")
+        plot_optimization_history(study, dirs)
+
+    if "timeline" in plots_to_generate:
+        print("Generating timeline plot...")
+        plot_timeline(study, dirs)
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
