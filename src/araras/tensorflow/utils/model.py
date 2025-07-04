@@ -5,6 +5,7 @@ or RAPL (CPU).
 """
 
 import time
+import pynvml
 import tensorflow as tf
 from typing import Tuple, Optional, Callable
 
@@ -127,8 +128,6 @@ def get_model_usage_stats(
         # Initialize NVML each attempt if required
         if device == "gpu":
             try:
-                import pynvml
-
                 pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(0)
             except Exception as e:
