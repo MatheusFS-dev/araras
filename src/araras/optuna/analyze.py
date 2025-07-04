@@ -466,10 +466,6 @@ def analyze_study(
         print("Generating parallel coordinate plots...")
         plot_parallel_coordinate(study, numeric_cols + categorical_cols, dirs)
 
-    if "rank" in plots_to_generate:
-        print("Generating rank plots...")
-        plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
-
     if "slice" in plots_to_generate:
         print("Generating slice plots...")
         plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
@@ -485,6 +481,10 @@ def analyze_study(
     if "terminator" in plots_to_generate:
         print("Generating terminator improvement plot...")
         plot_terminator_improvement(study, dirs)
+        
+    if "rank" in plots_to_generate:
+        print("Generating rank plots...")
+        plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
