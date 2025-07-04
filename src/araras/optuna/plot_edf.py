@@ -28,9 +28,9 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
 
     fig, ax = plt.subplots(figsize=PLOT_CFG.importance_size)
     ax.step(high_res_values, high_res_ecdf, where="post", color="black")
-    ax.set_xlabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
-    ax.set_ylabel("Cumulative Proportion", fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Empirical Distribution of Study Values", pad=PLOT_CFG.title_pad)
+    ax.set_xlabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel("Cumulative Proportion", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Empirical Distribution of Study Values", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")

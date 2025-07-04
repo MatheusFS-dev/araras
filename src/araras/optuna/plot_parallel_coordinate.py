@@ -86,8 +86,8 @@ def plot_parallel_coordinate(
     ax.set_xticks(range(len(cols)))
     labels = [get_param_display_name(c) if c != "loss" else PLOT_CFG.study_value_label for c in cols]
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=PLOT_CFG.x_tick_fs)
-    ax.set_ylabel("Scaled Value", fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad)
+    ax.set_ylabel("Scaled Value", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=color_vals.min(), vmax=color_vals.max()))
     fig.colorbar(sm, ax=ax, label="Objective Rank")
     ax.set_yticks(np.linspace(0, 1, 5))

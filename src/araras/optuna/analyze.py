@@ -49,8 +49,8 @@ class PlotConfig:
     y_tick_fs: int = 12
 
     # Font sizes for standalone plots
-    standalone_title_fs: int = 22
-    standalone_label_fs: int = 20
+    standalone_title_fs: int = 20
+    standalone_label_fs: int = 18
     standalone_legend_fs: int = 16
     standalone_x_tick_fs: int = 16
     standalone_y_tick_fs: int = 16

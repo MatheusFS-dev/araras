@@ -34,9 +34,9 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
             alpha=0.8,
         )
 
-    ax.set_xlabel("Step", fontsize=PLOT_CFG.label_fs)
-    ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Intermediate Values", pad=PLOT_CFG.title_pad)
+    ax.set_xlabel("Step", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Intermediate Values", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")

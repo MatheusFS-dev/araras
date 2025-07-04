@@ -48,13 +48,12 @@ def plot_terminator_improvement(
         ax.plot(x, error_curve, label="Evaluation error", color="red", linewidth=2)
 
     ax.axvspan(0, min_n_trials, color="gray", alpha=0.15)
-    ax.set_xlabel("Number of Trials", fontsize=PLOT_CFG.label_fs)
-    ax.set_ylabel("Improvement", fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Terminator Improvement", pad=PLOT_CFG.title_pad)
+    ax.set_xlabel("Number of Trials", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel("Improvement", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Terminator Improvement", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     ax.legend(fontsize=PLOT_CFG.legend_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
     fig.savefig(os.path.join(dirs["figs"], "terminator_improvement.pdf"), bbox_inches="tight")
     plt.close(fig)
-

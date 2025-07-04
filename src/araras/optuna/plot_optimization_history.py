@@ -25,9 +25,9 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
     ax.scatter(df["number"], loss, color="blue", edgecolor="black", linewidth=0.3, alpha=0.7)
     ax.plot(df["number"], best, color="red", linewidth=2, label="Best so far")
 
-    ax.set_xlabel("Trial", fontsize=PLOT_CFG.label_fs)
-    ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Optimization History", pad=PLOT_CFG.title_pad)
+    ax.set_xlabel("Trial", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Optimization History", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     ax.legend(fontsize=PLOT_CFG.legend_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()

@@ -41,11 +41,11 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
         else:
             colors.append("red")
 
-    fig_width = PLOT_CFG.importance_size[0] * 1.5
+    fig_width = PLOT_CFG.importance_size[0] * 2
     fig_height = PLOT_CFG.importance_size[1]
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-    ax.barh(numbers, durations, left=start_nums, height=0.8, color=colors, edgecolor="black")
+    ax.barh(numbers, durations, left=start_nums, height=2.0, color=colors)
 
     locator = mdates.AutoDateLocator()
     ax.xaxis.set_major_locator(locator)
@@ -54,9 +54,9 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     avg_duration = float(np.mean(durations_sec))
     avg_text = f"Avg duration per trial: {timedelta(seconds=int(avg_duration))}"
 
-    ax.set_xlabel("Time", fontsize=PLOT_CFG.label_fs)
-    ax.set_ylabel("Trial", fontsize=PLOT_CFG.label_fs)
-    ax.set_title("Timeline", pad=PLOT_CFG.title_pad)
+    ax.set_xlabel("Time", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel("Trial", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_title("Timeline", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     tick_dates = mdates.num2date(ax.get_xticks())
     labels = []
     prev_date = None
@@ -74,9 +74,9 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     from matplotlib.patches import Patch
 
     legend_elems = [
-        Patch(facecolor="green", edgecolor="black", label="COMPLETE"),
-        Patch(facecolor="orange", edgecolor="black", label="PRUNED"),
-        Patch(facecolor="red", edgecolor="black", label="FAIL"),
+        Patch(facecolor="green", label="COMPLETE"),
+        Patch(facecolor="orange", label="PRUNED"),
+        Patch(facecolor="red", label="FAIL"),
     ]
     ax.legend(handles=legend_elems, fontsize=PLOT_CFG.legend_fs)
 
