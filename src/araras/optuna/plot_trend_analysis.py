@@ -205,13 +205,7 @@ def plot_trend_analysis(
             y_flat = intercept
             ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
 
-        # Determine trend direction for legend
-        if abs(slope) < 1e-6:
-            trend_legend = "No clear trend"
-        elif slope > 0:
-            trend_legend = "Higher parameter → HIGHER Study Value"
-        else:
-            trend_legend = "Higher parameter → LOWER Study Value"
+
 
         ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
@@ -223,12 +217,7 @@ def plot_trend_analysis(
         )
         ax.grid(True, alpha=0.3)
 
-        # Add legend with trend information
-        if abs(slope) > 1e-6:
-            ax.plot([], [], linewidth=2, color="red", label=trend_legend)  # Dummy plot for legend
-        else:
-            ax.plot([], [], linewidth=2, color="gray", label=trend_legend)  # Dummy plot for legend
-        ax.legend(loc="best", fontsize=PLOT_CFG.legend_fs)
+
 
         # Add text box with statistics
         stats_text = f"Slope: {slope:.6f}\n"  # Show more decimal places for slope
@@ -266,10 +255,6 @@ def plot_trend_analysis(
                 y_flat = intercept
                 standalone_ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
 
-            if abs(slope) > 1e-6:
-                standalone_ax.plot([], [], linewidth=2, color="red", label=trend_legend)
-            else:
-                standalone_ax.plot([], [], linewidth=2, color="gray", label=trend_legend)
 
             standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
@@ -285,7 +270,7 @@ def plot_trend_analysis(
             standalone_ax.grid(True, alpha=0.3)
             standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
             standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
-            standalone_ax.legend(loc="best", fontsize=PLOT_CFG.standalone_legend_fs)
+
 
             standalone_ax.text(
                 0.02,

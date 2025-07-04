@@ -14,7 +14,12 @@ from .analyze import (
 )
 
 
-def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> None:
+def plot_rank(
+    study: optuna.Study,
+    params: List[str],
+    dirs: Dict[str, str],
+    create_standalone: bool = False,
+) -> None:
     """Plot parameter relations colored by rank."""
     if not params:
         print("No parameters available for rank plot.")
@@ -113,3 +118,43 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
     plt.close(fig)
+
+    if create_standalone:
+        for p1, p2 in pairs:
+            fig_s, ax_s = plt.subplots(figsize=PLOT_CFG.standalone_size)
+
+            x_data = pd.to_numeric(df[p1], errors="coerce")
+            y_data = pd.to_numeric(df[p2], errors="coerce")
+            valid_mask = ~(x_data.isna() | y_data.isna())
+            x_data = x_data[valid_mask]
+            y_data = y_data[valid_mask]
+            c_data = loss_vals[valid_mask]
+
+            sc = ax_s.scatter(
+                x_data,
+                y_data,
+                c=c_data,
+                cmap=cmap,
+                s=25,
+                edgecolor="black",
+                linewidth=0.3,
+                vmin=vmin,
+                vmax=vmax,
+            )
+            ax_s.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.standalone_label_fs)
+            ax_s.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.standalone_label_fs)
+            title = f"{get_param_display_name(p1)} vs {get_param_display_name(p2)}"
+            ax_s.set_title(
+                format_title(PLOT_CFG.param_title_tpl, title),
+                fontsize=PLOT_CFG.standalone_title_fs,
+                pad=PLOT_CFG.standalone_title_pad,
+            )
+            ax_s.grid(True, alpha=0.3)
+            fig_s.colorbar(sc, ax=ax_s, label=PLOT_CFG.study_value_label)
+            ax_s.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
+            ax_s.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
+
+            plt.tight_layout()
+            fname = os.path.join(dirs["standalone_ranks"], f"rank_{p1}_{p2}.pdf")
+            fig_s.savefig(fname, bbox_inches="tight")
+            plt.close(fig_s)
