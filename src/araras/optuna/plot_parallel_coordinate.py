@@ -61,10 +61,10 @@ def plot_parallel_coordinate(
             norm[col] = 0
 
     color_vals = data["loss"].rank(method="dense", ascending=True)
-    cmap = plt.cm.Blues
+    cmap = plt.cm.coolwarm
 
     fig, ax = plt.subplots(
-        figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height * 1.5)
+        figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height * 2)
     )
     for idx, (_, row) in enumerate(norm.iterrows()):
         ax.plot(range(len(cols)), row.values, color=cmap(color_vals.iloc[idx] / color_vals.max()), alpha=0.5)

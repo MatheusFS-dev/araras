@@ -33,5 +33,5 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     fig.autofmt_xdate()
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "timeline.pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
     plt.close(fig)

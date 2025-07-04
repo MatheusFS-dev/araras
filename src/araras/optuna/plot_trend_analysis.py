@@ -238,7 +238,7 @@ def plot_trend_analysis(
 
         ax.text(
             0.02,
-            0.98,
+            0.95,
             stats_text,
             transform=ax.transAxes,
             verticalalignment="top",

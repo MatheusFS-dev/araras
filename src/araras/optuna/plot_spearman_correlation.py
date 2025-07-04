@@ -41,7 +41,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     )
 
     # Create heatmap with correlation values mapped to colors (-1 to +1 range)
-    im = ax.imshow(corr, vmin=-1, vmax=1, cmap="Blues")
+    im = ax.imshow(corr, vmin=-1, vmax=1, cmap="coolwarm")
 
     cols = [col if col != "loss" else "Study Value" for col in cols]
 

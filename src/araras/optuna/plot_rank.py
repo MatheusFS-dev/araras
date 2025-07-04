@@ -1,6 +1,7 @@
 import os
 from typing import List, Dict
 import matplotlib.pyplot as plt
+import matplotlib as mpl
 import optuna
 import numpy as np
 from itertools import combinations
@@ -45,7 +46,7 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         return
 
     loss_vals = df["loss"].replace([np.inf, -np.inf], np.nan)
-    cmap = plt.cm.coolwarm
+    cmap = mpl.colormaps['coolwarm']
     vmin = loss_vals.min()
     vmax = loss_vals.max()
 
@@ -110,5 +111,5 @@ def plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str]) -> N
         axes[row, col].set_visible(False)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "study_rank.pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
     plt.close(fig)

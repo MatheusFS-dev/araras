@@ -70,6 +70,26 @@ def plot_hyperparameter_distributions(
             display_name = get_param_display_name(col, param_name_mapping)
             values = df[col].dropna()
 
+            # Skip parameters with no valid data
+            if values.empty:
+                ax.text(
+                    0.5,
+                    0.5,
+                    f"No valid data\nfor {display_name}",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=PLOT_CFG.label_fs,
+                    style="italic",
+                )
+                ax.set_title(
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
+                    fontsize=PLOT_CFG.title_fs,
+                    fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
+                )
+                continue
+
             # Main histogram
             n, bins, patches = ax.hist(
                 values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
@@ -428,5 +448,3 @@ def plot_hyperparameter_distributions(
     # Print summary
     if not numeric_cols and not categorical_cols:
         print("No parameters found for distribution plotting.")
-
-

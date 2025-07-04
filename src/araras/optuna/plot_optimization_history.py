@@ -31,5 +31,5 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
     ax.legend(fontsize=PLOT_CFG.legend_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "optimization_history.pdf"), bbox_inches="tight")
+    fig.savefig(os.path.join(dirs["figs"], "study_optimization_history.pdf"), bbox_inches="tight")
     plt.close(fig)

@@ -29,7 +29,7 @@ class PlotConfig:
     # Layout and sizing configurations for combined plots
     max_cols: int = 4
     numeric_subplot_size: int = 5
-    box_subplot_height: int = 4
+    box_subplot_height: int = 5
     heatmap_cell: float = 0.5
     corr_bar_min_width: int = 6
     corr_bar_scale: float = 0.6
@@ -356,7 +356,7 @@ def analyze_study(
         plots: List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
-            'parallel_coordinate', 'rank', 'slice'
+            'parallel_coordinate', 'rank', 'slice', 'history', 'timeline'.
             If None, generates all plots.
     """
     print("\n\nAnalyzing study...")
