@@ -128,6 +128,7 @@ def build_dnn(
     )(x)
 
     # Apply dropout for regularization
-    x = layers.Dropout(dropout_rate, name=f"{name_prefix}_dropout")(x)  # Randomly zero some elements
+    if dropout_rate > 0:
+        x = layers.Dropout(dropout_rate, name=f"{name_prefix}_dropout")(x)  # Randomly zero some elements
 
     return x  # Return the final output layer after all transformations
