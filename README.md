@@ -392,6 +392,39 @@ Below is a summary of all modules and their functions.
   - `top_frac`: fraction of best/worst trials.
   - `param_name_mapping`: optional mapping for display names.
 
+### `araras.optuna.viz`
+
+- **`report(study, metrics=None, summary_values=None, best_is_min=True, improvement_evaluator=None, error_evaluator=None, min_n_trials=DEFAULT_MIN_N_TRIALS)`** – update or create realtime plots for a study.
+  - `study`: Optuna study instance.
+  - `metrics`: mapping of metric names to callables returning values from a trial.
+  - `summary_values`: mapping of labels to callables returning study-level values.
+  - `best_is_min`: treat lower values as better when tracking best metrics.
+  - `improvement_evaluator`: optional evaluator to compute improvement.
+  - `error_evaluator`: optional evaluator to compute error bars.
+  - `min_n_trials`: minimum number of trials before computing improvement.
+
+**Example**
+
+```python
+import optuna
+from araras.optuna import report
+
+study = optuna.create_study(direction="minimize")
+
+def objective(trial):
+    x = trial.suggest_float("x", -5, 5)
+    y = trial.suggest_float("y", -5, 5)
+    value = x**2 + y**2
+    report(
+        study,
+        metrics={"loss": lambda t: t.value},
+        summary_values={"Completed trials": lambda s: len(s.trials)},
+    )
+    return value
+
+study.optimize(objective, n_trials=20)
+```
+
 ## 🤝 Contributing
 
 Contributions are what make the open-source community amazing. To contribute:
