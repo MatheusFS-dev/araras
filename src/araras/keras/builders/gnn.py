@@ -18,6 +18,37 @@ import scipy.sparse as sp
 from spektral.utils import convolution
 from sklearn.neighbors import NearestNeighbors
 
+PRINT_ONCE_JIT = True
+
+def print_warning_jit():
+    """Print a warning about JIT compilation."""
+    global PRINT_ONCE_JIT
+    if PRINT_ONCE_JIT:
+        YELLOW = "\033[93m"
+        ORANGE = "\033[38;5;208m"
+        RESET = "\033[0m"
+
+        # warning messages in yellow
+        warnings = [
+            "Spektral's GCNConv uses a sparse-dense matmul under the hood.",
+            "XLA's GPU JIT compiler does not support that op.",
+            "This may cause issues with the GNN layers.",
+            "Disable all auto-JIT clustering and auto-JIT compilation",
+            "Call:",
+        ]
+        for msg in warnings:
+            print(f"{YELLOW}{msg}{RESET}")
+
+        # commands in orange
+        commands = [
+            "os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=-1'",
+            "tf.config.optimizer.set_jit(False)",
+            "'jit_compile=False'  # pass into model.compile()",
+        ]
+        for cmd in commands:
+            print(f"{ORANGE}{cmd}{RESET}")
+        PRINT_ONCE_JIT = False
+
 
 def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
     """Build a grid adjacency matrix with GCN normalization.
@@ -132,6 +163,7 @@ def build_gcn(
     name_prefix: str = "gcn",
 ) -> layers.Layer:
     """Build a single Graph Convolutional Network (GCN) layer."""
+    print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     dropout = _select_float_range_value(
         trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
@@ -185,6 +217,7 @@ def build_gat(
     name_prefix: str = "gat",
 ) -> layers.Layer:
     """Build a single Graph Attention (GAT) layer."""
+    print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     heads = _select_range_value(trial, f"{name_prefix}_heads", heads_range, heads_step)
     dropout = _select_float_range_value(
@@ -241,6 +274,7 @@ def build_cheb(
     name_prefix: str = "cheb",
 ) -> layers.Layer:
     """Build a single Chebyshev graph convolution layer."""
+    print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     K = _select_range_value(trial, f"{name_prefix}_K", K_range, K_step)
     dropout = _select_float_range_value(
