@@ -4,26 +4,30 @@ from __future__ import annotations
 
 from typing import List, Optional
 
+import numpy as np
+
 import optuna
 from optuna.terminator import BaseImprovementEvaluator, RegretBoundEvaluator
-from optuna.terminator.improvement.evaluator import BestValueStagnationEvaluator, DEFAULT_MIN_N_TRIALS
+from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
 
 
 class ImprovementStagnationCallback:
-    """Stop a study when the terminator improvement stagnates.
+    """Stop a study when the terminator improvement variance plateaus.
 
-    This callback evaluates the potential improvement of the study after each
-    completed trial using an ``optuna.terminator`` improvement evaluator. If the
-    estimated improvement drops to or below ``threshold`` after ``min_n_trials``
-    completed trials, the optimization is terminated via :meth:`optuna.Study.stop`.
+    After each completed trial the callback computes the potential future
+    improvement using an ``optuna.terminator`` improvement evaluator. The
+    variance of the most recent ``window_size`` improvement values is measured
+    and if it falls below ``variance_threshold`` after ``min_n_trials`` trials
+    the study is terminated via :meth:`optuna.Study.stop`.
 
     Parameters
     ----------
     min_n_trials:
-        Minimum number of completed trials before evaluating stagnation.
-    threshold:
-        Improvement threshold used to determine stagnation. The study is stopped
-        when the evaluator returns a value less than or equal to this threshold.
+        Minimum number of completed trials before starting variance checks.
+    window_size:
+        Number of recent improvement values used to compute the variance.
+    variance_threshold:
+        Threshold below which the variance of improvements indicates stagnation.
     improvement_evaluator:
         Custom improvement evaluator. Defaults to :class:`RegretBoundEvaluator`.
     """
@@ -31,28 +35,36 @@ class ImprovementStagnationCallback:
     def __init__(
         self,
         min_n_trials: int = DEFAULT_MIN_N_TRIALS,
-        threshold: float = 0.0,
+        window_size: int = 5,
+        variance_threshold: float = 1e-10,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     ) -> None:
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
         self.min_n_trials = min_n_trials
-        self.threshold = threshold
+        self.window_size = window_size
+        self.variance_threshold = variance_threshold
         self.improvement_evaluator = improvement_evaluator
         self._completed_trials: List[optuna.trial.FrozenTrial] = []
+        self._improvements: List[float] = []
 
     def __call__(self, study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
         if trial.state != optuna.trial.TrialState.COMPLETE:
             return
 
         self._completed_trials.append(trial)
-        if len(self._completed_trials) < self.min_n_trials:
-            return
 
         improvement = self.improvement_evaluator.evaluate(
             trials=self._completed_trials,
             study_direction=study.direction,
         )
+        self._improvements.append(improvement)
 
-        if improvement <= self.threshold:
+        if len(self._completed_trials) < max(self.min_n_trials, self.window_size):
+            return
+
+        recent_improvements = self._improvements[-self.window_size :]
+        variance = float(np.var(recent_improvements))
+
+        if variance <= self.variance_threshold:
             study.stop()
