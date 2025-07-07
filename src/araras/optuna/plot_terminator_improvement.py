@@ -121,6 +121,13 @@ def plot_terminator_improvement(
         print("No completed trials for terminator improvement plot.")
         return
 
+    # Calculate and print variance of last 5 trials after warm-up phase
+    if len(info.trial_numbers) > min_n_trials + 5:
+        for i in range(min_n_trials, len(info.trial_numbers) - 4):
+            last_5_trials = info.improvements[i : i + 5]
+            variance = np.var(last_5_trials)
+            print(f"Variance of trials {info.trial_numbers[i:i + 5]}: {variance}")
+
     fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
     # Plot improvement until min_n_trials with lighter color
@@ -145,7 +152,7 @@ def plot_terminator_improvement(
             info.trial_numbers,
             info.errors,
             color="red",
-            label="Error Curve\nHow much the improvement could be just due to noise",
+            label="Error Curve\nImprovement due to noise",
             linewidth=2,
         )
 
@@ -161,9 +168,9 @@ def plot_terminator_improvement(
     ax.set_ylim(ymin, ymax)
 
     ax.set_xlabel("Trial", fontsize=PLOT_CFG.standalone_label_fs)
-    ax.set_ylabel("Terminator Improvement", fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel("Improvement", fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_title(
-        "Terminator Improvement Plot",
+        "Improvement vs Trials Plot",
         pad=PLOT_CFG.title_pad,
         fontsize=PLOT_CFG.standalone_title_fs,
     )
