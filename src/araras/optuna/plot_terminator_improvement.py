@@ -128,7 +128,7 @@ def plot_terminator_improvement(
         info.trial_numbers[: min_n_trials + 1],
         info.improvements[: min_n_trials + 1],
         color=(0, 0, 1, OPACITY),
-        label="Terminator Improvement",
+        label="Improvement Curve\nRoom left to improve",
         linewidth=2,
     )
 
@@ -145,7 +145,7 @@ def plot_terminator_improvement(
             info.trial_numbers,
             info.errors,
             color="red",
-            label="Error",
+            label="Error Curve\nHow much the improvement could be just due to noise",
             linewidth=2,
         )
 
@@ -153,6 +153,7 @@ def plot_terminator_improvement(
         min(info.trial_numbers),
         min_n_trials,
         color="gray",
+        label=f"Warm-up Phase ({min_n_trials} trials)",
         alpha=OPACITY,
     )
 
