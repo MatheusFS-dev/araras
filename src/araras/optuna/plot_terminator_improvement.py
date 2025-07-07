@@ -103,7 +103,7 @@ def _get_y_range(info: _ImprovementInfo, min_n_trials: int) -> tuple[float, floa
 def plot_terminator_improvement(
     study: optuna.Study,
     dirs: Dict[str, str],
-    plot_error: bool = False,
+    plot_error: bool = True,
     improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     error_evaluator: Optional[BaseErrorEvaluator] = None,
     min_n_trials: int = DEFAULT_MIN_N_TRIALS,
