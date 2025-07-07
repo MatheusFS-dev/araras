@@ -16,6 +16,7 @@ from araras.keras.hparams import HParams
 from spektral.layers import GCNConv, GATConv, ChebConv
 import scipy.sparse as sp
 from spektral.utils import convolution
+from sklearn.neighbors import NearestNeighbors
 
 
 def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
@@ -57,8 +58,8 @@ def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
 def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
     """Construct a k-nearest neighbour adjacency matrix on a 2-D grid.
 
-    Nodes correspond to cells of a ``rows`` × ``cols`` grid.  Each node is
-    connected to its ``k`` spatially nearest neighbours.  The adjacency matrix is
+    Nodes correspond to cells of a `rows` × `cols` grid.  Each node is
+    connected to its `k` spatially nearest neighbours.  The adjacency matrix is
     symmetrised, normalised with the GCN filter and returned as a TensorFlow
     sparse tensor.
 
@@ -70,7 +71,6 @@ def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
     Returns:
         tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
     """
-    from sklearn.neighbors import NearestNeighbors
 
     n = rows * cols
     coords = np.array([(i // cols, i % cols) for i in range(n)], np.float32)
