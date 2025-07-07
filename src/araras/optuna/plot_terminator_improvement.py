@@ -128,8 +128,8 @@ def plot_terminator_improvement(
         info.trial_numbers[: min_n_trials + 1],
         info.improvements[: min_n_trials + 1],
         color=(0, 0, 1, OPACITY),
-        marker="o",
         label="Terminator Improvement",
+        linewidth=2,
     )
 
     if len(info.trial_numbers) > min_n_trials:
@@ -137,7 +137,7 @@ def plot_terminator_improvement(
             info.trial_numbers[min_n_trials:],
             info.improvements[min_n_trials:],
             color="blue",
-            marker="o",
+            linewidth=2,
         )
 
     if plot_error and info.errors is not None:
@@ -145,8 +145,8 @@ def plot_terminator_improvement(
             info.trial_numbers,
             info.errors,
             color="red",
-            marker="o",
             label="Error",
+            linewidth=2,
         )
 
     ax.axvspan(
