@@ -36,17 +36,28 @@ class ImprovementStagnationCallback:
         self,
         min_n_trials: int = DEFAULT_MIN_N_TRIALS,
         window_size: int = 5,
-        variance_threshold: float = 2e-9,
+        variance_threshold: float = 1e-10,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     ) -> None:
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
         self.min_n_trials = min_n_trials
         self.window_size = window_size
-        self.variance_threshold = variance_threshold
+        self._variance_threshold = variance_threshold
         self.improvement_evaluator = improvement_evaluator
         self._completed_trials: List[optuna.trial.FrozenTrial] = []
         self._improvements: List[float] = []
+
+    @property
+    def variance_threshold(self) -> float:
+        """Variance threshold triggering study stop."""
+        return self._variance_threshold
+
+    @variance_threshold.setter
+    def variance_threshold(self, value: float) -> None:
+        if value < 0:
+            raise ValueError("variance_threshold must be non-negative")
+        self._variance_threshold = value
 
     def __call__(self, study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
         if trial.state != optuna.trial.TrialState.COMPLETE:
@@ -67,4 +78,9 @@ class ImprovementStagnationCallback:
         variance = float(np.var(recent_improvements))
 
         if variance <= self.variance_threshold:
+            print(
+                f"\033[33m\nStopping study {study.study_name} due to stagnation "
+                f"(variance={variance:.2e} < threshold={self.variance_threshold:.2e})\033[0m\n"
+            )
+            
             study.stop()

@@ -104,6 +104,7 @@ def plot_terminator_improvement(
     study: optuna.Study,
     dirs: Dict[str, str],
     plot_error: bool = True,
+    print_variance: bool = False,
     improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     error_evaluator: Optional[BaseErrorEvaluator] = None,
     min_n_trials: int = DEFAULT_MIN_N_TRIALS,
@@ -122,11 +123,12 @@ def plot_terminator_improvement(
         return
 
     # Calculate and print variance of last 5 trials after warm-up phase
-    if len(info.trial_numbers) > min_n_trials + 5:
-        for i in range(min_n_trials, len(info.trial_numbers) - 4):
-            last_5_trials = info.improvements[i : i + 5]
-            variance = np.var(last_5_trials)
-            print(f"Variance of trials {info.trial_numbers[i:i + 5]}: {variance}")
+    if print_variance:
+        if len(info.trial_numbers) > min_n_trials + 5:
+            for i in range(min_n_trials, len(info.trial_numbers) - 4):
+                last_5_trials = info.improvements[i : i + 5]
+                variance = np.var(last_5_trials)
+                print(f"Variance of trials {info.trial_numbers[i:i + 5]}: {variance}")
 
     fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
 
