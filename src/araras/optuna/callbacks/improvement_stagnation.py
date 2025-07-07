@@ -36,7 +36,7 @@ class ImprovementStagnationCallback:
         self,
         min_n_trials: int = DEFAULT_MIN_N_TRIALS,
         window_size: int = 5,
-        variance_threshold: float = 1e-10,
+        variance_threshold: float = 2e-9,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     ) -> None:
         if improvement_evaluator is None:
