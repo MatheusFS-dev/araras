@@ -89,11 +89,19 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.set_xlabel("Time", fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_ylabel("Trial", fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_title("Timeline", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
-    locator = mdates.AutoDateLocator()
-    formatter = mdates.DateFormatter('%H H\n%b %d, %Y')
-    ax.xaxis.set_major_locator(locator)
-    ax.xaxis.set_major_formatter(formatter)
-    ax.xaxis_date()
+    tick_dates = mdates.num2date(ax.get_xticks())
+    labels = []
+    prev_date = None
+    for d in tick_dates:
+        time_str = d.strftime("%H") + " H"
+        date_str = d.strftime("%b %d, %Y")
+        if prev_date == date_str:
+            labels.append(time_str)
+        else:
+            labels.append(time_str + "\n" + date_str)
+            prev_date = date_str
+    ax.set_xticklabels(labels)
+    # fig.autofmt_xdate()
 
     legend_elems = [
         Patch(facecolor="green", label="COMPLETE"),
