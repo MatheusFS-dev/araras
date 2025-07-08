@@ -200,7 +200,7 @@ def save_top_k_trials(
 
         # Extract extra attributes
         extra_values = {}
-        if extra_attrs is not None:
+        if extra_attrs is not None and extra_attrs:
             for attr in extra_attrs:
                 extra_values[attr] = trial.user_attrs.get(attr, None)
 
