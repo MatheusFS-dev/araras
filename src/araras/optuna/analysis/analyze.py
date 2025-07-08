@@ -14,6 +14,7 @@ Example usage:
 
 import os
 import re
+import math
 import optuna
 import numpy as np
 from typing import *
@@ -117,6 +118,55 @@ def set_plot_config_params(**kwargs: Any) -> None:
 def format_title(template: str, display_name: str) -> str:
     """Format a title template with the given display name."""
     return template.format(display_name=display_name)
+
+
+def calculate_grid(
+    n_plots: int,
+    subplot_width: int,
+    subplot_height: int,
+    base_max_cols: int,
+) -> Tuple[int, int]:
+    """Calculate grid dimensions ensuring the resulting figure stays within
+    Matplotlib's maximum image size.
+
+    Parameters
+    ----------
+    n_plots : int
+        Number of subplots to create.
+    subplot_width : int
+        Width of each subplot in inches.
+    subplot_height : int
+        Height of each subplot in inches.
+    base_max_cols : int
+        Desired number of columns before auto-adjustment.
+
+    Returns
+    -------
+    Tuple[int, int]
+        (n_rows, n_cols) suitable for ``plt.subplots``.
+    """
+
+    if n_plots <= 0:
+        return 0, 0
+
+    dpi = plt.rcParams.get("figure.dpi", 100)
+    max_px = (2 ** 16) - 1
+
+    max_cols_by_width = max_px // int(subplot_width * dpi)
+    max_rows_by_height = max_px // int(subplot_height * dpi)
+
+    max_cols_by_width = max(1, max_cols_by_width)
+    max_rows_by_height = max(1, max_rows_by_height)
+
+    # Start with requested number of columns but respect pixel limits
+    n_cols = min(base_max_cols, max_cols_by_width, n_plots)
+    n_rows = math.ceil(n_plots / n_cols)
+
+    if n_rows > max_rows_by_height:
+        n_cols = min(max_cols_by_width, math.ceil(n_plots / max_rows_by_height))
+        n_rows = math.ceil(n_plots / n_cols)
+
+    return n_rows, n_cols
 
 
 # ———————————————————————————————————————————————————————————————————————————— #
