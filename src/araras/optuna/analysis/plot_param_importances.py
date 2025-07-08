@@ -56,12 +56,18 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     for bar, importance in zip(bars, df_imp["Importance"]):
         width = bar.get_width()
         plt.text(
-            width,
+            width + PLOT_CFG.bar_value_offset,
             bar.get_y() + bar.get_height() / 2.0,
             f"{importance:.3f}",
             ha="left",
             va="center",
             fontsize=PLOT_CFG.bar_value_fs,
+            bbox=dict(
+                facecolor="white",
+                alpha=0,
+                edgecolor="none",
+                pad=PLOT_CFG.bar_value_pad,
+            ),
         )
     plt.gca().invert_yaxis()  # Highest importance at top
     plt.tight_layout()
