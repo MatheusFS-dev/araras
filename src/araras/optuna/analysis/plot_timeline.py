@@ -3,6 +3,7 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
+from matplotlib.ticker import FixedLocator
 from datetime import timedelta
 import numpy as np
 import optuna
