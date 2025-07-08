@@ -169,7 +169,7 @@ def create_directories(
                 "standalone_ranges": os.path.join(table_dir, "figures", "standalone", "ranges"),
                 "standalone_contours": os.path.join(table_dir, "figures", "standalone", "contours"),
                 "standalone_slices": os.path.join(table_dir, "figures", "standalone", "slices"),
-                "standalone_ranks": os.path.join(table_dir, "figures", "standalone", "ranks"),
+                # "standalone_ranks": os.path.join(table_dir, "figures", "standalone", "ranks"),
             }
         )
 
@@ -358,7 +358,7 @@ def analyze_study(
         plots: List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
-            'parallel_coordinate', 'rank', 'slice', 'history', 'timeline',
+            'parallel_coordinate', 'slice', 'history', 'timeline',
             'terminator'.
             If None, generates all plots.
     """
@@ -376,7 +376,7 @@ def analyze_study(
         "edf",
         "intermediate",
         "parallel_coordinate",
-        "rank",
+        # "rank",
         "slice",
         "history",
         "timeline",
@@ -482,9 +482,10 @@ def analyze_study(
         print("Generating terminator improvement plot...")
         plot_terminator_improvement(study, dirs)
         
-    if "rank" in plots_to_generate:
-        print("Generating rank plots...")
-        plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
+    #! Rank plots are deprecated, they are causing crashes and not helping much
+    # if "rank" in plots_to_generate:
+    #     print("Generating rank plots...")
+    #     plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
@@ -506,7 +507,7 @@ def analyze_study(
         print(f"  * Ranges: {dirs['standalone_ranges']}")
         print(f"  * Contours: {dirs['standalone_contours']}")
         print(f"  * Slices: {dirs['standalone_slices']}")
-        print(f"  * Ranks: {dirs['standalone_ranks']}")
+        # print(f"  * Ranks: {dirs['standalone_ranks']}")
 
     if param_name_mapping:
         print(f"\nParameter name mappings applied:")

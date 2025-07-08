@@ -136,8 +136,8 @@ def plot_terminator_improvement(
     ax.plot(
         info.trial_numbers[: min_n_trials + 1],
         info.improvements[: min_n_trials + 1],
-        color=(0, 0, 1, OPACITY),
-        label="Improvement Curve\nRoom left to improve",
+        color="blue",
+        label="Improvement Curve\n(Room left to improve)",
         linewidth=2,
     )
 
@@ -154,7 +154,7 @@ def plot_terminator_improvement(
             info.trial_numbers,
             info.errors,
             color="red",
-            label="Error Curve\nImprovement due to noise",
+            label="Error Curve\n(Improvement due to noise)",
             linewidth=2,
         )
 
