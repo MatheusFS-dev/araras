@@ -12,6 +12,7 @@ def get_model_stats(
     bits_per_param: int,
     batch_size: int,
     n_trials: int = 10000,
+    verbose: bool = False,
 ) -> Dict[str, float]:
     """
     Extract and return model statistics from the given Optuna trial.
@@ -21,13 +22,15 @@ def get_model_stats(
         model (tf.keras.Model): The Keras model to analyze.
         policy (tf.keras.DTypePolicy): The precision policy used for the model.
         batch_size (int): The batch size to simulate for input.
+        n_trials (int): Number of trials for power and energy measurement.
+        verbose (bool): If True, print detailed information.
 
     Returns:
         Dict[str, float]: A dictionary containing model statistics
     """
     params = model.count_params()
-    peak_mem_usage, inference_time = get_memory_and_time(model, batch_size=batch_size, device="GPU:0")
-    _, avg_power, avg_energy = get_model_usage_stats(model, device="gpu", n_trials=n_trials)
+    peak_mem_usage, inference_time = get_memory_and_time(model, batch_size=batch_size, device="GPU:0", verbose=verbose)
+    _, avg_power, avg_energy = get_model_usage_stats(model, device="gpu", n_trials=n_trials, verbose=verbose)
 
     trial.set_user_attr("num_params", params)
     trial.set_user_attr("model_size", params * bits_per_param)
