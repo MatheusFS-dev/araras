@@ -151,12 +151,12 @@ Below is a summary of all modules and their functions.
 ### `araras.keras.utils.punish`
 
 - **`compute_flops_penalized_loss(loss, model, flops_penalty_factor=1e-10, operation="subtract")`** – adjust loss by FLOPs.
-  - `loss`: original scalar loss value.
+  - `loss`: original loss value or list of values.
   - `model`: Keras model to profile.
   - `flops_penalty_factor`: scaling factor for FLOP penalty.
   - `operation`: `'add'` or `'subtract'` the penalty.
 - **`compute_params_penalized_loss(loss, model, params_penalty_factor=1e-9, operation="subtract")`** – adjust loss by parameter count.
-  - `loss`: original loss value.
+  - `loss`: original loss value or list of values.
   - `model`: Keras model.
   - `params_penalty_factor`: scaling factor for parameter penalty.
   - `operation`: `'add'` or `'subtract'` the penalty.
