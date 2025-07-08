@@ -3,8 +3,8 @@ import unittest
 import tensorflow as tf
 
 from araras.keras.utils.punish import (
-    compute_flops_penalized_loss,
-    compute_params_penalized_loss,
+    punish_model_flops,
+    punish_model_params,
 )
 from araras.keras.utils.profiler import get_flops
 
@@ -20,14 +20,14 @@ class PenalizedLossTests(unittest.TestCase):
         base_loss = 1.0
         expected_penalty = penalty_factor * get_flops(self.model)
 
-        single = compute_flops_penalized_loss(
-            base_loss, self.model, penalty_factor, "add"
+        single = punish_model_flops(
+            base_loss, self.model, penalty_factor, "minimize"
         )
         self.assertAlmostEqual(single, base_loss + expected_penalty)
 
         loss_list = [1.0, 2.0]
-        result_list = compute_flops_penalized_loss(
-            loss_list, self.model, penalty_factor, "subtract"
+        result_list = punish_model_flops(
+            loss_list, self.model, penalty_factor, "maximize"
         )
         self.assertIsInstance(result_list, list)
         expected_list = [l - expected_penalty for l in loss_list]
@@ -39,14 +39,14 @@ class PenalizedLossTests(unittest.TestCase):
         base_loss = 2.0
         expected_penalty = penalty_factor * self.model.count_params()
 
-        single = compute_params_penalized_loss(
-            base_loss, self.model, penalty_factor, "add"
+        single = punish_model_params(
+            base_loss, self.model, penalty_factor, "minimize"
         )
         self.assertAlmostEqual(single, base_loss + expected_penalty)
 
         loss_list = [2.0, 3.0]
-        result_list = compute_params_penalized_loss(
-            loss_list, self.model, penalty_factor, "subtract"
+        result_list = punish_model_params(
+            loss_list, self.model, penalty_factor, "maximize"
         )
         self.assertIsInstance(result_list, list)
         expected_list = [l - expected_penalty for l in loss_list]
