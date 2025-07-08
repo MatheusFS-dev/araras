@@ -308,6 +308,7 @@ Below is a summary of all modules and their functions.
   - `run_dir`: base directory for experiment.
   - `study_name`: study directory name.
   - `subdirs`: list of subdirectories to create.
+- **`supress_optuna_warnings()`** – silence Optuna logs and experimental warnings.
 
 ### `araras.optuna.analyze`
 
