@@ -609,6 +609,11 @@ class FlagBasedRestartManager:
         # Child process cleanup manager
         self.child_cleanup = ChildProcessCleanup()
 
+        # Track all target PIDs that have been launched. This allows us to
+        # verify old instances are truly gone and to forcibly terminate them if
+        # they linger after a forced restart.
+        self.pid_history: List[int] = []
+
     def run_file_with_restart(
         self,
         file_path: str,
@@ -671,8 +676,14 @@ class FlagBasedRestartManager:
             if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
                 raise RuntimeError("Previous target process still running, aborting duplicate start")
 
+            # Clean up any lingering processes from earlier runs
+            self._cleanup_stale_pids()
+
             # Main restart loop with consolidated email notifications
             while self.running and self.restart_count < self.max_restarts:
+                # Ensure any leftover processes from previous iteration are gone
+                self._cleanup_stale_pids()
+
                 # Remove old success flag (atomic operation)
                 if flag_path.exists():
                     flag_path.unlink()
@@ -832,6 +843,8 @@ class FlagBasedRestartManager:
             raise OSError("Failed to get target process PID")
 
         self.current_target_pid = target_pid
+        # Record the pid so we can later ensure it has terminated
+        self.pid_history.append(target_pid)
 
         # Cleanup PID file immediately (no longer needed)
         try:
@@ -958,6 +971,9 @@ class FlagBasedRestartManager:
 
         time.sleep(0.1)
 
+        # Ensure any historical PIDs are truly dead
+        self._cleanup_stale_pids()
+
     def _cleanup_terminal(self) -> None:
         """Cleanup terminal process with minimal overhead."""
         if self.current_terminal_process:
@@ -977,6 +993,42 @@ class FlagBasedRestartManager:
                 pass
 
             self.current_terminal_process = None
+
+    # ------------------------------------------------------------------
+    # PID tracking helpers
+    # ------------------------------------------------------------------
+    def _kill_pid(self, pid: int) -> None:
+        """Terminate a specific PID if it is still running."""
+        try:
+            proc = psutil.Process(pid)
+            if proc.is_running():
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except psutil.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+        except psutil.NoSuchProcess:
+            pass
+        except Exception as e:
+            print_warning_message(f"Failed to kill pid {pid}: {e}")
+
+    def _cleanup_stale_pids(self) -> None:
+        """Ensure any previously launched target PIDs are fully terminated."""
+        stale_pids = []
+        for pid in list(self.pid_history):
+            if pid == self.current_target_pid:
+                continue
+            if psutil.pid_exists(pid):
+                print_process_status("Cleaning up stale process", pid)
+                self._kill_pid(pid)
+            if not psutil.pid_exists(pid):
+                stale_pids.append(pid)
+
+        # Remove PIDs that are confirmed dead from history
+        for pid in stale_pids:
+            if pid in self.pid_history:
+                self.pid_history.remove(pid)
 
     def _cleanup_converted_file(self) -> None:
         """Delete converted Python file if original was a notebook.
@@ -1210,6 +1262,8 @@ def run_auto_restart(
                 try:
                     while not stop_event.is_set():
                         manager.restart_count = 0  # Never increment max_restarts for forced restart
+                        # Ensure no leftover processes remain running
+                        manager._cleanup_stale_pids()
                         finished = [False]
 
                         def run_and_flag():
