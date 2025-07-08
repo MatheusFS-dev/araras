@@ -127,14 +127,14 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Calculate expanded x-axis limits to accommodate labels
     max_abs_corr = max(abs(param_loss_corr.min()), abs(param_loss_corr.max()))
-    # Expand limits by 30% to ensure labels fit inside plot area
-    x_limit = max_abs_corr * 1.3
+    # Expand limits to ensure labels fit inside plot area
+    x_limit = max_abs_corr * 2
     ax.set_xlim(-x_limit, x_limit)
 
     # Add labels with 3 decimal places for each bar
     for i, (bar, value) in enumerate(zip(bars, param_loss_corr.values)):
         # Position label closer to the end of the bar with reduced margin
-        x_pos = value + (0.01 if value >= 0 else -0.01)
+        x_pos = value + (0.001 if value >= 0 else -0.001)
         ha = "left" if value >= 0 else "right"
         ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.y_tick_fs)
 
