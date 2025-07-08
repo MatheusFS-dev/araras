@@ -224,7 +224,7 @@ class NotebookConverter:
                 "#!/usr/bin/env python",
                 "# -*- coding: utf-8 -*-",
                 f"# Converted from: {notebook_path.name}",
-                f'# Generated on: {time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())}',
+                f'# Generated on: {time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())}',
                 "",
             ]
 
