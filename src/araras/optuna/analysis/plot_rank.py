@@ -11,6 +11,7 @@ from .analyze import (
     PLOT_CFG,
     get_param_display_name,
     format_title,
+    calculate_grid,
 )
 
 
@@ -57,8 +58,12 @@ def plot_rank(
 
     max_cols = PLOT_CFG.max_cols + 2
     n_plots = len(pairs)
-    n_cols = min(n_plots, max_cols)
-    n_rows = (n_plots + max_cols - 1) // max_cols
+    n_rows, n_cols = calculate_grid(
+        n_plots,
+        PLOT_CFG.numeric_subplot_size,
+        PLOT_CFG.numeric_subplot_size,
+        max_cols,
+    )
 
     fig, axes = plt.subplots(
         n_rows,
@@ -74,8 +79,8 @@ def plot_rank(
         axes = axes.reshape(-1, 1)
 
     for idx, (p1, p2) in enumerate(pairs):
-        row = idx // max_cols
-        col = idx % max_cols
+        row = idx // n_cols
+        col = idx % n_cols
         ax = axes[row, col]
 
         # Ensure data is numeric
@@ -111,8 +116,8 @@ def plot_rank(
         fig.colorbar(sc, ax=ax, label=PLOT_CFG.study_value_label)
 
     for idx in range(n_plots, n_rows * n_cols):
-        row = idx // max_cols
-        col = idx % max_cols
+        row = idx // n_cols
+        col = idx % n_cols
         axes[row, col].set_visible(False)
 
     plt.tight_layout()

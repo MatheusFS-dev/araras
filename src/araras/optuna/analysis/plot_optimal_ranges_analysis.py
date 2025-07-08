@@ -9,6 +9,7 @@ from .analyze import (
     format_title,
     get_param_display_name,
     save_data_for_latex,
+    calculate_grid,
 )
 
 from araras.utils.misc import format_scientific
@@ -161,11 +162,15 @@ def plot_optimal_ranges_analysis(
 
         ranges_data.append(param_data)
 
-    # Calculate grid dimensions with max 4 columns
+    # Calculate grid dimensions and adjust columns if needed
     max_cols = PLOT_CFG.max_cols
     n_plots = len(numeric_cols)  # Use all parameters, not just valid ones
-    n_cols = min(n_plots, max_cols)
-    n_rows = (n_plots + max_cols - 1) // max_cols  # Ceiling division
+    n_rows, n_cols = calculate_grid(
+        n_plots,
+        PLOT_CFG.numeric_subplot_size,
+        PLOT_CFG.box_subplot_height,
+        max_cols,
+    )
 
     # Create grid layout
     fig, axes = plt.subplots(
@@ -187,8 +192,8 @@ def plot_optimal_ranges_analysis(
 
     plottable_count = 0
     for plot_idx, data in enumerate(ranges_data):
-        row = plot_idx // max_cols
-        col_idx = plot_idx % max_cols
+        row = plot_idx // n_cols
+        col_idx = plot_idx % n_cols
         ax = axes[row, col_idx]
 
         col = data["parameter"]
@@ -473,8 +478,8 @@ def plot_optimal_ranges_analysis(
 
     # Hide unused subplots if needed
     for idx in range(n_plots, n_rows * n_cols):
-        row = idx // max_cols
-        col_idx = idx % max_cols
+        row = idx // n_cols
+        col_idx = idx % n_cols
         axes[row, col_idx].set_visible(False)
 
     # Adjust layout and save
