@@ -155,7 +155,9 @@ def print_monitoring_config_summary(
     print()
 
 
-def print_process_status(message: str, pid: Optional[int] = None, runtime: Optional[float] = None) -> None:
+def print_process_status(
+    message: str, pid: Optional[int] = None, runtime: Optional[float] = None
+) -> None:
     """Print process status messages with consistent formatting."""
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     if pid and runtime is not None:
@@ -171,7 +173,9 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
     print(f"Restarting in {delay:.1f}s ({restart_count}/{max_restarts})")
 
 
-def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
+def print_completion_summary(
+    restart_count: int, total_runtime: Optional[float] = None
+) -> None:
     """Print final completion summary."""
     print("=" * 50)
     print("MONITORING COMPLETED")
@@ -262,7 +266,9 @@ class ConsolidatedEmailManager:
 
         return True
 
-    def send_consolidated_status_email(self, status_type: str, process_data: Dict[str, Any]) -> None:
+    def send_consolidated_status_email(
+        self, status_type: str, process_data: Dict[str, Any]
+    ) -> None:
         """Send consolidated status email with unified reporting.
 
         Args:
@@ -295,9 +301,7 @@ class ConsolidatedEmailManager:
 
                 if remaining > 0:
                     subject = f"{title} crashed - Restart Failed ({failed_attempts} attempts, {remaining} remaining)"
-                    status_description = (
-                        f"Restart failed after {failed_attempts} attempts, {remaining} attempts remaining"
-                    )
+                    status_description = f"Restart failed after {failed_attempts} attempts, {remaining} attempts remaining"
                 else:
                     subject = f"{title} crashed - Maximum Restarts Reached"
                     status_description = "All restart attempts have been exhausted"
@@ -333,13 +337,23 @@ class ConsolidatedEmailManager:
                 details_section=details_section,
             )
 
-            send_email(subject, html_content, self.recipients_file, self.credentials_file, "html")
+            send_email(
+                subject,
+                html_content,
+                self.recipients_file,
+                self.credentials_file,
+                "html",
+            )
             self.last_notification_time = time.time()
 
         except Exception as e:
-            print_error_message("EMAIL", f"Failed to send consolidated status email: {e}")
+            print_error_message(
+                "EMAIL", f"Failed to send consolidated status email: {e}"
+            )
 
-    def should_attempt_restart(self, title: str, restart_count: int, max_restarts: int) -> bool:
+    def should_attempt_restart(
+        self, title: str, restart_count: int, max_restarts: int
+    ) -> bool:
         """Determine if should attempt restart with retry logic.
 
         Args:
@@ -372,7 +386,12 @@ class ConsolidatedEmailManager:
         return remaining_attempts > 0
 
     def report_successful_restart(
-        self, title: str, old_pid: Optional[int], new_pid: int, restart_count: int, runtime: float
+        self,
+        title: str,
+        old_pid: Optional[int],
+        new_pid: int,
+        restart_count: int,
+        runtime: float,
     ) -> None:
         """Report successful restart with consolidated information.
 
@@ -397,7 +416,9 @@ class ConsolidatedEmailManager:
             },
         )
 
-    def report_task_completion(self, title: str, restart_count: int, total_runtime: float) -> None:
+    def report_task_completion(
+        self, title: str, restart_count: int, total_runtime: float
+    ) -> None:
         """Report successful task completion.
 
         Args:
@@ -406,7 +427,12 @@ class ConsolidatedEmailManager:
             total_runtime: Total execution time
         """
         self.send_consolidated_status_email(
-            "task_complete", {"title": title, "restart_count": restart_count, "total_runtime": total_runtime}
+            "task_complete",
+            {
+                "title": title,
+                "restart_count": restart_count,
+                "total_runtime": total_runtime,
+            },
         )
 
     def report_final_failure(self, title: str, restart_count: int, error: str) -> None:
@@ -470,7 +496,9 @@ class FileTypeHandler:
         return file_type
 
     @classmethod
-    def build_execution_command(cls, file_path: Path, success_flag_file: str) -> Tuple[List[str], str]:
+    def build_execution_command(
+        cls, file_path: Path, success_flag_file: str
+    ) -> Tuple[List[str], str]:
         """Build optimized execution command based on file type.
 
         Args:
@@ -499,7 +527,9 @@ class FileTypeHandler:
 
         elif file_type == "notebook":
             # This should never be reached after conversion, but keeping for safety
-            raise ValueError(f"Notebook files should be converted to Python first: {file_path}")
+            raise ValueError(
+                f"Notebook files should be converted to Python first: {file_path}"
+            )
 
         else:
             raise ValueError(f"Unsupported file type: {file_type} for {file_path}")
@@ -535,7 +565,9 @@ class FileTypeHandler:
 
         file_type = cls.get_file_type(path_obj)
         if file_type == "unknown":
-            raise ValueError(f"Unsupported file type: {path_obj.suffix}. Supported: .py, .ipynb")
+            raise ValueError(
+                f"Unsupported file type: {path_obj.suffix}. Supported: .py, .ipynb"
+            )
 
         return path_obj.resolve()
 
@@ -620,7 +652,7 @@ class FlagBasedRestartManager:
         success_flag_file: str,
         title: Optional[str] = None,
         restart_after_delay: Optional[float] = None,
-        supress_tf_warnings: bool = False
+        supress_tf_warnings: bool = False,
     ) -> None:
         """Run file with flag-based restart logic and consolidated email notifications.
 
@@ -643,9 +675,13 @@ class FlagBasedRestartManager:
 
         # Convert notebook to Python if needed
         if file_type == "notebook":
-            print_process_status(f"Converting notebook to Python: {validated_path.name}")
+            print_process_status(
+                f"Converting notebook to Python: {validated_path.name}"
+            )
             try:
-                self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
+                self.converted_python_file = (
+                    NotebookConverter.convert_notebook_to_python(validated_path)
+                )
                 self.original_was_notebook = True
                 validated_path = self.converted_python_file
                 file_type = "python"
@@ -674,7 +710,9 @@ class FlagBasedRestartManager:
         try:
             # before launching a new run
             if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
-                raise RuntimeError("Previous target process still running, aborting duplicate start")
+                raise RuntimeError(
+                    "Previous target process still running, aborting duplicate start"
+                )
 
             # Clean up any lingering processes from earlier runs
             self._cleanup_stale_pids()
@@ -696,25 +734,37 @@ class FlagBasedRestartManager:
                         self.monitor_info = None
 
                     # Launch process
-                    target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
+                    target_pid = self._launch_process(
+                        validated_path, working_dir, success_flag_file
+                    )
                     print_process_status("Process started", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
                     if self.restart_count > 0:
                         runtime = time.time() - self.last_process_start_time
                         self.email_manager.report_successful_restart(
-                            self.process_title, previous_pid, target_pid, self.restart_count, runtime
+                            self.process_title,
+                            previous_pid,
+                            target_pid,
+                            self.restart_count,
+                            runtime,
                         )
 
                     # Start crash monitor with simplified monitoring
-                    self.monitor_info = start_monitor(target_pid, self.process_title, supress_tf_warnings=supress_tf_warnings)
+                    self.monitor_info = start_monitor(
+                        target_pid,
+                        self.process_title,
+                        supress_tf_warnings=supress_tf_warnings,
+                    )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
                     # Wait for completion or crash with optimized polling
                     completion_reason = self._wait_for_completion(flag_path)
                     runtime = time.time() - self.last_process_start_time
 
-                    print_process_status(f"Process finished: {completion_reason}", target_pid, runtime)
+                    print_process_status(
+                        f"Process finished: {completion_reason}", target_pid, runtime
+                    )
 
                     # Store PID for next restart notification
                     previous_pid = target_pid
@@ -738,8 +788,14 @@ class FlagBasedRestartManager:
                         # User pressed CTRL+C, clean up and exit
                         print_process_status("Process interrupted by user")
                         break
+                    elif completion_reason == "stopped":
+                        # External request to stop without treating as failure
+                        print_process_status("Process stopped by external request")
+                        break
                     else:
-                        print_process_status("Process ended without success flag, treating as failure")
+                        print_process_status(
+                            "Process ended without success flag, treating as failure"
+                        )
                         if not self._handle_restart_with_retry():
                             break
 
@@ -751,7 +807,9 @@ class FlagBasedRestartManager:
 
             # Handle maximum restarts reached
             if self.restart_count >= self.max_restarts:
-                print_error_message("MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}")
+                print_error_message(
+                    "MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}"
+                )
                 self.email_manager.report_final_failure(
                     self.process_title,
                     self.restart_count,
@@ -814,7 +872,9 @@ class FlagBasedRestartManager:
 
         return False
 
-    def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
+    def _launch_process(
+        self, file_path: Path, working_dir: str, success_flag_file: str
+    ) -> int:
         """Launch target process.
 
         Args:
@@ -829,7 +889,9 @@ class FlagBasedRestartManager:
             OSError: If PID discovery fails
         """
         # Build command for Python file
-        command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
+        command, execution_type = FileTypeHandler.build_execution_command(
+            file_path, success_flag_file
+        )
 
         launcher = SimpleTerminalLauncher()
         self.current_terminal_process = launcher.launch(command, working_dir)
@@ -974,6 +1036,11 @@ class FlagBasedRestartManager:
         # Ensure any historical PIDs are truly dead
         self._cleanup_stale_pids()
 
+    def force_stop(self) -> None:
+        """Request the currently running loop to stop and cleanup."""
+        self.running = False
+        self._cleanup_all()
+
     def _cleanup_terminal(self) -> None:
         """Cleanup terminal process with minimal overhead."""
         if self.current_terminal_process:
@@ -1040,9 +1107,13 @@ class FlagBasedRestartManager:
             try:
                 if self.converted_python_file.exists():
                     self.converted_python_file.unlink()
-                    print_process_status(f"Cleaned up converted file: {self.converted_python_file}")
+                    print_process_status(
+                        f"Cleaned up converted file: {self.converted_python_file}"
+                    )
             except Exception as e:
-                print_warning_message(f"Failed to cleanup converted file {self.converted_python_file}: {e}")
+                print_warning_message(
+                    f"Failed to cleanup converted file {self.converted_python_file}: {e}"
+                )
             finally:
                 self.converted_python_file = None
                 self.original_was_notebook = False
@@ -1060,11 +1131,15 @@ class FlagBasedRestartManager:
             except KeyboardInterrupt:
                 # Handle CTRL+C during sleep
                 self.running = False
-                print_process_status("CTRL+C detected during restart delay, aborting restart")
+                print_process_status(
+                    "CTRL+C detected during restart delay, aborting restart"
+                )
                 break
 
 
-def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
+def start_monitor(
+    pid: int, title: str, supress_tf_warnings: bool = False
+) -> Dict[str, Any]:
     """Start simplified crash monitor without email capabilities.
 
     Args:
@@ -1261,7 +1336,9 @@ def run_auto_restart(
             def restart_loop():
                 try:
                     while not stop_event.is_set():
-                        manager.restart_count = 0  # Never increment max_restarts for forced restart
+                        manager.restart_count = (
+                            0  # Never increment max_restarts for forced restart
+                        )
                         # Ensure no leftover processes remain running
                         manager._cleanup_stale_pids()
                         finished = [False]
@@ -1286,20 +1363,9 @@ def run_auto_restart(
                             print_process_status(
                                 f"Forcing restart after {restart_after_delay} seconds (not a crash)"
                             )
-
-                            # First stop the monitor before restarting the process
-                            if manager.monitor_info:
-                                print_process_status("Stopping monitor before restart")
-                                stop_monitor(manager.monitor_info)
-                                manager.monitor_info = None
-                                time.sleep(0.1)
-
-                            manager._cleanup_all()
-                            # Intentionally NOT incrementing restart_count
-                            # Signal process to stop, then continue
-                            # The completion reason will be 'stopped', and the outer loop will restart
-                            # Wait for thread to finish cleanup
-                            thread.join(2)
+                            manager.force_stop()
+                            # Ensure the worker thread finishes cleanly before continuing
+                            thread.join(5)
                             clear()
 
                         else:
@@ -1313,8 +1379,10 @@ def run_auto_restart(
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
                     stop_event.set()
-                    print_process_status("Restart loop interrupted by user, cleaning up")
-                    manager._cleanup_all()
+                    print_process_status(
+                        "Restart loop interrupted by user, cleaning up"
+                    )
+                    manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
@@ -1335,7 +1403,9 @@ def run_auto_restart(
         print_error_message("CONFIG", str(e))
         raise
     except KeyboardInterrupt:
-        print_process_status("Main process interrupted by user, performing final cleanup")
+        print_process_status(
+            "Main process interrupted by user, performing final cleanup"
+        )
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
