@@ -6,6 +6,7 @@ import numpy as np
 
 from .analyze import PLOT_CFG, save_data_for_latex
 
+
 def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
     """
     Generate and save Spearman correlation heatmap for numeric parameters and loss.
@@ -59,19 +60,14 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Add correlation values as text on each cell
     for i in range(len(cols)):
         for j in range(len(cols)):
-            ax.text(
-                j,
-                i,
-                f"{corr.iloc[i, j]:.2f}",
-                ha="center",
-                va="center",
-                fontsize=PLOT_CFG.heatmap_value_fs,
-            )
+            ax.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center")
 
     # Add colorbar to show correlation scale
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    plt.title(PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)  # Descriptive title
-    # plt.tight_layout()  # Adjust layout to prevent label cutoff
+    plt.title(
+        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs
+    )  # Descriptive title
+    plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
     fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"))
     plt.close()  # Close figure to free memory
@@ -160,5 +156,3 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Save parameter-loss correlation bar chart with high resolution
     fig.savefig(os.path.join(dirs["figs"], "params_study_value_correlations.pdf"))
     plt.close()  # Close figure to free memory
-
-
