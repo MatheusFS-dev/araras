@@ -24,31 +24,6 @@ def compute_flops_penalized_loss(
     flops_penalty_factor: float = 1e-10,
     operation: Literal["add", "subtract"] = "subtract",
 ) -> Union[float, Sequence[float]]:
-    """
-    Applies a penalty to the loss based on the number of FLOPs used by the model.
-
-    Logic:
-        -> Check that model input shape is valid
-        -> Create a `tf.function` to profile the graph
-        -> Use TensorFlow Profiler to estimate FLOPs
-        -> Apply penalty using the given `flops_penalty_factor`
-        -> Return penalized loss
-
-    Args:
-        loss (float | Sequence[float]): Loss value(s) to penalize.
-        model (tf.keras.Model): Keras model to be profiled.
-        flops_penalty_factor (float): Scaling factor for FLOP penalty (default: 1e-10).
-        operation (Literal["add", "subtract"]): Whether to add or subtract the penalty.
-
-    Returns:
-        float | list[float]: Penalized loss value(s).
-
-    Raises:
-        ValueError: If input shape is missing or if operation is invalid.
-
-    Example:
-        new_loss = compute_flops_penalized_loss(val_loss, model, 1e-9, "add")
-    """
     # Validate operation mode
     if operation not in ("add", "subtract"):
         raise ValueError("`operation` must be either 'add' or 'subtract'.")
@@ -73,29 +48,6 @@ def compute_params_penalized_loss(
     params_penalty_factor: float = 1e-9,
     operation: Literal["add", "subtract"] = "subtract",
 ) -> Union[float, Sequence[float]]:
-    """
-    Applies a penalty to the loss based on the number of trainable parameters in the model.
-
-    Logic:
-        -> Count model parameters
-        -> Multiply by penalty factor
-        -> Add or subtract penalty from original loss
-
-    Args:
-        loss (float | Sequence[float]): Loss value(s) to penalize.
-        model (tf.keras.Model): Keras model.
-        params_penalty_factor (float): Scaling factor for parameter penalty (default: 1e-9).
-        operation (Literal["add", "subtract"]): Whether to add or subtract the penalty.
-
-    Returns:
-        float | list[float]: Adjusted loss value(s).
-
-    Raises:
-        ValueError: If operation is not one of "add" or "subtract".
-
-    Example:
-        penalized = compute_params_penalized_loss(val_loss, model, 1e-8, "subtract")
-    """
     # Validate operation type
     if operation not in ("add", "subtract"):
         raise ValueError("`operation` must be either 'add' or 'subtract'.")
