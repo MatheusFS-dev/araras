@@ -6,6 +6,7 @@ import numpy as np
 
 from .analyze import PLOT_CFG, save_data_for_latex
 
+
 def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
     """
     Generate and save Spearman correlation heatmap for numeric parameters and loss.
@@ -36,38 +37,53 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     )
 
     # ———————————————————————— Complete correlation matrix ——————————————————————— #
-    fig, ax = plt.subplots(
-        figsize=(len(cols) * PLOT_CFG.heatmap_cell + 1, len(cols) * PLOT_CFG.heatmap_cell + 1)
-    )
+    # Calculate dynamic figure size based on content
+    max_label_length = max(len(str(col)) for col in cols)
+    base_size = len(cols) * PLOT_CFG.heatmap_cell + 1
+    # Add extra space for rotated labels and colorbar
+    fig_width = base_size + max(2, max_label_length * 0.08)
+    fig_height = base_size + 1.5
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     # Create heatmap with correlation values mapped to colors (-1 to +1 range)
     im = ax.imshow(corr, vmin=-1, vmax=1, cmap="coolwarm")
 
-    cols = [col if col != "loss" else "Study Value" for col in cols]
+    # Replace 'loss' with 'Study Value' for display
+    display_cols = [col if col != "loss" else "Study Value" for col in cols]
 
     # Set axis labels to parameter names
-    ax.set_xticks(range(len(cols)))
-    ax.set_yticks(range(len(cols)))
+    ax.set_xticks(range(len(display_cols)))
+    ax.set_yticks(range(len(display_cols)))
     ax.set_xticklabels(
-        cols,
+        display_cols,
         rotation=45,
         ha="right",
         fontsize=PLOT_CFG.x_tick_fs,
-    )  # Rotate x-labels for readability
-    ax.set_yticklabels(cols, fontsize=PLOT_CFG.y_tick_fs)
+    )
+    ax.set_yticklabels(display_cols, fontsize=PLOT_CFG.y_tick_fs)
 
     # Add correlation values as text on each cell
-    for i in range(len(cols)):
-        for j in range(len(cols)):
+    for i in range(len(display_cols)):
+        for j in range(len(display_cols)):
             ax.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center")
 
-    # Add colorbar to show correlation scale
-    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
-    plt.title(PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)  # Descriptive title
-    plt.tight_layout()  # Adjust layout to prevent label cutoff
-    # Save with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"))
-    plt.close()  # Close figure to free memory
+    # Add colorbar with proper spacing
+    cbar = fig.colorbar(im, ax=ax, fraction=0.046, pad=0.08, shrink=0.8)
+    cbar.ax.tick_params(labelsize=PLOT_CFG.y_tick_fs)
+
+    plt.title(
+        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad + 10, fontsize=PLOT_CFG.standalone_title_fs
+    )
+
+    # Use subplots_adjust for precise control over margins
+    plt.subplots_adjust(left=0.15, bottom=0.2, right=0.85, top=0.9)
+
+    # Save with bbox_inches='tight' to capture all elements
+    fig.savefig(
+        os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight", pad_inches=0.3
+    )
+    plt.close()
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
     # Extract correlations between each parameter and loss function only
@@ -83,13 +99,14 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         dirs["data_correlations"],
     )
 
-    # Create figure for parameter-loss correlation bar chart
-    fig, ax = plt.subplots(
-        figsize=(
-            max(PLOT_CFG.corr_bar_min_width, len(numeric_cols) * PLOT_CFG.corr_bar_scale),
-            PLOT_CFG.box_subplot_height,
-        )
+    # Dynamic figure sizing based on parameter count and name length
+    max_param_length = (
+        max(len(str(param)) for param in param_loss_corr.index) if param_loss_corr.index.size > 0 else 10
     )
+    fig_width = max(PLOT_CFG.corr_bar_min_width, len(numeric_cols) * PLOT_CFG.corr_bar_scale + 2)
+    fig_height = max(PLOT_CFG.box_subplot_height, len(numeric_cols) * 0.4 + 3)
+
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
     # Create color map based on correlation values (red for negative, blue for positive)
     colors = ["red" if x < 0 else "blue" for x in param_loss_corr.values]
@@ -140,11 +157,12 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.axvline(x=-0.3, color="gray", linestyle="--", linewidth=0.6, alpha=0.6)
 
     # Set axis labels and title
-    ax.set_xlabel(PLOT_CFG.param_corr_xlabel)
-    ax.set_ylabel(PLOT_CFG.param_corr_ylabel)
+    ax.set_xlabel(PLOT_CFG.param_corr_xlabel, fontsize=PLOT_CFG.standalone_label_fs)
+    ax.set_ylabel(PLOT_CFG.param_corr_ylabel, fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_title(
         PLOT_CFG.param_corr_title,
-        pad=PLOT_CFG.title_pad,
+        pad=PLOT_CFG.title_pad + 5,
+        fontsize=PLOT_CFG.standalone_title_fs,
     )
 
     # Set x-axis limits with padding for better visualization
@@ -157,11 +175,12 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Invert y-axis to show most correlated parameters at top
     ax.invert_yaxis()
 
-    # Adjust layout to prevent label cutoff
-    plt.tight_layout()
+    # Use subplots_adjust for better control over margins
+    left_margin = max(0.2, max_param_length * 0.012)  # Dynamic left margin based on label length
+    plt.subplots_adjust(left=left_margin, bottom=0.12, right=0.95, top=0.9)
 
-    # Save parameter-loss correlation bar chart with high resolution
-    fig.savefig(os.path.join(dirs["figs"], "params_study_value_correlations.pdf"))
-    plt.close()  # Close figure to free memory
-
-
+    # Save parameter-loss correlation bar chart with better bounding box handling
+    fig.savefig(
+        os.path.join(dirs["figs"], "params_study_value_correlations.pdf"), bbox_inches="tight", pad_inches=0.2
+    )
+    plt.close()

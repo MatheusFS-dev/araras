@@ -2,6 +2,7 @@ import os
 from typing import Dict
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
+from matplotlib.patches import Patch
 from datetime import timedelta
 import numpy as np
 import optuna
@@ -101,8 +102,6 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
             prev_date = date_str
     ax.set_xticklabels(labels)
     # fig.autofmt_xdate()
-
-    from matplotlib.patches import Patch
 
     legend_elems = [
         Patch(facecolor="green", label="COMPLETE"),

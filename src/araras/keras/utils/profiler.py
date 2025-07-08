@@ -54,6 +54,7 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     # 3) Grab the concrete graph and profile it
     concrete = _forward_fn.get_concrete_function()
     opts = ProfileOptionBuilder.float_operation()
+    opts["output"] = "none" # Supress report
     info = profile(concrete.graph, options=opts)
     return info.total_float_ops
 
