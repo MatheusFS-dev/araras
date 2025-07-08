@@ -125,6 +125,12 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.set_yticks(range(len(param_loss_corr)))
     ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.y_tick_fs)
 
+    # Add labels with 3 decimal places for each bar
+    for i, (bar, value) in enumerate(zip(bars, param_loss_corr.values)):
+        # Position label at the end of the bar
+        x_pos = value + (0.02 if value >= 0 else -0.02)
+        ha = "left" if value >= 0 else "right"
+        ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.y_tick_fs)
 
     # Add vertical line at x=0 for reference
     ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8, alpha=0.8)

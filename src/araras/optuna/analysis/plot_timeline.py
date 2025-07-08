@@ -3,12 +3,19 @@ from typing import Dict
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch
-from matplotlib.ticker import FixedLocator
 from datetime import timedelta
 import numpy as np
 import optuna
 
 from .analyze import PLOT_CFG
+
+import warnings
+
+warnings.filterwarnings(
+    "ignore",
+    message=r"set_ticklabels\(\) should only be used with a fixed number of ticks.*",
+    category=UserWarning,
+)
 
 
 def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
@@ -101,9 +108,6 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
         else:
             labels.append(time_str + "\n" + date_str)
             prev_date = date_str
-    ticks = ax.get_xticks()
-
-    ax.xaxis.set_major_locator(mdates.FixedLocator(ticks))
     ax.set_xticklabels(labels)
     # fig.autofmt_xdate()
 
