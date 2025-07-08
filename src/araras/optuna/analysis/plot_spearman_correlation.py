@@ -136,7 +136,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         # Position label closer to the end of the bar with reduced margin
         x_pos = value + (0.003 if value >= 0 else -0.003)
         ha = "left" if value >= 0 else "right"
-        ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.y_tick_fs)
+        ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.bar_value_fs)
 
     # Add vertical line at x=0 for reference
     ax.axvline(x=0, color="black", linestyle="-", linewidth=0.8, alpha=0.8)
