@@ -93,7 +93,7 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     labels = []
     prev_date = None
     for d in tick_dates:
-        time_str = d.strftime("%H") + " H"
+        time_str = d.strftime("%H:%M")
         date_str = d.strftime("%b %d, %Y")
         if prev_date == date_str:
             labels.append(time_str)
