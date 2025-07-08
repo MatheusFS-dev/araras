@@ -10,6 +10,10 @@ import optuna
 from optuna.terminator import BaseImprovementEvaluator, RegretBoundEvaluator
 from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
 
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 class ImprovementStagnationCallback:
     """Stop a study when the terminator improvement variance plateaus.
@@ -72,17 +76,13 @@ class ImprovementStagnationCallback:
         self._improvements.append(improvement)
 
         if len(self._completed_trials) < max(self.min_n_trials, self.window_size):
+            logger.warning("Not enough trials completed yet to check for stagnation.")
             return
 
         recent_improvements = self._improvements[-self.window_size :]
         variance = float(np.var(recent_improvements))
         
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.setLevel(logging.INFO)
-        # then inside __call__ replace print(...) with:
         logger.info(f"Study {study.study_name} – ... Variance: {variance:.3e}")
-        
 
         if variance <= self.variance_threshold:
             print(
