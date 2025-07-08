@@ -73,7 +73,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     cbar.ax.tick_params(labelsize=PLOT_CFG.y_tick_fs)
 
     plt.title(
-        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad + 10, fontsize=PLOT_CFG.standalone_title_fs
+        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs
     )
 
     # Use subplots_adjust for precise control over margins
@@ -144,7 +144,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.set_ylabel(PLOT_CFG.param_corr_ylabel, fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_title(
         PLOT_CFG.param_corr_title,
-        pad=PLOT_CFG.title_pad + 5,
+        pad=PLOT_CFG.title_pad,
         fontsize=PLOT_CFG.standalone_title_fs,
     )
 
