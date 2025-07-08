@@ -85,3 +85,39 @@ def punish_model_params(
             for t in target
         ]
     return target + penalty if direction == "minimize" else target - penalty
+
+
+# Function to facilitate the use of both penalties together
+def punish_model(
+    target: Union[float, Sequence[float]],
+    model: tf.keras.Model,
+    type: Literal["flops", "params"] = "flops",
+    flops_penalty_factor: float = 1e-10,
+    params_penalty_factor: float = 1e-9,
+    direction: Literal["minimize", "maximize"] = "minimize",
+) -> Union[float, Sequence[float]]:
+    """Apply both FLOPs and parameter penalties to an objective.
+
+    Args:
+        target: Base objective value (scalar or list of scalars).
+        model: Model whose complexity will be penalised.
+        type: Type of penalty to apply, either "flops" or "params".
+        flops_penalty_factor: Factor for FLOPs penalty.
+        params_penalty_factor: Factor for parameters penalty.
+        direction: Whether the objective should be minimised or maximised.
+
+    Returns:
+        The penalised objective value or list of values.
+    """
+    if type == "flops":
+        target = punish_model_flops(
+            target, model, flops_penalty_factor, direction
+        )
+    elif type == "params":
+        target = punish_model_params(
+            target, model, params_penalty_factor, direction
+        )
+    else:
+        raise ValueError("`type` must be either 'flops' or 'params'.")    
+    
+    return target
