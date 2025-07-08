@@ -200,8 +200,9 @@ def save_top_k_trials(
 
         # Extract extra attributes
         extra_values = {}
-        for attr in extra_attrs:
-            extra_values[attr] = trial.user_attrs.get(attr, None)
+        if extra_attrs is not None:
+            for attr in extra_attrs:
+                extra_values[attr] = trial.user_attrs.get(attr, None)
 
         # Save trial parameters to file manually
         filepath = os.path.join(args_dir, f"top_{rank + 1}_trial.txt")
