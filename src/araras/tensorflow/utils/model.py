@@ -133,7 +133,6 @@ def get_model_usage_stats(
             except Exception as e:
                 raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
 
-        print(f"Estimating energy for {n_trials} trials on {device.upper()}...")
         for i in range(n_trials):
             if verbose:
                 progress = (i + 1) / n_trials
