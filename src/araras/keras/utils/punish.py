@@ -91,7 +91,7 @@ def punish_model_params(
 def punish_model(
     target: Union[float, Sequence[float]],
     model: tf.keras.Model,
-    type: Literal["flops", "params"] = "flops",
+    type: Literal["flops", "params", None] = None,
     flops_penalty_factor: float = 1e-10,
     params_penalty_factor: float = 1e-9,
     direction: Literal["minimize", "maximize"] = "minimize",
@@ -109,6 +109,10 @@ def punish_model(
     Returns:
         The penalised objective value or list of values.
     """
+    if type is None:
+        # If no type is specified, return the target unchanged
+        return target
+    
     if type == "flops":
         target = punish_model_flops(
             target, model, flops_penalty_factor, direction
@@ -118,6 +122,6 @@ def punish_model(
             target, model, params_penalty_factor, direction
         )
     else:
-        raise ValueError("`type` must be either 'flops' or 'params'.")    
-    
+        raise ValueError("`type` must be either 'flops', 'params' or None.")
+
     return target
