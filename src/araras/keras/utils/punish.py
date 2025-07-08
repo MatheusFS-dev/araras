@@ -18,15 +18,12 @@ from araras.keras.utils.profiler import get_flops
 from typing import Literal, Sequence, Union
 
 
-LossOrList = Union[float, Sequence[float]]
-
-
 def compute_flops_penalized_loss(
-    loss: LossOrList,
+    loss: Union[float, Sequence[float]],
     model: tf.keras.Model,
     flops_penalty_factor: float = 1e-10,
     operation: Literal["add", "subtract"] = "subtract",
-) -> LossOrList:
+) -> Union[float, Sequence[float]]:
     """
     Applies a penalty to the loss based on the number of FLOPs used by the model.
 
@@ -71,11 +68,11 @@ def compute_flops_penalized_loss(
 
 
 def compute_params_penalized_loss(
-    loss: LossOrList,
+    loss: Union[float, Sequence[float]],
     model: tf.keras.Model,
     params_penalty_factor: float = 1e-9,
     operation: Literal["add", "subtract"] = "subtract",
-) -> LossOrList:
+) -> Union[float, Sequence[float]]:
     """
     Applies a penalty to the loss based on the number of trainable parameters in the model.
 
