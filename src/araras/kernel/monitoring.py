@@ -47,7 +47,7 @@ with open(r"{pid_file}", "w") as f:
 
 def send_crash_signal(pid, title, restart_count=0):
     \"\"\"Send crash signal for restart manager to handle.\"\"\"
-    timestamp = time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())
+    timestamp = time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime())
     print(f"CRASH DETECTED: {{title}} (PID {{pid}}) at {{timestamp}}")
     
     with open(r"{restart_file}", "w") as f:
@@ -157,7 +157,7 @@ def print_monitoring_config_summary(
 
 def print_process_status(message: str, pid: Optional[int] = None, runtime: Optional[float] = None) -> None:
     """Print process status messages with consistent formatting."""
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     if pid and runtime is not None:
         print(f"[{timestamp}] {message} (PID {pid}, runtime: {runtime:.1f}s)")
     elif pid:
@@ -273,7 +273,7 @@ class ConsolidatedEmailManager:
             return
 
         try:
-            timestamp = time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+            timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
             title = process_data.get("title", "Unknown Process")
 
             # Generate subject and content based on status type
