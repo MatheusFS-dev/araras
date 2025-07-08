@@ -15,15 +15,18 @@ Example usage:
 
 import tensorflow as tf
 from araras.keras.utils.profiler import get_flops
-from typing import Literal
+from typing import Literal, Sequence, Union
+
+
+LossOrList = Union[float, Sequence[float]]
 
 
 def compute_flops_penalized_loss(
-    loss: float,
+    loss: LossOrList,
     model: tf.keras.Model,
     flops_penalty_factor: float = 1e-10,
     operation: Literal["add", "subtract"] = "subtract",
-) -> float:
+) -> LossOrList:
     """
     Applies a penalty to the loss based on the number of FLOPs used by the model.
 
@@ -35,13 +38,13 @@ def compute_flops_penalized_loss(
         -> Return penalized loss
 
     Args:
-        loss (float): Original scalar loss (e.g., validation loss).
+        loss (float | Sequence[float]): Loss value(s) to penalize.
         model (tf.keras.Model): Keras model to be profiled.
         flops_penalty_factor (float): Scaling factor for FLOP penalty (default: 1e-10).
         operation (Literal["add", "subtract"]): Whether to add or subtract the penalty.
 
     Returns:
-        float: Penalized loss value.
+        float | list[float]: Penalized loss value(s).
 
     Raises:
         ValueError: If input shape is missing or if operation is invalid.
@@ -55,17 +58,24 @@ def compute_flops_penalized_loss(
 
     total_flops = get_flops(model)
 
-    # Compute penalty and return adjusted loss
+    # Compute penalty
     penalty = flops_penalty_factor * total_flops
+
+    # Apply penalty to single value or list
+    if isinstance(loss, (list, tuple)):
+        return [
+            l + penalty if operation == "add" else l - penalty
+            for l in loss
+        ]
     return loss + penalty if operation == "add" else loss - penalty
 
 
 def compute_params_penalized_loss(
-    loss: float,
+    loss: LossOrList,
     model: tf.keras.Model,
     params_penalty_factor: float = 1e-9,
     operation: Literal["add", "subtract"] = "subtract",
-) -> float:
+) -> LossOrList:
     """
     Applies a penalty to the loss based on the number of trainable parameters in the model.
 
@@ -75,13 +85,13 @@ def compute_params_penalized_loss(
         -> Add or subtract penalty from original loss
 
     Args:
-        loss (float): Original scalar loss (e.g., validation loss).
+        loss (float | Sequence[float]): Loss value(s) to penalize.
         model (tf.keras.Model): Keras model.
         params_penalty_factor (float): Scaling factor for parameter penalty (default: 1e-9).
         operation (Literal["add", "subtract"]): Whether to add or subtract the penalty.
 
     Returns:
-        float: Adjusted loss after penalty.
+        float | list[float]: Adjusted loss value(s).
 
     Raises:
         ValueError: If operation is not one of "add" or "subtract".
@@ -96,6 +106,13 @@ def compute_params_penalized_loss(
     # Count total trainable + non-trainable parameters
     total_params = model.count_params()
 
-    # Compute penalty and return adjusted loss
+    # Compute penalty
     penalty = params_penalty_factor * total_params
+
+    # Apply penalty to single value or list
+    if isinstance(loss, (list, tuple)):
+        return [
+            l + penalty if operation == "add" else l - penalty
+            for l in loss
+        ]
     return loss + penalty if operation == "add" else loss - penalty
