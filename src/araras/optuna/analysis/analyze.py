@@ -44,6 +44,7 @@ class PlotConfig:
     suptitle_fs: int = 24
     annotation_fs: int = 12
     bar_value_fs: int = 9
+    heatmap_value_fs: int = 8
     x_tick_fs: int = 12
     y_tick_fs: int = 12
 

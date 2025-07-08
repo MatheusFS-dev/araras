@@ -59,7 +59,14 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Add correlation values as text on each cell
     for i in range(len(cols)):
         for j in range(len(cols)):
-            ax.text(j, i, f"{corr.iloc[i, j]:.2f}", ha="center", va="center")
+            ax.text(
+                j,
+                i,
+                f"{corr.iloc[i, j]:.2f}",
+                ha="center",
+                va="center",
+                fontsize=PLOT_CFG.heatmap_value_fs,
+            )
 
     # Add colorbar to show correlation scale
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
