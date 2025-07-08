@@ -40,25 +40,30 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
         dirs["data_importances"],
     )
 
-    # Create bar chart visualization
+    # Create horizontal bar chart visualization
     plt.figure(figsize=PLOT_CFG.standalone_size)
     display_names = [get_param_display_name(p) for p in df_imp["Parameter"]]
-    bars = plt.bar(display_names, df_imp["Importance"])
-    plt.xticks(rotation=45, ha="right", fontsize=PLOT_CFG.x_tick_fs)
-    plt.ylabel(
+    bars = plt.barh(range(len(df_imp)), df_imp["Importance"])
+    plt.yticks(range(len(df_imp)), display_names, fontsize=PLOT_CFG.y_tick_fs)
+    plt.xlabel(
         PLOT_CFG.importance_ylabel, fontsize=PLOT_CFG.standalone_label_fs
-    )  # Importance score on y-axis
-    plt.title(PLOT_CFG.importance_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
-    for bar in bars:
-        height = bar.get_height()
+    )  # Importance score on x-axis
+    plt.title(
+        PLOT_CFG.importance_title,
+        pad=PLOT_CFG.title_pad,
+        fontsize=PLOT_CFG.standalone_title_fs,
+    )
+    for bar, importance in zip(bars, df_imp["Importance"]):
+        width = bar.get_width()
         plt.text(
-            bar.get_x() + bar.get_width() / 2.0,
-            height,
-            f"{height:.3f}",
-            ha="center",
-            va="bottom",
+            width,
+            bar.get_y() + bar.get_height() / 2.0,
+            f"{importance:.3f}",
+            ha="left",
+            va="center",
             fontsize=PLOT_CFG.bar_value_fs,
         )
+    plt.gca().invert_yaxis()  # Highest importance at top
     plt.tight_layout()
     # Save with high resolution
     plt.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
