@@ -43,7 +43,7 @@ class PlotConfig:
     legend_fs: int = 12
     suptitle_fs: int = 24
     annotation_fs: int = 12
-    bar_value_fs: int = 9
+    bar_value_fs: int = 12
     bar_value_pad: float = 0.2
     bar_value_offset: float = 0.01
     heatmap_value_fs: int = 8
