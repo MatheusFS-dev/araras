@@ -71,7 +71,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Add colorbar to show correlation scale
     fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
     plt.title(PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)  # Descriptive title
-    plt.tight_layout()  # Adjust layout to prevent label cutoff
+    # plt.tight_layout()  # Adjust layout to prevent label cutoff
     # Save with high resolution
     fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"))
     plt.close()  # Close figure to free memory
