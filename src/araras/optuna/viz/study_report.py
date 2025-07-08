@@ -106,7 +106,31 @@ class StudyReport:
 
         self.best_metrics: Dict[str, float] = {}
 
-        self._fig: Optional[go.Figure] = None
+        self._fig: Optional[go.FigureWidget] = None
+        self._impr_trace: Optional[go.Scatter] = None
+        self._error_trace: Optional[go.Scatter] = None
+        self._metric_traces: Dict[str, go.Scatter] = {}
+        self._rows: int = 1 + len(self.metric_history)
+
+    # ------------------------------------------------------------------
+    def _init_fig(self) -> None:
+        """Initialize the Plotly FigureWidget and traces."""
+        fig = make_subplots(rows=self._rows, cols=1, shared_xaxes=True)
+        self._fig = go.FigureWidget(fig)
+
+        # Improvement and error traces
+        self._impr_trace = self._fig.add_scatter(row=1, col=1, name="Improvement")
+        self._error_trace = self._fig.add_scatter(row=1, col=1, name="Error")
+
+        # Metric traces
+        row_idx = 2
+        for name in self.metric_history:
+            self._metric_traces[name] = self._fig.add_scatter(row=row_idx, col=1, name=name)
+            row_idx += 1
+
+        self._fig.update_xaxes(title_text="Trial", row=self._rows, col=1)
+        self._fig.update_layout(height=300 * self._rows, showlegend=True)
+        self._fig.show(renderer="browser")
 
     # ------------------------------------------------------------------
     def update(
@@ -149,42 +173,31 @@ class StudyReport:
             ):
                 self.best_metrics["improvement"] = best_impr
 
-        # ------------------------------------------------------------------
-        # Build figure
-        rows = 1 + len(self.metric_history)
-        fig = make_subplots(rows=rows, cols=1, shared_xaxes=True)
+        if self._fig is None:
+            self._rows = 1 + len(self.metric_history)
+            self._init_fig()
 
+        # Update improvement trace
         x_impr = list(range(1, len(improvements) + 1))
-        if x_impr:
-            fig.add_trace(
-                go.Scatter(x=x_impr, y=improvements, mode="lines+markers", name="Improvement"),
-                row=1,
-                col=1,
-            )
-            fig.add_trace(
-                go.Scatter(x=x_impr, y=errors, mode="lines+markers", name="Error"),
-                row=1,
-                col=1,
-            )
-            fig.update_yaxes(title_text="Improvement", row=1, col=1, autorange=True)
 
-        row_idx = 2
-        for name, values in self.metric_history.items():
-            x_vals = list(range(1, len(values) + 1))
-            fig.add_trace(
-                go.Scatter(x=x_vals, y=values, mode="lines+markers", name=name),
-                row=row_idx,
-                col=1,
-            )
-            fig.update_yaxes(title_text=name, row=row_idx, col=1, autorange=True)
-            row_idx += 1
+        with self._fig.batch_update():
+            if self._impr_trace is not None:
+                self._impr_trace.x = x_impr
+                self._impr_trace.y = improvements
+            if self._error_trace is not None:
+                self._error_trace.x = x_impr
+                self._error_trace.y = errors
 
-        fig.update_xaxes(title_text="Trial", row=rows, col=1)
-        max_len = max([len(improvements)] + [len(v) for v in self.metric_history.values()] + [1])
-        fig.update_xaxes(range=[1, max_len], row=rows, col=1)
-        fig.update_layout(height=300 * rows, showlegend=True)
+            # Update metric traces
+            for idx, (name, values) in enumerate(self.metric_history.items(), start=2):
+                x_vals = list(range(1, len(values) + 1))
+                trace = self._metric_traces.get(name)
+                if trace is not None:
+                    trace.x = x_vals
+                    trace.y = values
 
-        fig.show(renderer="browser")
+            max_len = max([len(improvements)] + [len(v) for v in self.metric_history.values()] + [1])
+            self._fig.update_xaxes(range=[1, max_len], row=self._rows, col=1)
 
         # ------------------------------------------------------------------
         # Print summary
