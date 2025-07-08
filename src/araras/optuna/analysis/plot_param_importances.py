@@ -7,6 +7,7 @@ from optuna.importance import get_param_importances
 
 from .analyze import PLOT_CFG, save_data_for_latex, get_param_display_name
 
+
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     """
     Generate and save parameter importance analysis.
@@ -69,6 +70,9 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
                 pad=PLOT_CFG.bar_value_pad,
             ),
         )
+    xmax = df_imp["Importance"].max()
+    pad = max(0.05, xmax * 0.1)
+    plt.xlim(0, xmax + pad)
     plt.gca().invert_yaxis()  # Highest importance at top
     plt.tight_layout()
     # Save with high resolution
