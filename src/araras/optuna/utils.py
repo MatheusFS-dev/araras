@@ -21,13 +21,7 @@ from araras.utils.misc import format_number, format_bytes, format_scientific, fo
 
 
 def supress_optuna_warnings() -> None:
-    """Suppress Optuna info logs and experimental warnings."""
-
-    # Reduce Optuna logging noise
-    try:
-        optuna.logging.set_verbosity(optuna.logging.WARNING)
-    except Exception:
-        pass
+    """Suppress only Optuna experimental warnings."""
 
     # Attempt to obtain ExperimentalWarning classes from possible locations
     warning_classes = []
@@ -39,11 +33,8 @@ def supress_optuna_warnings() -> None:
                 warning_classes.append(warning_cls)
 
     # Filter warnings emitted by Optuna experimental features
-    if warning_classes:
-        for cls in warning_classes:
-            warnings.filterwarnings("ignore", category=cls)
-    else:
-        warnings.filterwarnings("ignore", message=".*experimental.*", category=UserWarning)
+    for cls in warning_classes:
+        warnings.filterwarnings("ignore", category=cls)
 
 
 def get_remaining_trials(study: optuna.Study, num_trials: int) -> list[optuna.trial.FrozenTrial]:
