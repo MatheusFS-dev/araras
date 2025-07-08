@@ -127,13 +127,27 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
 
     # Add correlation values as text on each bar
     for i, (param, corr_val) in enumerate(param_loss_corr.items()):
-        # Position text inside bar for better visibility
-        text_x = corr_val * 0.5 if abs(corr_val) > 0.1 else corr_val + 0.05 * (1 if corr_val >= 0 else -1)
+        # Determine text position based on bar direction and configuration
+        if corr_val >= 0:
+            # Positive bars: place text to the right of the bar
+            text_x = corr_val + PLOT_CFG.bar_value_offset
+            ha = "left"
+        else:
+            # Negative bars: place text to the left of the bar
+            text_x = corr_val - PLOT_CFG.bar_value_offset
+            ha = "right"
+
+        # Add padding to ensure text doesn't touch the bar
+        if abs(corr_val) < PLOT_CFG.bar_value_pad:
+            # For very small bars, place text outside with minimum padding
+            text_x = PLOT_CFG.bar_value_pad if corr_val >= 0 else -PLOT_CFG.bar_value_pad
+            ha = "left" if corr_val >= 0 else "right"
+
         ax.text(
             text_x,
             i,
             f"{corr_val:.3f}",
-            ha="center",
+            ha=ha,
             va="center",
             fontweight="bold",
             fontsize=PLOT_CFG.bar_value_fs,

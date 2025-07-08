@@ -71,8 +71,7 @@ class PlotConfig:
     importance_title: str = "Hyperparameter Importances"
     spearman_heatmap_title: str = "Spearman Correlation"
     param_corr_title: str = (
-        "Parameter-Study Value Correlations\n"
-        "(Red: Negative correlation = Lower values improve performance)"
+        "Parameter-Study Value Correlations"
     )
     param_corr_xlabel: str = "Spearman Correlation with Study Value"
     param_corr_ylabel: str = "Parameters"
