@@ -125,20 +125,17 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.set_yticks(range(len(param_loss_corr)))
     ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.y_tick_fs)
 
-    # Add correlation values as text on each bar
+    pad = PLOT_CFG.bar_value_pad
+    offset = PLOT_CFG.bar_value_offset
     for i, (param, corr_val) in enumerate(param_loss_corr.items()):
-        # Position text beside the bar, but within the plot region
         if corr_val >= 0:
-            # Positive bars: place text to the right of the bar start with padding
-            text_x = PLOT_CFG.bar_value_pad
+            # positive bar: place label to the right of bar end
+            text_x = corr_val + pad + offset
             ha = "left"
         else:
-            # Negative bars: place text to the left of the bar end with padding
-            text_x = corr_val + PLOT_CFG.bar_value_pad
-            ha = "left"
-
-        # Apply additional offset if needed
-        text_x += PLOT_CFG.bar_value_offset
+            # negative bar: place label to the left of bar end
+            text_x = corr_val - pad - offset
+            ha = "right"
 
         ax.text(
             text_x,
