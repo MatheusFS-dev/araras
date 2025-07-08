@@ -77,13 +77,12 @@ class ImprovementStagnationCallback:
         recent_improvements = self._improvements[-self.window_size :]
         variance = float(np.var(recent_improvements))
         
-        # Print a summary for debugging purposes
-        print(
-            f"\033[34m\nStudy {study.study_name} - "
-            f"Completed Trials: {len(self._completed_trials)}, "
-            f"Recent Improvements: {recent_improvements}, "
-            f"Variance: {variance}\033[0m\n"
-        )
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.setLevel(logging.INFO)
+        # then inside __call__ replace print(...) with:
+        logger.info(f"Study {study.study_name} – ... Variance: {variance:.3e}")
+        
 
         if variance <= self.variance_threshold:
             print(
