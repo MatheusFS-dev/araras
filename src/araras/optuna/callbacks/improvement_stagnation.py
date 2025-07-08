@@ -82,7 +82,7 @@ class ImprovementStagnationCallback:
         recent_improvements = self._improvements[-self.window_size :]
         variance = float(np.var(recent_improvements))
         
-        logger.info(f"Study {study.study_name} – ... Variance: {variance:.3e}")
+        logger.warning(f"Study {study.study_name} – ... Variance: {variance:.3e}")
 
         if variance <= self.variance_threshold:
             print(
