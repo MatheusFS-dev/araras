@@ -9,7 +9,7 @@ from araras.tensorflow.utils.model import get_model_usage_stats
 def get_model_stats(
     trial: optuna.Trial,
     model: tf.keras.Model,
-    policy: tf.keras.DTypePolicy,
+    bits_per_param: int,
     batch_size: int,
     n_trials: int = 10000,
 ) -> Dict[str, float]:
@@ -26,7 +26,6 @@ def get_model_stats(
         Dict[str, float]: A dictionary containing model statistics
     """
     params = model.count_params()
-    bits_per_param = tf.dtypes.as_dtype(policy.variable_dtype).size
     peak_mem_usage, inference_time = get_memory_and_time(model, batch_size=batch_size, device="GPU:0")
     _, avg_power, avg_energy = get_model_usage_stats(model, device="gpu", n_trials=n_trials)
 
