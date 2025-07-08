@@ -42,6 +42,7 @@ class ImprovementStagnationCallback:
         window_size: int = 5,
         variance_threshold: float = 1e-10,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
+        verbose: bool = False,
     ) -> None:
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
@@ -51,6 +52,7 @@ class ImprovementStagnationCallback:
         self.improvement_evaluator = improvement_evaluator
         self._completed_trials: List[optuna.trial.FrozenTrial] = []
         self._improvements: List[float] = []
+        self.verbose = verbose
 
     @property
     def variance_threshold(self) -> float:
@@ -76,18 +78,25 @@ class ImprovementStagnationCallback:
         self._improvements.append(improvement)
 
         if len(self._completed_trials) < max(self.min_n_trials, self.window_size):
-            logger.warning("Not enough trials completed yet to check for stagnation.")
+            if self.verbose:
+                logger.warning(
+                    "[Improvement Stagnation Callback] Not enough trials completed yet to check for stagnation."
+                )
             return
 
         recent_improvements = self._improvements[-self.window_size :]
         variance = float(np.var(recent_improvements))
-        
-        logger.warning(f"Study {study.study_name} – ... Variance: {variance:.3e}")
+
+        if self.verbose:
+            logger.warning(
+                f"[Improvement Stagnation Callback] Study {study.study_name} – "
+                f"Variance of recent improvements: {variance:.3e}"
+            )
 
         if variance <= self.variance_threshold:
-            print(
-                f"\033[33m\nStopping study {study.study_name} due to stagnation "
+            logger.warning(
+                f"\033[33m\n[Improvement Stagnation Callback] Stopping study {study.study_name} due to stagnation "
                 f"(variance={variance:.2e} < threshold={self.variance_threshold:.2e})\033[0m\n"
             )
-            
+
             study.stop()
