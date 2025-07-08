@@ -19,3 +19,7 @@ try:
         )
 except Exception:
     pass
+
+
+from araras.optuna.utils import supress_optuna_warnings
+supress_optuna_warnings()
