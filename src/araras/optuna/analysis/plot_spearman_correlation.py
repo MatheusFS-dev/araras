@@ -73,7 +73,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     cbar.ax.tick_params(labelsize=PLOT_CFG.y_tick_fs)
 
     plt.title(
-        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs
+        PLOT_CFG.spearman_heatmap_title, pad=PLOT_CFG.title_pad + 10, fontsize=PLOT_CFG.standalone_title_fs
     )
 
     # Use subplots_adjust for precise control over margins
@@ -125,10 +125,16 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.set_yticks(range(len(param_loss_corr)))
     ax.set_yticklabels(param_loss_corr.index, fontsize=PLOT_CFG.y_tick_fs)
 
+    # Calculate expanded x-axis limits to accommodate labels
+    max_abs_corr = max(abs(param_loss_corr.min()), abs(param_loss_corr.max()))
+    # Expand limits by 30% to ensure labels fit inside plot area
+    x_limit = max_abs_corr * 1.3
+    ax.set_xlim(-x_limit, x_limit)
+
     # Add labels with 3 decimal places for each bar
     for i, (bar, value) in enumerate(zip(bars, param_loss_corr.values)):
-        # Position label at the end of the bar
-        x_pos = value + (0.02 if value >= 0 else -0.02)
+        # Position label closer to the end of the bar with reduced margin
+        x_pos = value + (0.01 if value >= 0 else -0.01)
         ha = "left" if value >= 0 else "right"
         ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.y_tick_fs)
 
@@ -144,13 +150,9 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     ax.set_ylabel(PLOT_CFG.param_corr_ylabel, fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_title(
         PLOT_CFG.param_corr_title,
-        pad=PLOT_CFG.title_pad,
+        pad=PLOT_CFG.title_pad + 5,
         fontsize=PLOT_CFG.standalone_title_fs,
     )
-
-    # Set x-axis limits with padding for better visualization
-    max_abs_corr = max(abs(param_loss_corr.min()), abs(param_loss_corr.max()))
-    ax.set_xlim(-max_abs_corr * 1.2, max_abs_corr * 1.2)
 
     # Add grid for better readability
     ax.grid(True, axis="x", alpha=0.3, linestyle="-", linewidth=0.5)
