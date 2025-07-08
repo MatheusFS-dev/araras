@@ -594,6 +594,7 @@ class FlagBasedRestartManager:
         "start_time",
         "last_process_start_time",
         "_last_restart_file",
+        "pid_history",
     )
 
     def __init__(
