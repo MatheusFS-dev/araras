@@ -134,7 +134,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     # Add labels with 3 decimal places for each bar
     for i, (bar, value) in enumerate(zip(bars, param_loss_corr.values)):
         # Position label closer to the end of the bar with reduced margin
-        x_pos = value + (0.001 if value >= 0 else -0.001)
+        x_pos = value + (0.003 if value >= 0 else -0.003)
         ha = "left" if value >= 0 else "right"
         ax.text(x_pos, i, f"{value:.3f}", ha=ha, va="center", fontsize=PLOT_CFG.y_tick_fs)
 
