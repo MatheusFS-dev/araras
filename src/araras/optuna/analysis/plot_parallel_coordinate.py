@@ -7,6 +7,7 @@ import numpy as np
 from .analyze import (
     PLOT_CFG,
     get_param_display_name,
+    draw_warning_box,
 )
 
 
@@ -17,13 +18,21 @@ def plot_parallel_coordinate(
 ) -> None:
     """Create a parallel coordinate plot for trials."""
     if not params:
-        print("No parameters available for parallel coordinate plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No parameters available for parallel coordinate plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'").rename(columns={'value': 'loss'})
     if df.empty:
-        print("No completed trials for parallel coordinate plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for parallel coordinate plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     cols = params + ["loss"]
@@ -74,14 +83,22 @@ def plot_parallel_coordinate(
     fig, ax = plt.subplots(
         figsize=(PLOT_CFG.numeric_subplot_size * len(cols), PLOT_CFG.box_subplot_height * 2)
     )
-    for idx, (_, row) in enumerate(norm.iterrows()):
-        ax.plot(
-            range(len(cols)),
-            row.values,
-            color=cmap(color_vals.iloc[idx] / color_vals.max()),
-            alpha=0.5,
-            marker="o",
-        )
+    try:
+        for idx, (_, row) in enumerate(norm.iterrows()):
+            ax.plot(
+                range(len(cols)),
+                row.values,
+                color=cmap(color_vals.iloc[idx] / color_vals.max()),
+                alpha=0.5,
+                marker="o",
+            )
+    except Exception as e:
+        draw_warning_box(ax, f"Could not generate plot: {e}")
+        ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        plt.close(fig)
+        return
 
     ax.set_xticks(range(len(cols)))
     labels = [get_param_display_name(c) if c != "loss" else PLOT_CFG.study_value_label for c in cols]

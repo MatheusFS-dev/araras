@@ -10,6 +10,7 @@ from .analyze import (
     get_param_display_name,
     save_data_for_latex,
     calculate_grid,
+    draw_warning_box,
 )
 
 def plot_parameter_boxplots(
@@ -139,6 +140,15 @@ def plot_parameter_boxplots(
             data = [df[col], best[col], worst[col]]
             labels = ["All trials", "Best trials", "Worst trials"]
 
+            if all(d.dropna().empty for d in data):
+                draw_warning_box(ax, f"No valid data for {display_name}")
+                ax.set_title(
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
+                    fontsize=PLOT_CFG.title_fs,
+                    pad=PLOT_CFG.title_pad,
+                )
+                continue
+
             # Save boxplot data for LaTeX (fixed version)
             save_boxplot_data_for_latex(col, df[col], best[col], worst[col], dirs["data_boxplots"])
 
@@ -215,6 +225,15 @@ def plot_parameter_boxplots(
         plt.savefig(save_path, bbox_inches="tight")
         plt.close(fig)
     else:
-        print("No numeric parameters found for boxplot analysis.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters found for boxplot analysis.")
+        ax.set_title(
+            "Numeric Parameters Boxplots Comparison",
+            fontsize=PLOT_CFG.standalone_title_fs,
+            pad=PLOT_CFG.title_pad,
+        )
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_numeric_boxplots.pdf"), bbox_inches="tight")
+        plt.close(fig)
 
 

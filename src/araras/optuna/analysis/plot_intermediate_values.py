@@ -6,6 +6,7 @@ import numpy as np
 
 from .analyze import (
     PLOT_CFG,
+    draw_warning_box,
 )
 
 
@@ -13,7 +14,11 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
     """Plot intermediate values reported during trials."""
     trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not trials:
-        print("No completed trials for intermediate values plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for intermediate values plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

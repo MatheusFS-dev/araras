@@ -12,6 +12,7 @@ from .analyze import (
     get_param_display_name,
     format_title,
     calculate_grid,
+    draw_warning_box,
 )
 
 
@@ -23,13 +24,21 @@ def plot_rank(
 ) -> None:
     """Plot parameter relations colored by rank."""
     if not params:
-        print("No parameters available for rank plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No parameters available for rank plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'").rename(columns={"value": "loss"})
     if df.empty:
-        print("No completed trials for rank plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for rank plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     # Separate numeric and categorical parameters
@@ -48,7 +57,11 @@ def plot_rank(
     # Only create pairs from numeric parameters for scatter plots
     pairs = list(combinations(numeric_params, 2))
     if not pairs:
-        print("Need at least two numeric parameters for rank plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "Need at least two numeric parameters for rank plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     loss_vals = df["loss"].replace([np.inf, -np.inf], np.nan)
@@ -83,27 +96,29 @@ def plot_rank(
         col = idx % n_cols
         ax = axes[row, col]
 
-        # Ensure data is numeric
-        x_data = pd.to_numeric(df[p1], errors="coerce")
-        y_data = pd.to_numeric(df[p2], errors="coerce")
+        try:
+            x_data = pd.to_numeric(df[p1], errors="coerce")
+            y_data = pd.to_numeric(df[p2], errors="coerce")
 
-        # Remove NaN values
-        valid_mask = ~(x_data.isna() | y_data.isna())
-        x_data = x_data[valid_mask]
-        y_data = y_data[valid_mask]
-        c_data = loss_vals[valid_mask]
+            valid_mask = ~(x_data.isna() | y_data.isna())
+            x_data = x_data[valid_mask]
+            y_data = y_data[valid_mask]
+            c_data = loss_vals[valid_mask]
 
-        sc = ax.scatter(
-            x_data,
-            y_data,
-            c=c_data,
-            cmap=cmap,
-            s=20,
-            edgecolor="black",
-            linewidth=0.2,
-            vmin=vmin,
-            vmax=vmax,
-        )
+            sc = ax.scatter(
+                x_data,
+                y_data,
+                c=c_data,
+                cmap=cmap,
+                s=20,
+                edgecolor="black",
+                linewidth=0.2,
+                vmin=vmin,
+                vmax=vmax,
+            )
+        except Exception as e:
+            draw_warning_box(ax, f"Could not plot pair: {e}")
+            continue
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.label_fs)
         title = f"{get_param_display_name(p1)} vs {get_param_display_name(p2)}"

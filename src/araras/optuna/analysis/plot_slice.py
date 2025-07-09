@@ -10,6 +10,7 @@ from .analyze import (
     get_param_display_name,
     format_title,
     calculate_grid,
+    draw_warning_box,
 )
 
 
@@ -21,13 +22,21 @@ def plot_slice(
 ) -> None:
     """Create slice plots for each parameter."""
     if not params:
-        print("No parameters available for slice plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No parameters available for slice plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'").rename(columns={"value": "loss"})
     if df.empty:
-        print("No completed trials for slice plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for slice plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     # Filter to only numeric parameters for slice plots
@@ -41,7 +50,11 @@ def plot_slice(
                 continue  # Skip categorical parameters
 
     if not numeric_params:
-        print("No numeric parameters available for slice plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters available for slice plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     max_cols = PLOT_CFG.max_cols
@@ -71,22 +84,43 @@ def plot_slice(
         col = idx % n_cols
         ax = axes[row, col]
 
-        # Convert to numeric and handle NaN values
-        x = pd.to_numeric(df[p], errors="coerce").to_numpy()
-        y = df["loss"].to_numpy()
-        mask = np.isfinite(x) & np.isfinite(y)
-        x = x[mask]
-        y = y[mask]
+        try:
+            x = pd.to_numeric(df[p], errors="coerce").to_numpy()
+            y = df["loss"].to_numpy()
+            mask = np.isfinite(x) & np.isfinite(y)
+            x = x[mask]
+            y = y[mask]
 
-        ax.scatter(x, y, s=20, edgecolor="black", linewidth=0.2, alpha=0.6)
+            if len(x) == 0:
+                draw_warning_box(ax, f"No valid data for {get_param_display_name(p)}")
+                ax.set_title(
+                    format_title(PLOT_CFG.param_title_tpl, get_param_display_name(p)),
+                    fontsize=PLOT_CFG.title_fs,
+                    pad=PLOT_CFG.title_pad,
+                )
+                continue
 
-        if len(x) > 1:
-            order = np.argsort(x)
-            x_sorted = x[order]
-            y_sorted = y[order]
-            window = max(2, len(x_sorted) // 20)
-            smooth = pd.Series(y_sorted).rolling(window=window, min_periods=1, center=True).mean()
-            ax.plot(x_sorted, smooth, color="red", linewidth=2)
+            ax.scatter(x, y, s=20, edgecolor="black", linewidth=0.2, alpha=0.6)
+
+            if len(x) > 1:
+                order = np.argsort(x)
+                x_sorted = x[order]
+                y_sorted = y[order]
+                window = max(2, len(x_sorted) // 20)
+                smooth = (
+                    pd.Series(y_sorted)
+                    .rolling(window=window, min_periods=1, center=True)
+                    .mean()
+                )
+                ax.plot(x_sorted, smooth, color="red", linewidth=2)
+        except Exception as e:
+            draw_warning_box(ax, f"Error plotting {get_param_display_name(p)}: {e}")
+            ax.set_title(
+                format_title(PLOT_CFG.param_title_tpl, get_param_display_name(p)),
+                fontsize=PLOT_CFG.title_fs,
+                pad=PLOT_CFG.title_pad,
+            )
+            continue
 
         ax.set_xlabel(get_param_display_name(p), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)

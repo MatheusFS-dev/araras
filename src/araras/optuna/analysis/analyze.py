@@ -171,6 +171,23 @@ def calculate_grid(
     return n_rows, n_cols
 
 
+def draw_warning_box(ax: plt.Axes, message: str) -> None:
+    """Display a warning message inside a plot area."""
+    ax.text(
+        0.5,
+        0.5,
+        message,
+        transform=ax.transAxes,
+        ha="center",
+        va="center",
+        fontsize=PLOT_CFG.label_fs,
+        bbox=dict(boxstyle="round", facecolor="lightyellow", alpha=0.8),
+        linespacing=1.5,
+    )
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
 # ———————————————————————————————————————————————————————————————————————————— #

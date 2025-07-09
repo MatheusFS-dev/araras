@@ -7,6 +7,7 @@ import scipy.interpolate
 
 from .analyze import (
     PLOT_CFG,
+    draw_warning_box,
 )
 
 
@@ -16,7 +17,16 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
     df = df.query("state == 'COMPLETE'")
     values = df["value"].astype(float).sort_values()
     if values.empty:
-        print("No completed trials for EDF plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for EDF plot.")
+        ax.set_title(
+            "Empirical Distribution of Study Values",
+            pad=PLOT_CFG.title_pad,
+            fontsize=PLOT_CFG.standalone_title_fs,
+        )
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     ecdf = np.arange(1, len(values) + 1) / len(values)

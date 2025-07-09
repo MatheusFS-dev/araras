@@ -11,6 +11,7 @@ from .analyze import (
     format_title,
     get_param_display_name,
     calculate_grid,
+    draw_warning_box,
 )
 
 
@@ -26,15 +27,30 @@ def plot_contour(
     and optionally standalone figures for each pair of parameters.
     """
     if not params:
-        print("No parameters available for contour plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No parameters available for contour plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'").rename(columns={'value': 'loss'})
+    if df.empty:
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for contour plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        plt.close(fig)
+        return
 
     pairs = list(combinations(params, 2))
     if not pairs:
-        print("Need at least two parameters for contour plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "Need at least two parameters for contour plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     max_cols = PLOT_CFG.max_cols + 2
@@ -72,14 +88,7 @@ def plot_contour(
 
         unique_points = np.unique(np.column_stack((x, y)), axis=0)
         if unique_points.shape[0] < 3:
-            ax.text(
-                0.5,
-                0.5,
-                "No Data or Error Generating",
-                ha="center",
-                va="center",
-                fontsize=PLOT_CFG.label_fs,
-            )
+            draw_warning_box(ax, "No Data or Error Generating")
         else:
             try:
                 tri = Triangulation(x, y)
@@ -98,14 +107,7 @@ def plot_contour(
                 print(
                     f"Warning: could not generate contour for {p1} vs {p2}: {e}"
                 )
-                ax.text(
-                    0.5,
-                    0.5,
-                    "No Data or Error Generating",
-                    ha="center",
-                    va="center",
-                    fontsize=PLOT_CFG.label_fs,
-                )
+                draw_warning_box(ax, "No Data or Error Generating")
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.label_fs)
@@ -141,11 +143,7 @@ def plot_contour(
                 ax.text(
                     0.5,
                     0.5,
-                    "No Data or Error Generating",
-                    ha="center",
-                    va="center",
-                    fontsize=PLOT_CFG.standalone_label_fs,
-                )
+                    draw_warning_box(ax, "No Data or Error Generating")
             else:
                 try:
                     tri = Triangulation(x, y)
@@ -164,14 +162,7 @@ def plot_contour(
                     print(
                         f"Warning: could not generate standalone contour for {p1} vs {p2}: {e}"
                     )
-                    ax.text(
-                        0.5,
-                        0.5,
-                        "No Data or Error Generating",
-                        ha="center",
-                        va="center",
-                        fontsize=PLOT_CFG.standalone_label_fs,
-                    )
+                    draw_warning_box(ax, "No Data or Error Generating")
 
             ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.standalone_label_fs)
             ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.standalone_label_fs)
