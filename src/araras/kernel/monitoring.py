@@ -26,7 +26,7 @@ from threading import Event, Thread
 from araras.email.utils import send_email
 from araras.utils.cleanup import ChildProcessCleanup
 from araras.utils.terminal import SimpleTerminalLauncher
-from araras.utils.misc import NotebookConverter, clear
+from araras.utils.misc import NotebookConverter, clear, format_bytes
 
 
 # Enhanced HTML template for consolidated status reports
@@ -205,6 +205,32 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
         print(f"Child cleanup: {terminated} terminated, {killed} killed")
+
+
+def get_process_usage(pid: int) -> Tuple[int, float]:
+    """Return memory usage in bytes and CPU percent for a PID."""
+    try:
+        proc = psutil.Process(pid)
+        mem = proc.memory_info().rss
+        cpu = proc.cpu_percent(interval=0.0)
+        return mem, cpu
+    except Exception:
+        return 0, 0.0
+
+
+def print_live_summary(pid: Optional[int], start: float, delay: float, bar_len: int = 30) -> None:
+    """Print live status line with memory, CPU and restart countdown."""
+    mem, cpu = (0, 0.0)
+    if pid:
+        mem, cpu = get_process_usage(pid)
+
+    elapsed = time.time() - start
+    progress = min(max(elapsed / delay, 0.0), 1.0)
+    filled = int(progress * bar_len)
+    bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
+    remaining = max(0.0, delay - elapsed)
+    summary = f"Mem: {format_bytes(mem):>9} | CPU: {cpu:5.1f}% | [{bar}] {remaining:5.1f}s"
+    print(f"\r{summary:<80}", end="", flush=True)
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
@@ -1359,8 +1385,26 @@ def run_auto_restart(
 
                         thread = Thread(target=run_and_flag)
                         thread.start()
-                        thread.join(timeout=restart_after_delay)
+                        start_wait = time.time()
+                        while (
+                            thread.is_alive()
+                            and time.time() - start_wait < restart_after_delay
+                            and not stop_event.is_set()
+                        ):
+                            print_live_summary(
+                                manager.current_target_pid,
+                                start_wait,
+                                restart_after_delay,
+                            )
+                            thread.join(timeout=0.5)
+                        print("", end="\r")
                         if thread.is_alive():
+                            print_live_summary(
+                                manager.current_target_pid,
+                                start_wait,
+                                restart_after_delay,
+                            )
+                            print()
                             print_process_status(
                                 f"Forcing restart after {restart_after_delay} seconds (not a crash)"
                             )
@@ -1368,8 +1412,8 @@ def run_auto_restart(
                             # Ensure the worker thread finishes cleanly before continuing
                             thread.join(5)
                             clear()
-
                         else:
+                            print()
                             # If finished (success or crash), check if success
                             if Path(success_flag_file).exists():
                                 stop_event.set()
