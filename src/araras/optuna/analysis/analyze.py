@@ -430,8 +430,8 @@ def analyze_study(
         "contours",
         "edf",
         "intermediate",
-        # "parallel_coordinate",
-        # "rank",
+        "parallel_coordinate",
+        "rank",
         "slice",
         "history",
         "timeline",
@@ -475,6 +475,11 @@ def analyze_study(
         + [col for col in df.columns if col.startswith("user_")],
         param_name_mapping=param_name_mapping,
     )
+    
+    if plots is None:
+        # Deactivate parallel coordinate and rank plots by default
+        plots_to_generate -= {"parallel_coordinate", "rank"}
+    
 
     print("\nGenerating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
