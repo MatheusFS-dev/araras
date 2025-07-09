@@ -10,6 +10,7 @@ from .analyze import (
     get_param_display_name,
     save_data_for_latex,
     calculate_grid,
+    draw_warning_box,
 )
 
 from araras.utils.misc import format_scientific
@@ -41,7 +42,11 @@ def plot_optimal_ranges_analysis(
         None: Saves the optimal ranges visualization to fig_ranges directory
     """
     if not numeric_cols:
-        print("No numeric parameters to analyze")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters to analyze")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_ranges.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     def save_ranges_data_for_latex(
@@ -201,21 +206,12 @@ def plot_optimal_ranges_analysis(
 
         if not data["plottable"]:
             # Create blank graph with error message
-            ax.text(
-                0.5,
-                0.5,
+            draw_warning_box(
+                ax,
                 f"Parameter: {display_name}\n\n"
                 f"Analysis not possible\n\n"
                 f"Reason:\n{data['error_message']}\n\n"
-                f"Data points:\n"
-                f"All trials: {len(data['all_values'])}\n"
-                f"Best trials: {len(data['best_values'])}",
-                ha="center",
-                va="center",
-                transform=ax.transAxes,
-                fontsize=PLOT_CFG.label_fs,
-                bbox=dict(boxstyle="round", facecolor="lightgray", alpha=0.8),
-                linespacing=1.5,
+                f"Data points:\nAll: {len(data['all_values'])} / Best: {len(data['best_values'])}"
             )
             ax.set_title(
                 f"{display_name} (No Analysis)",

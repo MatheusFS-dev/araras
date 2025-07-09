@@ -12,6 +12,7 @@ from .analyze import (
     format_numeric_value,
     save_data_for_latex,
     calculate_grid,
+    draw_warning_box,
 )
 
 def plot_hyperparameter_distributions(
@@ -291,7 +292,19 @@ def plot_hyperparameter_distributions(
         )
         plt.close(fig)
     else:
-        print("No numeric parameters found for distribution plotting.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters found for distribution plotting.")
+        ax.set_title(
+            "Numeric Parameters Distributions",
+            fontsize=PLOT_CFG.standalone_title_fs,
+            pad=PLOT_CFG.title_pad,
+        )
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(dirs["figs"], "params_numeric_distributions.pdf"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
 
     # ——————————————————————— Categorical Parameters Figure ————————————————————— #
     if categorical_cols:
@@ -482,8 +495,24 @@ def plot_hyperparameter_distributions(
         )
         plt.close(fig)
     else:
-        print("No categorical parameters found for distribution plotting.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No categorical parameters found for distribution plotting.")
+        ax.set_title(
+            "Categorical Parameters Distributions",
+            fontsize=PLOT_CFG.standalone_title_fs,
+            pad=PLOT_CFG.title_pad,
+        )
+        plt.tight_layout()
+        plt.savefig(
+            os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
+            bbox_inches="tight",
+        )
+        plt.close(fig)
 
     # Print summary
     if not numeric_cols and not categorical_cols:
-        print("No parameters found for distribution plotting.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No parameters found for distribution plotting.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_no_distributions.pdf"), bbox_inches="tight")
+        plt.close(fig)

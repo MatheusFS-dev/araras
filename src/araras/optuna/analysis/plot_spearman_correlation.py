@@ -4,7 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .analyze import PLOT_CFG, save_data_for_latex
+from .analyze import PLOT_CFG, save_data_for_latex, draw_warning_box
 
 
 def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
@@ -23,6 +23,14 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     Returns:
         None: Saves correlation heatmap as pdf file
     """
+    if not numeric_cols:
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters for correlation plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight")
+        plt.close(fig)
+        return
+
     # Include loss column with numeric parameters for correlation analysis
     cols = numeric_cols + ["loss"]
 

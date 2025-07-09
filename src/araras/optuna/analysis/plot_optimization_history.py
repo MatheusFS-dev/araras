@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import optuna
 import pandas as pd
 
-from .analyze import PLOT_CFG
+from .analyze import PLOT_CFG, draw_warning_box
 
 
 def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None:
@@ -12,7 +12,11 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
     df = study.trials_dataframe(attrs=("number", "value", "state"))
     df = df.query("state == 'COMPLETE'")
     if df.empty:
-        print("No completed trials for optimization history plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for optimization history plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_optimization_history.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     df = df.rename(columns={"value": "loss"})
