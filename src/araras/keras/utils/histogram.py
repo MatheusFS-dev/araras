@@ -5,12 +5,15 @@ import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
+from araras.plot.configs import config_plt
 
-def plot_param_and_size_histograms(
+config_plt("single-column")  # Configure matplotlib for single-column figures
+
+def model_param_distribution(
     build_model_fn: Callable[[optuna.Trial, object], tf.keras.Model],
     hparams,
+    bits_per_param: int,
     n_trials: int = 1000,
-    bits_per_param: int = 32,
 ) -> None:
     """Sample random models and plot parameter and size histograms.
 
@@ -18,8 +21,9 @@ def plot_param_and_size_histograms(
         build_model_fn: Function that builds a Keras model given an Optuna
             ``Trial``.
         hparams: Hyperparameter object consumed by ``build_model_fn``.
-        n_trials: Number of random trials to run.
         bits_per_param: Number of bits used to store each parameter.
+        n_trials: Number of random trials to run.
+
     """
 
     sampler = optuna.samplers.RandomSampler()
@@ -45,17 +49,16 @@ def plot_param_and_size_histograms(
 
     print()
 
-    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
-    axes[0].hist(param_counts, bins=50, color="black")
+    fig, axes = plt.subplots(1, 2)
+    axes[0].hist(param_counts, bins=100, color="black")
     axes[0].set_xlabel("Number of parameters")
     axes[0].set_ylabel("Frequency")
     axes[0].set_title("Parameter count distribution")
 
-    axes[1].hist(model_sizes_mb, bins=50, color="black")
+    axes[1].hist(model_sizes_mb, bins=100, color="black")
     axes[1].set_xlabel("Model size (MB)")
     axes[1].set_ylabel("Frequency")
     axes[1].set_title("Model size distribution")
 
     plt.tight_layout()
     plt.show()
-
