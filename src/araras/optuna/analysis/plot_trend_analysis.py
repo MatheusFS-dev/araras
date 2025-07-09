@@ -10,6 +10,7 @@ from .analyze import (
     get_param_display_name,
     save_data_for_latex,
     calculate_grid,
+    draw_warning_box,
 )
 
 def plot_trend_analysis(
@@ -37,7 +38,11 @@ def plot_trend_analysis(
         None: Saves single comprehensive trend plot as pdf file and trend statistics as CSV
     """
     if not numeric_cols:
-        print("No numeric parameters to analyze")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No numeric parameters to analyze")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_trends.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     stats = []

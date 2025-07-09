@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
-from .analyze import PLOT_CFG, save_data_for_latex, get_param_display_name
+from .analyze import PLOT_CFG, save_data_for_latex, get_param_display_name, draw_warning_box
 
 
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
@@ -30,6 +30,18 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     df_imp = pd.DataFrame(list(importances.items()), columns=["Parameter", "Importance"]).sort_values(
         "Importance", ascending=False
     )
+    if df_imp.empty:
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No importances could be computed.")
+        ax.set_title(
+            PLOT_CFG.importance_title,
+            pad=PLOT_CFG.title_pad,
+            fontsize=PLOT_CFG.standalone_title_fs,
+        )
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
+        plt.close(fig)
+        return
 
     # Save data for LaTeX
     save_data_for_latex(

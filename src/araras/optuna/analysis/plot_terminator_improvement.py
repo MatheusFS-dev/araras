@@ -18,7 +18,7 @@ from optuna.terminator.improvement.evaluator import (
     DEFAULT_MIN_N_TRIALS,
 )
 
-from .analyze import PLOT_CFG
+from .analyze import PLOT_CFG, draw_warning_box
 
 
 PADDING_RATIO_Y = 0.05
@@ -119,7 +119,11 @@ def plot_terminator_improvement(
     )
 
     if not info.trial_numbers:
-        print("No completed trials for terminator improvement plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No completed trials for terminator improvement plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_terminator_improvement.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     # Calculate and print variance of last 5 trials after warm-up phase

@@ -7,7 +7,7 @@ from datetime import timedelta
 import numpy as np
 import optuna
 
-from .analyze import PLOT_CFG
+from .analyze import PLOT_CFG, draw_warning_box
 
 import warnings
 
@@ -27,7 +27,11 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     }
     trials = [t for t in study.trials if t.state in considered_states]
     if not trials:
-        print("No finished trials for timeline plot.")
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No finished trials for timeline plot.")
+        plt.tight_layout()
+        fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
+        plt.close(fig)
         return
 
     trials.sort(key=lambda t: t.number)
