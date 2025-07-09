@@ -350,6 +350,14 @@ from .plot_optimization_history import plot_optimization_history
 from .plot_timeline import plot_timeline
 from .plot_terminator_improvement import plot_terminator_improvement
 
+
+def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> None:
+    """Execute a plotting function, catching and reporting any errors."""
+    try:
+        func(*args, **kwargs)
+    except Exception as e:  # pragma: no cover - errors are user-facing
+        print(f"Error generating {plot_name} plot: {e}")
+
 def print_study_columns(
     study: optuna.Study,
     exclude: Optional[List[str]] = None,
@@ -486,67 +494,121 @@ def analyze_study(
 
     if "distributions" in plots_to_generate:
         print("Generating hyperparameter distribution plots...")
-        plot_hyperparameter_distributions(
-            df, numeric_cols, categorical_cols, dirs, param_name_mapping, create_standalone
+        _safe_plot(
+            "distributions",
+            plot_hyperparameter_distributions,
+            df,
+            numeric_cols,
+            categorical_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
         )
 
     if "importances" in plots_to_generate:
         print("Generating parameter importances...")
-        plot_param_importances(study, dirs)
+        _safe_plot("importances", plot_param_importances, study, dirs)
 
     if "correlations" in plots_to_generate:
         print("Generating Spearman correlations...")
-        plot_spearman_correlation(df, numeric_cols, dirs)
+        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs)
 
     if "boxplots" in plots_to_generate:
         print("Generating boxplots for parameter distributions...")
-        plot_parameter_boxplots(df, best, worst, numeric_cols, dirs, param_name_mapping, create_standalone)
+        _safe_plot(
+            "boxplots",
+            plot_parameter_boxplots,
+            df,
+            best,
+            worst,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
 
     if "trends" in plots_to_generate:
         print("Generating trend analysis...")
-        plot_trend_analysis(df, numeric_cols, dirs, param_name_mapping, create_standalone)
+        _safe_plot(
+            "trends",
+            plot_trend_analysis,
+            df,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
 
     if "ranges" in plots_to_generate:
         print("Generating optimal ranges analysis...")
-        plot_optimal_ranges_analysis(df, best, numeric_cols, dirs, param_name_mapping, create_standalone)
+        _safe_plot(
+            "ranges",
+            plot_optimal_ranges_analysis,
+            df,
+            best,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
 
     if "contours" in plots_to_generate:
         print("Generating contour plots...")
-        plot_contour(study, numeric_cols, dirs, create_standalone)
+        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone)
 
     if "edf" in plots_to_generate:
         print("Generating EDF of study values...")
-        plot_edf(study, dirs)
+        _safe_plot("edf", plot_edf, study, dirs)
 
     if "intermediate" in plots_to_generate:
         print("Generating intermediate values plots...")
-        plot_intermediate_values(study, dirs)
+        _safe_plot("intermediate", plot_intermediate_values, study, dirs)
 
     if "parallel_coordinate" in plots_to_generate:
         print("Generating parallel coordinate plots...")
-        plot_parallel_coordinate(study, numeric_cols + categorical_cols, dirs)
+        _safe_plot(
+            "parallel_coordinate",
+            plot_parallel_coordinate,
+            study,
+            numeric_cols + categorical_cols,
+            dirs,
+        )
 
     if "slice" in plots_to_generate:
         print("Generating slice plots...")
-        plot_slice(study, numeric_cols + categorical_cols, dirs, create_standalone)
+        _safe_plot(
+            "slice",
+            plot_slice,
+            study,
+            numeric_cols + categorical_cols,
+            dirs,
+            create_standalone,
+        )
 
     if "history" in plots_to_generate:
         print("Generating optimization history plot...")
-        plot_optimization_history(study, dirs)
+        _safe_plot("history", plot_optimization_history, study, dirs)
 
     if "timeline" in plots_to_generate:
         print("Generating timeline plot...")
-        plot_timeline(study, dirs)
+        _safe_plot("timeline", plot_timeline, study, dirs)
 
     if "terminator" in plots_to_generate:
         print("Generating terminator improvement plot...")
-        plot_terminator_improvement(study, dirs)
+        _safe_plot("terminator", plot_terminator_improvement, study, dirs)
 
     #! Rank plots are deprecated, they are causing crashes and not helping much
     #! So they are not generated by default anymore
     if "rank" in plots_to_generate:
         print("Generating rank plots...")
-        plot_rank(study, numeric_cols + categorical_cols, dirs, create_standalone)
+        _safe_plot(
+            "rank",
+            plot_rank,
+            study,
+            numeric_cols + categorical_cols,
+            dirs,
+            create_standalone,
+        )
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")
