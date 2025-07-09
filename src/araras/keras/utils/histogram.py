@@ -3,10 +3,9 @@ This module provides utilities for analyzing and visualizing the distribution of
 and sizes in Keras models using Optuna for hyperparameter optimization.
 
 How to use:
-    1. Define a function `build_model_fn` that takes an Optuna `Trial` and a hyperparameter object,
-       and returns a compiled Keras model.
-    2. Call `model_param_distribution` with the `build_model_fn`, hyperparameters object, number of bits per parameter,
-       and the number of trials you want to run.
+    1. Define a function `build_model_fn` that takes an Optuna `Trial` and returns a compiled Keras model.
+    2. Call `model_param_distribution` with the `build_model_fn`, number of bits per parameter, and the 
+       number of trials you want to run.
     3. The function will sample random models, compute their parameter counts and sizes, and
        plot histograms of these distributions.
        
@@ -28,7 +27,7 @@ Example usage:
         
     # use lambda to pass trial and hparams
     model_param_distribution(
-        build_model_fn=lambda trial, hparams: build_model_fn(trial, hparams),
+        build_model_fn=lambda trial: build_model_fn(trial, *Other parameters if needed),
         bits_per_param=4,
         n_trials=1000
     )
@@ -41,7 +40,7 @@ import tensorflow as tf
 
 from araras.plot.configs import config_plt
 
-config_plt("single-column")  # Configure matplotlib for single-column figures
+config_plt("double-column")  # Configure matplotlib for double-column figures
 
 def model_param_distribution(
     build_model_fn: Callable[[optuna.Trial], tf.keras.Model],
