@@ -125,39 +125,55 @@ print("Monitor completed")"""
 
 
 # ——————————————————————————— Print Functions ——————————————————————————————— #
+SUMMARY_LINES = 0
+
+
 def print_monitoring_config_summary(
     file_path: str,
-    file_type: str,
     success_flag_file: str,
     max_restarts: int,
+    restarts_left: int,
     email_enabled: bool,
     title: str,
     restart_after_delay: Optional[float] = None,
+    mem_bytes: int = 0,
+    mem_percent: float = 0.0,
+    cpu_percent: float = 0.0,
+    progress: str = "",
+    time_left: Optional[float] = None,
 ) -> None:
-    """Print a summary of monitoring configuration."""
-    print()
-    print("=" * 70)
-    print("MONITORING CONFIGURATION SUMMARY")
-    print("=" * 70)
-    print(f"Target File: {file_path}")
-    print(f"File Type: {file_type}")
-    print(f"Process Title: \033[33m{title}\033[0m")
-    print(f"Success Flag: {success_flag_file}")
-    print(f"Max Restarts: {max_restarts}")
+    """Print or update the monitoring configuration summary."""
+    global SUMMARY_LINES
+
+    mem_str = format_bytes(mem_bytes)
+
+    lines = [
+        "=" * 70,
+        "MONITORING CONFIGURATION SUMMARY",
+        "=" * 70,
+        f"Target File: {file_path}",
+        f"Success Flag Location: {success_flag_file}",
+        f"Process Title: \033[33m{title}\033[0m",
+        f"Email Alerts: {'\033[92mEnabled\033[0m' if email_enabled else '\033[91mDisabled\033[0m'}",
+        f"Max Restarts: {max_restarts} (left: \033[36m{restarts_left}\033[0m)",
+    ]
+
     if restart_after_delay is not None:
-        print(f"Run will force restart after: {restart_after_delay} seconds")
+        lines.append(f"Force restart after: {restart_after_delay:.1f}s [{progress}] {time_left:5.1f}s")
 
-    if email_enabled:
-        print(f"Email Alerts: \033[92mEnabled\033[0m")
-    else:
-        print(f"Email Alerts: \033[91mDisabled\033[0m")
-    print("=" * 70)
-    print()
+    lines.append(f"Memory: {mem_str} ({mem_percent:5.1f}%) | CPU: {cpu_percent:5.1f}%")
+    lines.append("=" * 70)
+
+    summary_text = "\n".join(lines)
+
+    if SUMMARY_LINES:
+        sys.stdout.write(f"\033[{SUMMARY_LINES}F")
+    sys.stdout.write(summary_text + "\n")
+    sys.stdout.flush()
+    SUMMARY_LINES = len(lines)
 
 
-def print_process_status(
-    message: str, pid: Optional[int] = None, runtime: Optional[float] = None
-) -> None:
+def print_process_status(message: str, pid: Optional[int] = None, runtime: Optional[float] = None) -> None:
     """Print process status messages with consistent formatting."""
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     if pid and runtime is not None:
@@ -173,9 +189,7 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
     print(f"Restarting in {delay:.1f}s ({restart_count}/{max_restarts})")
 
 
-def print_completion_summary(
-    restart_count: int, total_runtime: Optional[float] = None
-) -> None:
+def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
     """Print final completion summary."""
     print("=" * 50)
     print("MONITORING COMPLETED")
@@ -207,30 +221,55 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
         print(f"Child cleanup: {terminated} terminated, {killed} killed")
 
 
-def get_process_usage(pid: int) -> Tuple[int, float]:
-    """Return memory usage in bytes and CPU percent for a PID."""
+def get_process_usage(pid: int) -> Tuple[int, float, float]:
+    """Return memory usage in bytes and percent plus CPU percent for a PID."""
     try:
         proc = psutil.Process(pid)
         mem = proc.memory_info().rss
-        cpu = proc.cpu_percent(interval=0.0)
-        return mem, cpu
+        mem_percent = proc.memory_percent()
+        cpu = proc.cpu_percent(interval=0.1)
+        return mem, mem_percent, cpu
     except Exception:
-        return 0, 0.0
+        return 0, 0.0, 0.0
 
 
-def print_live_summary(pid: Optional[int], start: float, delay: float, bar_len: int = 30) -> None:
-    """Print live status line with memory, CPU and restart countdown."""
-    mem, cpu = (0, 0.0)
+def print_live_summary(
+    file_path: str,
+    success_flag_file: str,
+    title: str,
+    pid: Optional[int],
+    start: float,
+    delay: float,
+    max_restarts: int,
+    restarts_left: int,
+    email_enabled: bool,
+    bar_len: int = 30,
+) -> None:
+    """Update the monitoring configuration summary with live resource info."""
+    mem, mem_p, cpu = (0, 0.0, 0.0)
     if pid:
-        mem, cpu = get_process_usage(pid)
+        mem, mem_p, cpu = get_process_usage(pid)
 
     elapsed = time.time() - start
     progress = min(max(elapsed / delay, 0.0), 1.0)
     filled = int(progress * bar_len)
     bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
     remaining = max(0.0, delay - elapsed)
-    summary = f"Mem: {format_bytes(mem):>9} | CPU: {cpu:5.1f}% | [{bar}] {remaining:5.1f}s"
-    print(f"\r{summary:<80}", end="", flush=True)
+
+    print_monitoring_config_summary(
+        file_path=file_path,
+        success_flag_file=success_flag_file,
+        max_restarts=max_restarts,
+        restarts_left=restarts_left,
+        email_enabled=email_enabled,
+        title=title,
+        restart_after_delay=delay,
+        mem_bytes=mem,
+        mem_percent=mem_p,
+        cpu_percent=cpu,
+        progress=bar,
+        time_left=remaining,
+    )
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
@@ -292,9 +331,7 @@ class ConsolidatedEmailManager:
 
         return True
 
-    def send_consolidated_status_email(
-        self, status_type: str, process_data: Dict[str, Any]
-    ) -> None:
+    def send_consolidated_status_email(self, status_type: str, process_data: Dict[str, Any]) -> None:
         """Send consolidated status email with unified reporting.
 
         Args:
@@ -327,7 +364,9 @@ class ConsolidatedEmailManager:
 
                 if remaining > 0:
                     subject = f"{title} crashed - Restart Failed ({failed_attempts} attempts, {remaining} remaining)"
-                    status_description = f"Restart failed after {failed_attempts} attempts, {remaining} attempts remaining"
+                    status_description = (
+                        f"Restart failed after {failed_attempts} attempts, {remaining} attempts remaining"
+                    )
                 else:
                     subject = f"{title} crashed - Maximum Restarts Reached"
                     status_description = "All restart attempts have been exhausted"
@@ -373,13 +412,9 @@ class ConsolidatedEmailManager:
             self.last_notification_time = time.time()
 
         except Exception as e:
-            print_error_message(
-                "EMAIL", f"Failed to send consolidated status email: {e}"
-            )
+            print_error_message("EMAIL", f"Failed to send consolidated status email: {e}")
 
-    def should_attempt_restart(
-        self, title: str, restart_count: int, max_restarts: int
-    ) -> bool:
+    def should_attempt_restart(self, title: str, restart_count: int, max_restarts: int) -> bool:
         """Determine if should attempt restart with retry logic.
 
         Args:
@@ -442,9 +477,7 @@ class ConsolidatedEmailManager:
             },
         )
 
-    def report_task_completion(
-        self, title: str, restart_count: int, total_runtime: float
-    ) -> None:
+    def report_task_completion(self, title: str, restart_count: int, total_runtime: float) -> None:
         """Report successful task completion.
 
         Args:
@@ -522,9 +555,7 @@ class FileTypeHandler:
         return file_type
 
     @classmethod
-    def build_execution_command(
-        cls, file_path: Path, success_flag_file: str
-    ) -> Tuple[List[str], str]:
+    def build_execution_command(cls, file_path: Path, success_flag_file: str) -> Tuple[List[str], str]:
         """Build optimized execution command based on file type.
 
         Args:
@@ -553,9 +584,7 @@ class FileTypeHandler:
 
         elif file_type == "notebook":
             # This should never be reached after conversion, but keeping for safety
-            raise ValueError(
-                f"Notebook files should be converted to Python first: {file_path}"
-            )
+            raise ValueError(f"Notebook files should be converted to Python first: {file_path}")
 
         else:
             raise ValueError(f"Unsupported file type: {file_type} for {file_path}")
@@ -591,9 +620,7 @@ class FileTypeHandler:
 
         file_type = cls.get_file_type(path_obj)
         if file_type == "unknown":
-            raise ValueError(
-                f"Unsupported file type: {path_obj.suffix}. Supported: .py, .ipynb"
-            )
+            raise ValueError(f"Unsupported file type: {path_obj.suffix}. Supported: .py, .ipynb")
 
         return path_obj.resolve()
 
@@ -702,13 +729,8 @@ class FlagBasedRestartManager:
 
         # Convert notebook to Python if needed
         if file_type == "notebook":
-            print_process_status(
-                f"Converting notebook to Python: {validated_path.name}"
-            )
             try:
-                self.converted_python_file = (
-                    NotebookConverter.convert_notebook_to_python(validated_path)
-                )
+                self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
                 self.original_was_notebook = True
                 validated_path = self.converted_python_file
                 file_type = "python"
@@ -723,9 +745,9 @@ class FlagBasedRestartManager:
         # Print configuration summary
         print_monitoring_config_summary(
             file_path=str(validated_path),
-            file_type=file_type,
             success_flag_file=str(flag_path),
             max_restarts=self.max_restarts,
+            restarts_left=self.max_restarts - self.restart_count,
             email_enabled=self.email_manager.email_enabled,
             title=self.process_title,
             restart_after_delay=restart_after_delay,
@@ -737,9 +759,7 @@ class FlagBasedRestartManager:
         try:
             # before launching a new run
             if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
-                raise RuntimeError(
-                    "Previous target process still running, aborting duplicate start"
-                )
+                raise RuntimeError("Previous target process still running, aborting duplicate start")
 
             # Clean up any lingering processes from earlier runs
             self._cleanup_stale_pids()
@@ -761,9 +781,7 @@ class FlagBasedRestartManager:
                         self.monitor_info = None
 
                     # Launch process
-                    target_pid = self._launch_process(
-                        validated_path, working_dir, success_flag_file
-                    )
+                    target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     print_process_status("Process started", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
@@ -789,9 +807,7 @@ class FlagBasedRestartManager:
                     completion_reason = self._wait_for_completion(flag_path)
                     runtime = time.time() - self.last_process_start_time
 
-                    print_process_status(
-                        f"Process finished: {completion_reason}", target_pid, runtime
-                    )
+                    print_process_status(f"Process finished: {completion_reason}", target_pid, runtime)
 
                     # Store PID for next restart notification
                     previous_pid = target_pid
@@ -820,9 +836,7 @@ class FlagBasedRestartManager:
                         print_process_status("Process stopped by external request")
                         break
                     else:
-                        print_process_status(
-                            "Process ended without success flag, treating as failure"
-                        )
+                        print_process_status("Process ended without success flag, treating as failure")
                         if not self._handle_restart_with_retry():
                             break
 
@@ -834,9 +848,7 @@ class FlagBasedRestartManager:
 
             # Handle maximum restarts reached
             if self.restart_count >= self.max_restarts:
-                print_error_message(
-                    "MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}"
-                )
+                print_error_message("MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}")
                 self.email_manager.report_final_failure(
                     self.process_title,
                     self.restart_count,
@@ -899,9 +911,7 @@ class FlagBasedRestartManager:
 
         return False
 
-    def _launch_process(
-        self, file_path: Path, working_dir: str, success_flag_file: str
-    ) -> int:
+    def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
         """Launch target process.
 
         Args:
@@ -916,9 +926,7 @@ class FlagBasedRestartManager:
             OSError: If PID discovery fails
         """
         # Build command for Python file
-        command, execution_type = FileTypeHandler.build_execution_command(
-            file_path, success_flag_file
-        )
+        command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
 
         launcher = SimpleTerminalLauncher()
         self.current_terminal_process = launcher.launch(command, working_dir)
@@ -1134,13 +1142,9 @@ class FlagBasedRestartManager:
             try:
                 if self.converted_python_file.exists():
                     self.converted_python_file.unlink()
-                    print_process_status(
-                        f"Cleaned up converted file: {self.converted_python_file}"
-                    )
+                    print_process_status(f"Cleaned up converted file: {self.converted_python_file}")
             except Exception as e:
-                print_warning_message(
-                    f"Failed to cleanup converted file {self.converted_python_file}: {e}"
-                )
+                print_warning_message(f"Failed to cleanup converted file {self.converted_python_file}: {e}")
             finally:
                 self.converted_python_file = None
                 self.original_was_notebook = False
@@ -1158,15 +1162,11 @@ class FlagBasedRestartManager:
             except KeyboardInterrupt:
                 # Handle CTRL+C during sleep
                 self.running = False
-                print_process_status(
-                    "CTRL+C detected during restart delay, aborting restart"
-                )
+                print_process_status("CTRL+C detected during restart delay, aborting restart")
                 break
 
 
-def start_monitor(
-    pid: int, title: str, supress_tf_warnings: bool = False
-) -> Dict[str, Any]:
+def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
     """Start simplified crash monitor without email capabilities.
 
     Args:
@@ -1363,9 +1363,7 @@ def run_auto_restart(
             def restart_loop():
                 try:
                     while not stop_event.is_set():
-                        manager.restart_count = (
-                            0  # Never increment max_restarts for forced restart
-                        )
+                        manager.restart_count = 0  # Never increment max_restarts for forced restart
                         # Ensure no leftover processes remain running
                         manager._cleanup_stale_pids()
                         finished = [False]
@@ -1392,17 +1390,29 @@ def run_auto_restart(
                             and not stop_event.is_set()
                         ):
                             print_live_summary(
+                                file_path,
+                                success_flag_file,
+                                title or Path(file_path).stem,
                                 manager.current_target_pid,
                                 start_wait,
                                 restart_after_delay,
+                                manager.max_restarts,
+                                manager.max_restarts - manager.restart_count,
+                                manager.email_manager.email_enabled,
                             )
                             thread.join(timeout=0.5)
                         print("", end="\r")
                         if thread.is_alive():
                             print_live_summary(
+                                file_path,
+                                success_flag_file,
+                                title or Path(file_path).stem,
                                 manager.current_target_pid,
                                 start_wait,
                                 restart_after_delay,
+                                manager.max_restarts,
+                                manager.max_restarts - manager.restart_count,
+                                manager.email_manager.email_enabled,
                             )
                             print()
                             print_process_status(
@@ -1424,9 +1434,7 @@ def run_auto_restart(
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
                     stop_event.set()
-                    print_process_status(
-                        "Restart loop interrupted by user, cleaning up"
-                    )
+                    print_process_status("Restart loop interrupted by user, cleaning up")
                     manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
@@ -1448,9 +1456,7 @@ def run_auto_restart(
         print_error_message("CONFIG", str(e))
         raise
     except KeyboardInterrupt:
-        print_process_status(
-            "Main process interrupted by user, performing final cleanup"
-        )
+        print_process_status("Main process interrupted by user, performing final cleanup")
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
