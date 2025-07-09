@@ -26,7 +26,7 @@ from threading import Event, Thread
 from araras.email.utils import send_email
 from araras.utils.cleanup import ChildProcessCleanup
 from araras.utils.terminal import SimpleTerminalLauncher
-from araras.utils.misc import NotebookConverter, clear, format_bytes
+from araras.utils.misc import NotebookConverter, clear
 
 
 # Enhanced HTML template for consolidated status reports
@@ -125,52 +125,34 @@ print("Monitor completed")"""
 
 
 # ——————————————————————————— Print Functions ——————————————————————————————— #
-SUMMARY_LINES = 0
-
-
 def print_monitoring_config_summary(
     file_path: str,
+    file_type: str,
     success_flag_file: str,
     max_restarts: int,
-    restarts_left: int,
     email_enabled: bool,
     title: str,
     restart_after_delay: Optional[float] = None,
-    mem_bytes: int = 0,
-    mem_percent: float = 0.0,
-    cpu_percent: float = 0.0,
-    progress: str = "",
-    time_left: Optional[float] = None,
 ) -> None:
-    """Print or update the monitoring configuration summary."""
-    global SUMMARY_LINES
-
-    mem_str = format_bytes(mem_bytes)
-
-    lines = [
-        "=" * 70,
-        "MONITORING CONFIGURATION SUMMARY",
-        "=" * 70,
-        f"Target File: {file_path}",
-        f"Success Flag Location: {success_flag_file}",
-        f"Process Title: " + "\033[33m" + f"{title}" + "\033[0m",
-        f"Email Alerts: " + ("\033[92mEnabled\033[0m" if email_enabled else "\033[91mDisabled\033[0m"),
-        f"Max Restarts: {max_restarts} (left: " + "\033[36m" + f"{restarts_left}" + "\033[0m)",
-    ]
-
+    """Print a summary of monitoring configuration."""
+    print()
+    print("=" * 70)
+    print("MONITORING CONFIGURATION SUMMARY")
+    print("=" * 70)
+    print(f"Target File: {file_path}")
+    print(f"File Type: {file_type}")
+    print(f"Process Title: \033[33m{title}\033[0m")
+    print(f"Success Flag: {success_flag_file}")
+    print(f"Max Restarts: {max_restarts}")
     if restart_after_delay is not None:
-        lines.append(f"Force restart after: {restart_after_delay:.1f}s [{progress}] {time_left:5.1f}s")
+        print(f"Run will force restart after: {restart_after_delay} seconds")
 
-    lines.append(f"Memory: {mem_str} ({mem_percent:5.1f}%) | CPU: {cpu_percent:5.1f}%")
-    lines.append("=" * 70)
-
-    summary_text = "\n".join(lines)
-
-    if SUMMARY_LINES:
-        sys.stdout.write(f"\033[{SUMMARY_LINES}F")
-    sys.stdout.write(summary_text + "\n")
-    sys.stdout.flush()
-    SUMMARY_LINES = len(lines)
+    if email_enabled:
+        print(f"Email Alerts: \033[92mEnabled\033[0m")
+    else:
+        print(f"Email Alerts: \033[91mDisabled\033[0m")
+    print("=" * 70)
+    print()
 
 
 def print_process_status(message: str, pid: Optional[int] = None, runtime: Optional[float] = None) -> None:
@@ -219,57 +201,6 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
         print(f"Child cleanup: {terminated} terminated, {killed} killed")
-
-
-def get_process_usage(pid: int) -> Tuple[int, float, float]:
-    """Return memory usage in bytes and percent plus CPU percent for a PID."""
-    try:
-        proc = psutil.Process(pid)
-        mem = proc.memory_info().rss
-        mem_percent = proc.memory_percent()
-        cpu = proc.cpu_percent(interval=0.1)
-        return mem, mem_percent, cpu
-    except Exception:
-        return 0, 0.0, 0.0
-
-
-def print_live_summary(
-    file_path: str,
-    success_flag_file: str,
-    title: str,
-    pid: Optional[int],
-    start: float,
-    delay: float,
-    max_restarts: int,
-    restarts_left: int,
-    email_enabled: bool,
-    bar_len: int = 30,
-) -> None:
-    """Update the monitoring configuration summary with live resource info."""
-    mem, mem_p, cpu = (0, 0.0, 0.0)
-    if pid:
-        mem, mem_p, cpu = get_process_usage(pid)
-
-    elapsed = time.time() - start
-    progress = min(max(elapsed / delay, 0.0), 1.0)
-    filled = int(progress * bar_len)
-    bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-    remaining = max(0.0, delay - elapsed)
-
-    print_monitoring_config_summary(
-        file_path=file_path,
-        success_flag_file=success_flag_file,
-        max_restarts=max_restarts,
-        restarts_left=restarts_left,
-        email_enabled=email_enabled,
-        title=title,
-        restart_after_delay=delay,
-        mem_bytes=mem,
-        mem_percent=mem_p,
-        cpu_percent=cpu,
-        progress=bar,
-        time_left=remaining,
-    )
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
@@ -729,6 +660,7 @@ class FlagBasedRestartManager:
 
         # Convert notebook to Python if needed
         if file_type == "notebook":
+            print_process_status(f"Converting notebook to Python: {validated_path.name}")
             try:
                 self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
                 self.original_was_notebook = True
@@ -745,9 +677,9 @@ class FlagBasedRestartManager:
         # Print configuration summary
         print_monitoring_config_summary(
             file_path=str(validated_path),
+            file_type=file_type,
             success_flag_file=str(flag_path),
             max_restarts=self.max_restarts,
-            restarts_left=self.max_restarts - self.restart_count,
             email_enabled=self.email_manager.email_enabled,
             title=self.process_title,
             restart_after_delay=restart_after_delay,
@@ -1383,38 +1315,8 @@ def run_auto_restart(
 
                         thread = Thread(target=run_and_flag)
                         thread.start()
-                        start_wait = time.time()
-                        while (
-                            thread.is_alive()
-                            and time.time() - start_wait < restart_after_delay
-                            and not stop_event.is_set()
-                        ):
-                            print_live_summary(
-                                file_path,
-                                success_flag_file,
-                                title or Path(file_path).stem,
-                                manager.current_target_pid,
-                                start_wait,
-                                restart_after_delay,
-                                manager.max_restarts,
-                                manager.max_restarts - manager.restart_count,
-                                manager.email_manager.email_enabled,
-                            )
-                            thread.join(timeout=0.5)
-                        print("", end="\r")
+                        thread.join(timeout=restart_after_delay)
                         if thread.is_alive():
-                            print_live_summary(
-                                file_path,
-                                success_flag_file,
-                                title or Path(file_path).stem,
-                                manager.current_target_pid,
-                                start_wait,
-                                restart_after_delay,
-                                manager.max_restarts,
-                                manager.max_restarts - manager.restart_count,
-                                manager.email_manager.email_enabled,
-                            )
-                            print()
                             print_process_status(
                                 f"Forcing restart after {restart_after_delay} seconds (not a crash)"
                             )
@@ -1422,8 +1324,8 @@ def run_auto_restart(
                             # Ensure the worker thread finishes cleanly before continuing
                             thread.join(5)
                             clear()
+
                         else:
-                            print()
                             # If finished (success or crash), check if success
                             if Path(success_flag_file).exists():
                                 stop_event.set()
