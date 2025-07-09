@@ -153,9 +153,9 @@ def print_monitoring_config_summary(
         "=" * 70,
         f"Target File: {file_path}",
         f"Success Flag Location: {success_flag_file}",
-        f"Process Title: \033[33m{title}\033[0m",
-        f"Email Alerts: {'\033[92mEnabled\033[0m' if email_enabled else '\033[91mDisabled\033[0m'}",
-        f"Max Restarts: {max_restarts} (left: \033[36m{restarts_left}\033[0m)",
+        f"Process Title: " + "\033[33m" + f"{title}" + "\033[0m",
+        f"Email Alerts: " + ("\033[92mEnabled\033[0m" if email_enabled else "\033[91mDisabled\033[0m"),
+        f"Max Restarts: {max_restarts} (left: " + "\033[36m" + f"{restarts_left}" + "\033[0m)",
     ]
 
     if restart_after_delay is not None:
