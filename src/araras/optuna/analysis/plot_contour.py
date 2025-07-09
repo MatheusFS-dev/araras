@@ -144,6 +144,7 @@ def plot_contour(
                     0.5,
                     0.5,
                     draw_warning_box(ax, "No Data or Error Generating")
+                )
             else:
                 try:
                     tri = Triangulation(x, y)
