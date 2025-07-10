@@ -40,7 +40,7 @@ def clear():
         else:  # macOS and Linux
             os.system("clear")
     except Exception as e:
-        print(f"Error clearing terminal: {e}")
+        logger_error.error(f"{RED}Error clearing terminal: {e}{RESET}")
 
 
 def format_number(number, precision=2):

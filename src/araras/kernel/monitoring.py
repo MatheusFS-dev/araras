@@ -188,23 +188,23 @@ def print_completion_summary(restart_count: int, total_runtime: Optional[float] 
 
 def print_error_message(error_type: str, message: str) -> None:
     """Print error messages with consistent formatting."""
-    print(f"ERROR [{error_type}]: {message}")
+    logger_error.error(f"{RED}ERROR [{error_type}]: {message}{RESET}")
 
 
 def print_warning_message(message: str) -> None:
     """Print warning messages with consistent formatting."""
-    print(f"Warning: {message}")
+    logger.warning(f"{YELLOW}Warning: {message}{RESET}")
 
 
 def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
-    print(f"SUCCESS: {message}")
+    logger.info(f"SUCCESS: {message}")
 
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
-        print(f"Child cleanup: {terminated} terminated, {killed} killed")
+        logger.info(f"Child cleanup: {terminated} terminated, {killed} killed")
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
