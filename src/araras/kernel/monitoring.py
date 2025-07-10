@@ -40,7 +40,6 @@ COMPLETION_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;mar
 # Updated monitoring script with consolidated email capabilities
 MONITOR_SCRIPT = """import os,sys,time,psutil,json
 sys.path.insert(0,r"{cwd}")
-from araras.kernel.monitoring import get_process_resource_usage
 
 with open(r"{pid_file}", "w") as f:
     f.write(str(os.getpid()))
@@ -97,16 +96,6 @@ while True:
             except:
                 pass
             send_crash_signal({pid}, {title}, restart_count)
-
-        try:
-            mem_p, mem_gb, cpu_p = get_process_resource_usage({pid})
-            print(
-                f"CPU:{{cpu_p:5.1f}}% MEM:{{mem_p:5.1f}}% ({{mem_gb:.2f}} GB)".ljust(60),
-                end="\r",
-                flush=True,
-            )
-        except Exception:
-            pass
 
     except psutil.NoSuchProcess:
         restart_count = 0
@@ -248,6 +237,17 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
         cpu_percent = proc.cpu_percent(interval=0.1)
     return mem_percent, mem_gb, cpu_percent
 
+def print_process_resource_usage(pid: int) -> None:
+    """Display CPU and memory usage for a process in a single updating line."""
+    try:
+        mem_p, mem_gb, cpu_p = get_process_resource_usage(pid)
+        print(
+            f"CPU:{cpu_p:5.1f}% MEM:{mem_p:5.1f}% ({mem_gb:.2f} GB)".ljust(60),
+            end="\r",
+            flush=True,
+        )
+    except Exception:
+        pass
 
 from .consolidated_email_manager import ConsolidatedEmailManager
 from .file_type_handler import FileTypeHandler
