@@ -101,7 +101,7 @@ while True:
         try:
             mem_p, mem_gb, cpu_p = get_process_resource_usage({pid})
             print(
-                f"CPU:{cpu_p:5.1f}% MEM:{mem_p:5.1f}% ({mem_gb:.2f} GB)".ljust(60),
+                f"CPU:{{cpu_p:5.1f}}% MEM:{{mem_p:5.1f}}% ({{mem_gb:.2f}} GB)".ljust(60),
                 end="\r",
                 flush=True,
             )
