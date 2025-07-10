@@ -96,7 +96,9 @@ while True:
             except:
                 pass
             send_crash_signal({pid}, {title}, restart_count)
-            
+
+
+
     except psutil.NoSuchProcess:
         restart_count = 0
         try:
@@ -215,6 +217,40 @@ def _cleanup_stale_monitor_files():
             os.unlink(path)
         except OSError:
             pass
+
+
+def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
+    """Return memory percentage, memory in GB, and CPU percentage for a process.
+
+    Args:
+        pid: Process ID of the process to query.
+
+    Returns:
+        Tuple containing memory percentage, memory usage in GB and CPU percentage.
+
+    Raises:
+        psutil.NoSuchProcess: If the PID does not exist.
+    """
+
+    proc = psutil.Process(pid)
+    with proc.oneshot():
+        mem_percent = proc.memory_percent()
+        mem_gb = proc.memory_info().rss / (1024 ** 3)
+        cpu_percent = proc.cpu_percent(interval=0.1)
+    return mem_percent, mem_gb, cpu_percent
+
+
+def print_process_resource_usage(pid: int) -> None:
+    """Display CPU and memory usage for a process in a single updating line."""
+    try:
+        mem_p, mem_gb, cpu_p = get_process_resource_usage(pid)
+        print(
+            f"CPU:{cpu_p:5.1f}% MEM:{mem_p:5.1f}% ({mem_gb:.2f} GB)".ljust(60),
+            end="\r",
+            flush=True,
+        )
+    except Exception:
+        pass
 
 
 from .consolidated_email_manager import ConsolidatedEmailManager
