@@ -241,6 +241,12 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
         mem_percent = proc.memory_percent()
         mem_gb = proc.memory_info().rss / (1024**3)
         cpu_percent = proc.cpu_percent()  # Non-blocking call after initialization
+        
+    # write to a log file in the root directory
+    log_file = os.path.join(os.getcwd(), "process_resource_usage.log")
+    with open(log_file, "a") as f:
+        timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
+        f.write(f"Time: {timestamp}, PID: {pid}, MEM: {mem_percent:.2f}%, {mem_gb:.2f} GB, CPU: {cpu_percent:.2f}%\n")
 
     return mem_percent, mem_gb, cpu_percent
 
