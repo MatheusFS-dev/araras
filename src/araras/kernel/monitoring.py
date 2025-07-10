@@ -177,12 +177,12 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
 
 def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
     """Print final completion summary."""
-    print("=" * 50)
-    print("MONITORING COMPLETED")
-    print("=" * 50)
+    print("\n" + "=" * 50)
+    print("\033[92mMONITORING COMPLETED\033[0m")
+    # print("=" * 50)
     print(f"Total Restarts: {restart_count}")
-    if total_runtime is not None:
-        print(f"Total Runtime:  {total_runtime:.1f}s")
+    # if total_runtime is not None:
+    #     print(f"Total Runtime:  {total_runtime:.1f}s")
     print("=" * 50)
 
 
