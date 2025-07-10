@@ -120,17 +120,15 @@ Below is a summary of all modules and their functions.
 
 ### `araras.keras.hparams`
 
-- **`HParams`** – dataclass storing hyperparameter options.
-  - `get_activation(trial, name)` – sample an activation function.
-    - `trial`: Optuna trial object for sampling.
-    - `name`: unique parameter name.
-  - `get_regularizer(trial, name)` – sample a regularizer.
-    - `trial`: Optuna trial object.
-    - `name`: unique parameter name.
-  - `get_optimizer(trial)` – sample and configure an optimizer.
-    - `trial`: Optuna trial object.
+- **`HParams`** – dataclass storing hyperparameter options. The predefined
+  choices include strings and ready‑to‑use Keras/scikit‑learn objects.
+  - `get_activation(trial, name)` – sample an activation or return one of the
+    provided objects.
+  - `get_regularizer(trial, name)` – return a TensorFlow regularizer instance.
+  - `get_optimizer(trial)` – configure and return an optimizer instance.
   - `get_scaler(trial)` – select a scikit‑learn scaler.
-    - `trial`: Optuna trial object.
+  - `get_initializer(trial, name)` – sample a kernel initializer.
+  - `default()` – create an instance with all default options.
 
 ### `araras.keras.utils.profiler`
 
