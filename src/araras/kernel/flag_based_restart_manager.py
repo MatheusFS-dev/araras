@@ -4,6 +4,7 @@ import os
 import psutil
 import subprocess
 import time
+import traceback
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -236,6 +237,7 @@ class FlagBasedRestartManager:
 
                 except Exception as e:
                     _mon.print_error_message("LAUNCH", str(e))
+                    traceback.print_exc()
                     self._cleanup_all()
                     if not self._handle_restart_with_retry():
                         break
