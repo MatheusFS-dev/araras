@@ -176,7 +176,7 @@ class FlagBasedRestartManager:
 
                     # Launch process
                     target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
-                    _mon.print_process_status("Process started", target_pid)
+                    _mon.print_process_status("\033[92mProcess started\033[0m", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
                     if self.restart_count > 0:
