@@ -10,10 +10,10 @@ Example:
     >>> adjusted = punish_model_flops(val_loss, model, 1e-9, "minimize")
     >>> adjusted = punish_model_params(val_loss, model, 1e-8, "maximize")
 """
+from araras.commons import *
 
 import tensorflow as tf
 from araras.keras.utils.profiler import get_flops
-from typing import Literal, Sequence, Union
 
 
 def punish_model_flops(

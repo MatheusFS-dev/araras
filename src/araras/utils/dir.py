@@ -9,6 +9,7 @@ Example usage:
     run_dir = create_run_directory(prefix="run")
     print(run_dir)  # outputs: runs/run1, runs/run2, etc.
 """
+from araras.commons import *
 
 import os
 

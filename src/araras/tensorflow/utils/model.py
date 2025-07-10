@@ -3,11 +3,11 @@ Module for estimating average power and energy consumption
 of a TensorFlow model (SavedModel or Keras model) on CPU or GPU using NVML (GPU)
 or RAPL (CPU).
 """
+from araras.commons import *
 
 import time
 import pynvml
 import tensorflow as tf
-from typing import Tuple, Optional, Callable
 
 
 def get_model_usage_stats(

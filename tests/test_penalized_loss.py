@@ -1,3 +1,4 @@
+from araras.commons import *
 import unittest
 
 import tensorflow as tf

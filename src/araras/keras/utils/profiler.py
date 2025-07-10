@@ -10,8 +10,8 @@ Example usage:
     flops = get_flops(model, batch_size=32)
     macs = get_macs(model, batch_size=32)
 """
+from araras.commons import *
 
-from typing import *
 import time
 import tensorflow as tf
 import psutil

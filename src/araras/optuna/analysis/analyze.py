@@ -11,13 +11,13 @@ Functions:
 Example usage:
     analyze_study(study=my_study, fig_dir="figures", table_dir="tables", top_frac=0.2)
 """
+from araras.commons import *
 
 import os
 import re
 import math
 import optuna
 import numpy as np
-from typing import *
 import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import dataclass

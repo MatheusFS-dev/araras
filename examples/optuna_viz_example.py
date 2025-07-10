@@ -1,3 +1,4 @@
+from araras.commons import *
 import optuna
 
 from araras.optuna import report
