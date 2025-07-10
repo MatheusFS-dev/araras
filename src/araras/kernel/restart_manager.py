@@ -245,6 +245,9 @@ class FlagBasedRestartManager:
 
                 except Exception as e:
                     print_error_message("LAUNCH", str(e))
+                    # Show traceback if needed
+                    import traceback
+                    traceback.print_exc()
                     self._cleanup_all()
                     if not self._handle_restart_with_retry():
                         break
