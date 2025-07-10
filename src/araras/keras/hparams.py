@@ -183,7 +183,7 @@ class HParams:
             "Ftrl": tf.keras.optimizers.Ftrl,
             "Lion": tf.keras.optimizers.Lion,
             "Lamb": tf.keras.optimizers.Lamb,
-            "LossScaleOptimizer": tf.keras.mixed_precision.LossScaleOptimizer,
+            # "LossScaleOptimizer": tf.keras.mixed_precision.LossScaleOptimizer,
         }
 
         # Returns the selected optimizer initialized with the sampled learning rate
