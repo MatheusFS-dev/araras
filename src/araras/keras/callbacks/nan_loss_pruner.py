@@ -5,6 +5,7 @@ It is particularly useful for early stopping of trials with unstable or divergin
 Usage:
     Add NanLossPrunerCallback(trial) to your Keras callbacks list in model.fit().
 """
+from araras.commons import *  # Common imports and configs for the Araras lib
 
 import numpy as np
 import optuna

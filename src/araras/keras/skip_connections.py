@@ -1,5 +1,5 @@
 """
-This module provides a function to create skip connections in a Keras model.
+This module provides a function to create skip connections in a Keras model using Optuna trials.
 
 Function:
     - `trial_skip_connections`: Creates skip connections based on a trial object and a list of layers.
@@ -12,15 +12,16 @@ Usage example:
     final_tensor = trial_skip_connections(trial, layers_list)
     ```
 """
+from araras.commons import *  # Common imports and configs for the Araras lib
 
-from typing import *
+import optuna
 import itertools
 import tensorflow as tf
 from tensorflow.keras import layers
 
 
 def trial_skip_connections(
-    trial: Any,
+    trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
     print_combinations: bool = False,
