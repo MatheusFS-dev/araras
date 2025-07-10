@@ -182,6 +182,8 @@ Below is a summary of all modules and their functions.
 -  - `pid`: process ID to monitor.
 -  - `title`: label for the monitored process.
 -  - `supress_tf_warnings`: suppress TensorFlow warnings.
+- **`get_process_resource_usage(pid)`** – return memory and CPU usage for a PID.
+-  - returns `(memory_percentage, memory_GB, cpu_percentage)`.
 - **`stop_monitor(monitor_info)`** – stop a monitor started with `start_monitor`.
 -  - `monitor_info`: control info returned by `start_monitor`.
 - **`check_crash_signal(monitor_info)`** – check if the monitored process crashed.
