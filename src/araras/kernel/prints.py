@@ -21,17 +21,17 @@ def print_monitoring_config_summary(
     print("MONITORING CONFIGURATION SUMMARY")
     print("=" * 70)
     print(f"Target File: {file_path}")
-    # file type intentionally omitted in summary
+    print(f"Success Flag Location: {success_flag_file}")
     print(f"Process Title: \033[33m{title}\033[0m")
-    print(f"Success Flag: {success_flag_file}")
-    print(f"Max Restarts: {max_restarts}")
-    if restart_after_delay is not None:
-        print(f"Run will force restart after: {restart_after_delay} seconds")
-
     if email_enabled:
         print(f"Email Alerts: \033[92mEnabled\033[0m")
     else:
         print(f"Email Alerts: \033[91mDisabled\033[0m")
+
+    print(f"Max Restarts: {max_restarts}")
+    if restart_after_delay is not None:
+        print(f"Force restart after: {restart_after_delay} seconds")
+
     print("=" * 70)
     print()
 
@@ -54,13 +54,13 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
 
 def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
     """Print a completion summary."""
-    print("=" * 50)
-    print("MONITORING COMPLETED")
-    print("=" * 50)
-    print(f"Total Restarts: {restart_count}")
-    if total_runtime is not None:
-        print(f"Total Runtime:  {total_runtime:.1f}s")
-    print("=" * 50)
+    # print("=" * 50)
+    print("\nMONITORING COMPLETED")
+    # print("=" * 50)
+    # print(f"Total Restarts: {restart_count}")
+    # if total_runtime is not None:
+        # print(f"Total Runtime:  {total_runtime:.1f}s")
+    # print("=" * 50)
 
 
 def print_error_message(error_type: str, message: str) -> None:
