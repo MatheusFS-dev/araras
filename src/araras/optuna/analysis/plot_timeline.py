@@ -1,5 +1,5 @@
+from araras.commons import *
 import os
-from typing import Dict
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from matplotlib.patches import Patch

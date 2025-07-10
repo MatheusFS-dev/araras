@@ -1,3 +1,4 @@
+from araras.commons import *
 import tensorflow as tf
 from tensorflow import keras
 

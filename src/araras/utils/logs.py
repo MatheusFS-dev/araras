@@ -7,6 +7,7 @@ Functions:
 Example:
     log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)
 """
+from araras.commons import *
 
 import os
 import time

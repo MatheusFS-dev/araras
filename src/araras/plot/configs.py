@@ -7,6 +7,7 @@
 This module contains functions to configure matplotlib rcParams for IEEE-style
 figures.
 """
+from araras.commons import *
 
 import numpy as np
 import matplotlib.pyplot as plt

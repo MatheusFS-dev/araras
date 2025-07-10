@@ -11,6 +11,7 @@ Functions:
 Classes:
     - NotebookConverter: Converts Jupyter notebooks to Python files with proper formatting and metadata.
 """
+from araras.commons import *
 
 import os
 import math

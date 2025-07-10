@@ -5,6 +5,7 @@ Functions:
     - capture_model_summary: Captures the model summary as a string.
 
 """
+from araras.commons import *
 
 def capture_model_summary(model):
     """

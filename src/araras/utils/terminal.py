@@ -1,8 +1,8 @@
+from araras.commons import *
 import os
 import platform
 import subprocess
 import tempfile
-from typing import *
 
 
 # ————————————————————————————— Terminal Launcher ———————————————————————————— #

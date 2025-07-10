@@ -1,8 +1,7 @@
 """Callback utilities for Optuna studies."""
+from araras.commons import *
 
 from __future__ import annotations
-
-from typing import List, Optional
 
 import numpy as np
 
@@ -10,10 +9,6 @@ import optuna
 from optuna.terminator import BaseImprovementEvaluator, RegretBoundEvaluator
 from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
 
-import logging
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 class ImprovementStagnationCallback:
     """Stop a study when the terminator improvement variance plateaus.

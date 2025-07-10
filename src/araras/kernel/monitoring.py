@@ -8,6 +8,7 @@ Usage example:
         title="My Critical Process",
     )
 """
+from araras.commons import *
 
 import os
 import sys
@@ -17,7 +18,6 @@ import glob
 import psutil
 import tempfile
 import subprocess
-from typing import *
 from pathlib import Path
 
 from threading import Event, Thread

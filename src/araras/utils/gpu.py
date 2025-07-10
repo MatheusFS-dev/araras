@@ -7,6 +7,7 @@ TensorFlow for machine learning or deep learning tasks.
 Functions:
     - get_gpu_info: Prints detailed TensorFlow and GPU configuration information.
 """
+from araras.commons import *
 
 import tensorflow as tf
 import subprocess

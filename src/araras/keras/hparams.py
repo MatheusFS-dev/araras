@@ -28,9 +28,9 @@ Example usage:
     kernel_regularizer = hparams.get_regularizer(trial, f"{custom_name}_kern_reg_{i}") if use_regularization else None
     bias_regularizer = hparams.get_regularizer(trial, f"{custom_name}_bias_reg_{i}") if use_regularization else None
 """
+from araras.commons import *
 
 from dataclasses import dataclass
-from typing import *
 import optuna
 import tensorflow as tf
 from sklearn.preprocessing import (

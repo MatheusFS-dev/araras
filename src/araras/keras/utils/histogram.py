@@ -32,8 +32,8 @@ Example usage:
         n_trials=1000
     )
 """
+from araras.commons import *
 
-from typing import Callable
 import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
