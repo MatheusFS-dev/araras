@@ -413,6 +413,7 @@ class FlagBasedRestartManager:
                 if check_count % 4 == 0 and self.current_target_pid:
                     if not psutil.pid_exists(self.current_target_pid):
                         return "process_died"
+                    _mon.print_process_resource_usage(self.current_target_pid)
 
                 time.sleep(0.5)
             except KeyboardInterrupt:
