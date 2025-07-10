@@ -1,14 +1,11 @@
 """
-This module provides a function to build a Squeeze-and-Excitation (SE) block
-with hyperparameter tuning using Optuna.
-
+This module provides a function to build a Squeeze-and-Excitation (SE) block with hyperparameter tuning using Optuna.
 Based on the paper: https://arxiv.org/pdf/1709.01507
-
 
 This paper presents the Squeeze-and-Excitation (SE) block, an architectural unit that enhances convolutional neural networks by modelling and leveraging channel-wise dependencies. Through a two-step mechanism, global “squeeze” pooling followed by adaptive “excitation” gating, the SE block generates per-channel modulation weights that reweight feature maps, improving representational capacity with minimal overhead and achieving state-of-the-art results on multiple benchmarks .
 """
+from araras.commons import *  # Common imports and configs for the Araras lib
 
-from typing import List
 import optuna
 import tensorflow as tf
 from tensorflow.keras import layers

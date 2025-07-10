@@ -1,9 +1,5 @@
 """
-Email utilities module.
-
 This module provides functions to send emails using SMTP with Gmail.
-It includes functions to read sender credentials and recipient email addresses from JSON files,
-as well as a function to send emails.
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib

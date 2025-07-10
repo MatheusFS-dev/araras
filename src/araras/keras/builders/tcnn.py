@@ -1,33 +1,11 @@
 """
-This module provides a function to build a TCNN (Transposed Convolutional Neural Network) block with optional hyperparameter tuning and regularization.
+Builders for Transposed Convolutional Networks (TCNNs) in Keras.
 
-Functions:
-    - build_tcnn1d: Constructs a configurable 1D transposed convolutional layer with options for batch normalization, activation, and regularization.
-    - build_tcnn2d: Constructs a configurable 2D transposed convolutional layer with options for batch normalization, activation, and regularization.
-    - build_tcnn3d: Constructs a configurable 3D transposed convolutional layer with options for batch normalization, activation, and regularization.
-
-Usage example:
-    from araras.keras.builders.tcnn import build_tcnn1d
-    from araras.keras.hparams import HParams
-    import tensorflow as tf
-    hparams = HParams()
-    x = tf.keras.Input(shape=(128, 64))  # Example input shape
-    tcnn_layer = build_tcnn1d(
-        trial=trial,
-        hparams=hparams,
-        x=x,
-        filters_range=(32, 128),
-        filters_step=10,
-        kernel_size_range=(3, 7),
-        kernel_size_step=1,
-        use_batch_norm=True,
-        trial_kernel_reg=True,
-        trial_bias_reg=True,
-        trial_activity_reg=True
-    )
+Check __init__.py for an example.
 """
 
-from typing import *
+from araras.commons import *  # Common imports and configs for the Araras lib
+
 from tensorflow.keras import layers, initializers
 from araras.keras.hparams import HParams
 

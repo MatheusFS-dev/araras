@@ -1,30 +1,11 @@
 """
-This module provides a function to build a Deep Neural Network (DNN) block with optional hyperparameter tuning and regularization.
+Builders for Deep Neural Networks (DNNs) in Keras.
 
-Functions:
-    - build_dnn: Constructs a configurable DNN layer with options for dropout, batch normalization, and regularization.
-    
-Usage example:
-    from araras.keras.builders.dnn import build_dnn
-    from araras.keras.hparams import HParams
-    import tensorflow as tf
-    hparams = HParams()
-    x = tf.keras.Input(shape=(128, 64))  # Example input shape
-    dnn_layer = build_dnn(
-        trial=trial,
-        hparams=hparams,
-        x=x,
-        units_range=(64, 256),
-        units_step=32,
-        dropout_rate_range=(0.1, 0.5),
-        dropout_rate_step=0.1,
-        use_batch_norm=True
-    )
-
+Check __init__.py for an example.
 """
 
+from araras.commons import *  # Common imports and configs for the Araras lib
 
-from typing import *
 from tensorflow.keras import layers, initializers
 from araras.keras.hparams import HParams
 

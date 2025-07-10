@@ -1,14 +1,11 @@
 """
-Graph neural network (GNN) building utilities.
+Builders for Graph Neural Networks (GNNs) in Keras.
 
-This module provides helper functions to create common GNN layers using
-hyperparameter optimization and the same interface as other builders in the
-package.  Functions include single-layer builders for GCN, GAT and Chebyshev
-convolutions as well as utilities to build adjacency matrices for grid and
-k-nearest neighbour graphs.
+Check __init__.py for an example.
 """
 
-from typing import Any, Union, Tuple
+from araras.commons import *  # Common imports and configs for the Araras lib
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, initializers
@@ -24,12 +21,9 @@ def print_warning_jit():
     """Print a warning about JIT compilation."""
     global PRINT_ONCE_JIT
     if PRINT_ONCE_JIT:
-        YELLOW = "\033[93m"
-        ORANGE = "\033[38;5;208m"
-        RESET = "\033[0m"
-
         # warning messages in yellow
         warnings = [
+            "==============================================================",
             "Spektral's GCNConv uses a sparse-dense matmul under the hood.",
             "XLA's GPU JIT compiler does not support that op.",
             "This may cause issues with the GNN layers.",
@@ -37,7 +31,7 @@ def print_warning_jit():
             "Call:",
         ]
         for msg in warnings:
-            print(f"{YELLOW}{msg}{RESET}")
+            print(f"{YELLOW}{msg}")
 
         # commands in orange
         commands = [
@@ -46,7 +40,8 @@ def print_warning_jit():
             "'jit_compile=False'  # pass into model.compile()",
         ]
         for cmd in commands:
-            print(f"{ORANGE}{cmd}{RESET}")
+            print(f"{ORANGE}{cmd}")
+        print(f"{YELLOW}==============================================================")
         PRINT_ONCE_JIT = False
 
 
