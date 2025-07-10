@@ -117,6 +117,14 @@ def run_auto_restart(
                     print_process_status("Restart loop interrupted by user, cleaning up")
                     manager.force_stop()
                     manager._cleanup_converted_file()
+                except Exception as e:
+                    print_error_message("FATAL", str(e))
+                    # Show traceback if needed
+                    import traceback
+                    traceback.print_exc()
+                    stop_event.set()
+                    manager.force_stop()
+                    manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
                 print_process_status("Restart-after-delay loop done")
