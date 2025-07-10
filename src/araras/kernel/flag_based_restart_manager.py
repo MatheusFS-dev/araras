@@ -13,6 +13,10 @@ from araras.utils.misc import NotebookConverter
 from .consolidated_email_manager import ConsolidatedEmailManager
 from .file_type_handler import FileTypeHandler
 from . import monitoring as _mon
+from .monitoring import (
+    print_completion_summary,
+    print_success_message,
+)
 
 
 class FlagBasedRestartManager:
@@ -534,7 +538,9 @@ class FlagBasedRestartManager:
                     self.converted_python_file.unlink()
                     _mon.print_process_status(f"Cleaned up converted file: {self.converted_python_file}")
             except Exception as e:
-                _mon.print_warning_message(f"Failed to cleanup converted file {self.converted_python_file}: {e}")
+                _mon.print_warning_message(
+                    f"Failed to cleanup converted file {self.converted_python_file}: {e}"
+                )
             finally:
                 self.converted_python_file = None
                 self.original_was_notebook = False
@@ -554,5 +560,3 @@ class FlagBasedRestartManager:
                 self.running = False
                 _mon.print_process_status("CTRL+C detected during restart delay, aborting restart")
                 break
-
-
