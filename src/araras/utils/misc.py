@@ -2,14 +2,15 @@
 Miscellaneous utility functions for the Araras project.
 
 Functions:
-    - clear_terminal: Clears the terminal or notebook cell output, compatible with various environments.
-    - format_number: Formats a number with appropriate suffixes (K, M, G, etc.) and precision.
-    - format_bytes: Formats a byte value with binary suffixes (B, KB, MB, etc.) and precision.
-    - format_scientific: Formats a number in scientific notation with automatic precision.
-    - format_number_commas: Formats a number with commas as thousands separators.
-    
-Classes:
-    - NotebookConverter: Converts Jupyter notebooks to Python files with proper formatting and metadata.
+    - clear: Clear all prints from terminal or notebook cell.
+    - format_number: Format a number using scientific suffixes.
+    - format_bytes: Format bytes using binary suffixes (B, KB, MB, GB, etc.).
+    - format_scientific: Format to scientific notation with automatic precision based on number magnitude.
+    - format_number_commas: Format a number with commas as thousands separators.
+
+Example:
+    >>> from araras.utils.misc import clear
+    >>> clear(...)
 """
 from araras.commons import *
 

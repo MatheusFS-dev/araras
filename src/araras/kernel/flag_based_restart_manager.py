@@ -1,3 +1,15 @@
+"""
+Restart manager based on flag files.
+
+Classes:
+    - FlagBasedRestartManager: Handles auto-restart logic and monitoring for a
+      target script.
+
+Example:
+    >>> from araras.kernel.flag_based_restart_manager import FlagBasedRestartManager
+    >>> manager = FlagBasedRestartManager()
+    >>> manager.run_file_with_restart("train.py")
+"""
 from araras.commons import *
 from __future__ import annotations
 

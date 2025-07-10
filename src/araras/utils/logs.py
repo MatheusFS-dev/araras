@@ -2,10 +2,11 @@
 This module provides utilities for logging system.
 
 Functions:
-    - log_resources: Logs selected system and ML resources at regular time intervals.
+    - log_resources: Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regular time intervals.
 
 Example:
-    log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)
+    >>> from araras.utils.logs import log_resources
+    >>> log_resources(...)
 """
 from araras.commons import *
 

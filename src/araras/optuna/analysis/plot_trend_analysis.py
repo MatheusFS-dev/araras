@@ -1,3 +1,13 @@
+"""
+Module plot_trend_analysis of analysis
+
+Functions:
+    - plot_trend_analysis: Create a single comprehensive plot with trend analysis for parameter-loss relationships.
+
+Example:
+    >>> from araras.optuna.analysis.plot_trend_analysis import plot_trend_analysis
+    >>> plot_trend_analysis(...)
+"""
 from araras.commons import *
 import os
 import numpy as np

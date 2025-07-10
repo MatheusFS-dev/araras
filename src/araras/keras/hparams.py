@@ -1,32 +1,14 @@
 """
-This module contains the hyperparameter tuning logic for the model.
-It provides a class `HParams` that encapsulates the logic for selecting various hyperparameters
-such as activation functions, regularizers, optimizers, and scalers.
-It uses the Optuna library for hyperparameter optimization and TensorFlow Keras for model building.
+Hyperparameter utilities for Keras models.
 
-Functions:
-    - get_activation: Returns a suggested activation function based on the trial.
-    - get_regularizer: Returns a suggested regularizer based on the trial.
-    - get_optimizer: Returns a suggested optimizer based on the trial.
-    - get_scaler: Returns a suggested scaler based on the trial.
+Classes:
+    - HParams: Dataclass with methods to sample activation functions,
+      regularizers, optimizers, and scalers.
 
-Class HParams:
-    - activation_choices: List of available activation functions.
-    - regularizer_choices: List of available regularizers.
-    - optimizer_choices: List of available optimizers.
-    - scaler_choices: List of available scalers.
-
-Example usage:
-    hparams = HParams(
-        activation_choices=["relu", "tanh", "swish"],
-        regularizer_choices=["none", "l2"],
-        optimizer_choices=["Adam", "SGD"],
-        scaler_choices=["StandardScaler", "MinMaxScaler_0_1"],
-    )
-
-    activation_function = hparams.get_activation(trial, f"{custom_name}_act_{i}")
-    kernel_regularizer = hparams.get_regularizer(trial, f"{custom_name}_kern_reg_{i}") if use_regularization else None
-    bias_regularizer = hparams.get_regularizer(trial, f"{custom_name}_bias_reg_{i}") if use_regularization else None
+Example:
+    >>> from araras.keras.hparams import HParams
+    >>> hp = HParams()
+    >>> hp.get_optimizer(optuna.trial.FixedTrial({}))
 """
 from araras.commons import *
 

@@ -1,3 +1,13 @@
+"""
+Module plot_param_importances of analysis
+
+Functions:
+    - plot_param_importances: Generate and save parameter importance analysis.
+
+Example:
+    >>> from araras.optuna.analysis.plot_param_importances import plot_param_importances
+    >>> plot_param_importances(...)
+"""
 from araras.commons import *
 import os
 import pandas as pd

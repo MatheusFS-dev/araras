@@ -1,3 +1,13 @@
+"""
+Module plot_intermediate_values of analysis
+
+Functions:
+    - plot_intermediate_values: Plot intermediate values reported during trials.
+
+Example:
+    >>> from araras.optuna.analysis.plot_intermediate_values import plot_intermediate_values
+    >>> plot_intermediate_values(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

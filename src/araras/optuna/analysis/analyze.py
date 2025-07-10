@@ -1,15 +1,27 @@
 """
 Utility functions for analyzing Optuna study results.
 
-This module provides comprehensive analysis tools for Optuna hyperparameter optimization studies,
-generating statistical summaries, visualizations, and comparative analyses between best and worst
-performing trials.
-
 Functions:
-    - analyze_study: Main analysis function generating all summaries and visualizations
+    - set_plot_config_param: Set a single parameter in :data:`PLOT_CFG`.
+    - set_plot_config_params: Set multiple parameters in :data:`PLOT_CFG`.
+    - format_title: Format a title template with the given display name.
+    - calculate_grid: Calculate grid dimensions ensuring the resulting figure stays within
+    - draw_warning_box: Display a warning message inside a plot area.
+    - create_directories: Create organized subdirectories for storing analysis outputs.
+    - save_data_for_latex: Save graph data to CSV files for LaTeX plotting.
+    - get_param_display_name: Get display name for parameter, using mapping if provided.
+    - prepare_dataframe: Extract and clean completed trial data from Optuna study.
+    - classify_columns: Split DataFrame columns into numeric and categorical parameter types.
+    - get_trial_subsets: Extract best and worst performing trial subsets based on loss values.
+    - format_numeric_value: Format numeric values with appropriate precision for readability.
+    - save_summary_tables: Generate and save statistical summary tables for different trial subsets.
+    - _safe_plot: Execute a plotting function, catching and reporting any errors.
+    - print_study_columns: Print the names of the DataFrame columns from the study as a bullet list.
+    - analyze_study: Comprehensive analysis of Optuna hyperparameter optimization study results.
 
-Example usage:
-    analyze_study(study=my_study, fig_dir="figures", table_dir="tables", top_frac=0.2)
+Example:
+    >>> from araras.optuna.analysis.analyze import set_plot_config_param
+    >>> set_plot_config_param(...)
 """
 from araras.commons import *
 

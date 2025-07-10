@@ -1,4 +1,14 @@
-"""Callback utilities for Optuna studies."""
+"""
+Callback to stop an Optuna study when improvement stagnates.
+
+Classes:
+    - ImprovementStagnationCallback: Monitors improvement variance and stops the
+      study once it falls below a threshold.
+
+Example:
+    >>> from araras.optuna.callbacks.improvement_stagnation import ImprovementStagnationCallback
+    >>> ImprovementStagnationCallback()  # used as a callback in study.optimize
+"""
 from araras.commons import *
 
 from __future__ import annotations

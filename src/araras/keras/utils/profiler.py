@@ -1,14 +1,14 @@
 """
 This module provides utilities to calculate the number of floating-point operations (FLOPs)
-and Multiply-Accumulate operations (MACs) for a given Keras model.
 
 Functions:
-    - get_flops: Calculates the total number of FLOPs for a single forward pass of the model.
-    - get_macs: Estimates the number of MACs for a single forward pass of the model.
+    - get_flops: Calculates the total number of floating-point operations (FLOPs) needed
+    - get_macs: Estimates the number of Multiply-Accumulate operations (MACs) required
+    - get_memory_and_time: Measures the peak memory usage and average inference time of a Keras model
 
-Example usage:
-    flops = get_flops(model, batch_size=32)
-    macs = get_macs(model, batch_size=32)
+Example:
+    >>> from araras.keras.utils.profiler import get_flops
+    >>> get_flops(...)
 """
 from araras.commons import *
 

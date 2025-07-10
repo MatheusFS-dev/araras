@@ -1,12 +1,26 @@
 """
 This module provides a restarting monitoring system for processes with email alert capabilities.
-It monitors a process for crashes and restarts it if necessary.
 
-Usage example:
-    run_auto_restart(
-        file_path="my_script.py",
-        title="My Critical Process",
-    )
+Functions:
+    - print_monitoring_config_summary: Print a summary of monitoring configuration only once.
+    - print_process_status: Print process status messages with consistent formatting.
+    - print_restart_info: Print restart information with formatting.
+    - print_completion_summary: Print final completion summary.
+    - print_error_message: Print error messages with consistent formatting.
+    - print_warning_message: Print warning messages with consistent formatting.
+    - print_success_message: Print success messages with consistent formatting.
+    - print_cleanup_info: Print child process cleanup information.
+    - _cleanup_stale_monitor_files: No description.
+    - get_process_resource_usage: Return memory percentage, memory in GB, and CPU percentage for a process.
+    - print_process_resource_usage: Display CPU and memory usage for a process in a single updating line.
+    - start_monitor: Start simplified crash monitor without email capabilities.
+    - stop_monitor: Stop monitor and cleanup files with optimized batch operations.
+    - check_crash_signal: Check if process crashed with minimal I/O operations.
+    - run_auto_restart: Main function with notebook conversion, file cleanup, and consolidated email notification support.
+
+Example:
+    >>> from araras.kernel.monitoring import print_monitoring_config_summary
+    >>> print_monitoring_config_summary(...)
 """
 from araras.commons import *
 

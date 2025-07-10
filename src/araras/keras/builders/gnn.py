@@ -1,7 +1,19 @@
 """
 Builders for Graph Neural Networks (GNNs) in Keras.
 
-Check __init__.py for an example.
+Functions:
+    - print_warning_jit: Print a warning about JIT compilation.
+    - build_grid_adjacency: Build a grid adjacency matrix with GCN normalization.
+    - build_knn_adjacency: Construct a k-nearest neighbour adjacency matrix on a 2-D grid.
+    - _select_range_value: Helper to pick an integer from a fixed value or an Optuna range.
+    - _select_float_range_value: Helper to pick a float from a fixed value or an Optuna range.
+    - build_gcn: Build a single Graph Convolutional Network (GCN) layer.
+    - build_gat: Build a single Graph Attention (GAT) layer.
+    - build_cheb: Build a single Chebyshev graph convolution layer.
+
+Example:
+    >>> from araras.keras.builders.gnn import print_warning_jit
+    >>> print_warning_jit(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib

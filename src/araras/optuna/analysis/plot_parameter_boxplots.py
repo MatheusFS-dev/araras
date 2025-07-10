@@ -1,3 +1,13 @@
+"""
+Module plot_parameter_boxplots of analysis
+
+Functions:
+    - plot_parameter_boxplots: Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
+
+Example:
+    >>> from araras.optuna.analysis.plot_parameter_boxplots import plot_parameter_boxplots
+    >>> plot_parameter_boxplots(...)
+"""
 from araras.commons import *
 import os
 import numpy as np

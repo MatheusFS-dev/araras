@@ -1,14 +1,14 @@
-"""Utilities for penalizing objective values based on model complexity.
+"""
+Utilities for penalizing objective values based on model complexity.
 
-This module contains helpers that adjust an objective value (usually a loss
-or metric) according to the computational cost of a Keras model.  Two types of
-penalties are provided: one based on the number of FLOPs required for a single
-forward pass and another based on the number of model parameters.  These are
-useful for discouraging overly complex models during optimisation.
+Functions:
+    - punish_model_flops: Penalize an objective according to the model's FLOPs.
+    - punish_model_params: Penalize an objective according to the model's parameter count.
+    - punish_model: Apply both FLOPs and parameter penalties to an objective.
 
 Example:
-    >>> adjusted = punish_model_flops(val_loss, model, 1e-9, "minimize")
-    >>> adjusted = punish_model_params(val_loss, model, 1e-8, "maximize")
+    >>> from araras.keras.utils.punish import punish_model_flops
+    >>> punish_model_flops(...)
 """
 from araras.commons import *
 

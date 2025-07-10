@@ -1,3 +1,13 @@
+"""
+Module describe_numeric of analysis
+
+Functions:
+    - describe_numeric: Generate descriptive statistics for numeric hyperparameters.
+
+Example:
+    >>> from araras.optuna.analysis.describe_numeric import describe_numeric
+    >>> describe_numeric(...)
+"""
 from araras.commons import *
 import pandas as pd
 

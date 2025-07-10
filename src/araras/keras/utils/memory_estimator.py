@@ -1,3 +1,18 @@
+"""
+Module memory_estimator of utils
+
+Functions:
+    - get_model_trainable_params: Get number of trainable parameters in the model.
+    - get_precision_bytes: Determine bytes per parameter based on model's actual dtype.
+    - get_optimizer_state_factor: Determine optimizer state factor from compiled model.
+    - calculate_activation_memory: Calculate activation memory needed during forward/backward pass.
+    - get_framework_overhead: Calculate framework overhead based on available GPU memory.
+    - estimate_training_memory: Estimate total VRAM needed for training a Keras model in bytes.
+
+Example:
+    >>> from araras.keras.utils.memory_estimator import get_model_trainable_params
+    >>> get_model_trainable_params(...)
+"""
 from araras.commons import *
 import tensorflow as tf
 from tensorflow import keras

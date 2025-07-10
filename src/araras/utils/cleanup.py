@@ -1,6 +1,12 @@
 """
-This module provides a utility for cleaning up child processes efficiently
-by gracefully terminating them first and force killing any that do not respond.
+Utility for cleaning up child processes efficiently.
+
+Classes:
+    - ChildProcessCleanup: Terminates or kills child processes with grace.
+
+Example:
+    >>> from araras.utils.cleanup import ChildProcessCleanup
+    >>> ChildProcessCleanup().cleanup_children()
 """
 from araras.commons import *
 

@@ -1,3 +1,15 @@
+"""
+Module plot_terminator_improvement of analysis
+
+Functions:
+    - _get_improvement_info: No description.
+    - _get_y_range: No description.
+    - plot_terminator_improvement: Plot the potentials for future objective improvement using Matplotlib.
+
+Example:
+    >>> from araras.optuna.analysis.plot_terminator_improvement import _get_improvement_info
+    >>> _get_improvement_info(...)
+"""
 from araras.commons import *
 import os
 

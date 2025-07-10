@@ -1,7 +1,12 @@
 """
 Builders for Long Short-Term Memory (LSTM) networks in Keras.
 
-Check __init__.py for an example.
+Functions:
+    - build_lstm: Builds a single LSTM block with optional regularization, batch normalization, and dynamic dropout.
+
+Example:
+    >>> from araras.keras.builders.lstm import build_lstm
+    >>> build_lstm(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib

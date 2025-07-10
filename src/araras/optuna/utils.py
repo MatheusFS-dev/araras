@@ -2,13 +2,18 @@
 This module contains utility functions for Optuna integration.
 
 Functions:
-    - get_remaining_trials: Returns the number of remaining trials in a study.
-    - cleanup_non_top_trials: Removes files for trials not in the top-K set.
-    - rename_top_k_files: Renames top-K trial files with ranking prefix.
-    - save_trial_params_to_file: Saves trial parameters and metadata to a text file.
-    - get_top_trials: Retrieves the top-K trials from a study based on ranking criteria.
-    - save_top_k_trials: Saves top-K trials to text files.
-    - init_study_dirs: Initializes study directory structure for experiments.
+    - supress_optuna_warnings: Suppress only Optuna experimental warnings.
+    - get_remaining_trials: Returns a list of completed trials from the given Optuna study.
+    - cleanup_non_top_trials: Remove files for trials not in the top-K set.
+    - rename_top_k_files: Rename top-K trial files with ranking prefix.
+    - save_trial_params_to_file: Save Optuna trial parameters and associated metadata to a text file.
+    - get_top_trials: Get the top-K trials from an Optuna study based on ranking criteria.
+    - save_top_k_trials: Save top-K trials to text files.
+    - init_study_dirs: Create and return study directory structure for experiments.
+
+Example:
+    >>> from araras.optuna.utils import supress_optuna_warnings
+    >>> supress_optuna_warnings(...)
 """
 from araras.commons import *
 

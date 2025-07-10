@@ -1,3 +1,13 @@
+"""
+Module plot_edf of analysis
+
+Functions:
+    - plot_edf: Plot the empirical distribution function of objective values.
+
+Example:
+    >>> from araras.optuna.analysis.plot_edf import plot_edf
+    >>> plot_edf(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

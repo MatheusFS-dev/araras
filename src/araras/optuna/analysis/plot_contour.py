@@ -1,3 +1,13 @@
+"""
+Module plot_contour of analysis
+
+Functions:
+    - plot_contour: Generate contour plots for parameter pairs.
+
+Example:
+    >>> from araras.optuna.analysis.plot_contour import plot_contour
+    >>> plot_contour(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt
