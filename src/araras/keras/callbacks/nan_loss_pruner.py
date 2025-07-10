@@ -1,9 +1,12 @@
 """
-This module provides a custom Keras callback for pruning an Optuna trial when the training loss becomes NaN.
-It is particularly useful for early stopping of trials with unstable or diverging training.
+Keras callback for pruning Optuna trials when the training loss becomes NaN.
 
-Usage:
-    Add NanLossPrunerCallback(trial) to your Keras callbacks list in model.fit().
+Classes:
+    - NanLossPrunerCallback: Stops a trial once ``loss`` is NaN.
+
+Example:
+    >>> from araras.keras.callbacks.nan_loss_pruner import NanLossPrunerCallback
+    >>> NanLossPrunerCallback(trial)
 """
 from araras.commons import *  # Common imports and configs for the Araras lib
 

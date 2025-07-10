@@ -1,13 +1,12 @@
 """
 This module provides utility functions for managing directories, such as creating
-incrementally named run directories for experiments or other purposes.
 
 Functions:
-    - create_run_directory: Creates a new directory with an incremented numeric suffix.
+    - create_run_directory: Creates a new run directory with an incremented numeric suffix and returns its full path.
 
-Example usage:
-    run_dir = create_run_directory(prefix="run")
-    print(run_dir)  # outputs: runs/run1, runs/run2, etc.
+Example:
+    >>> from araras.utils.dir import create_run_directory
+    >>> create_run_directory(...)
 """
 from araras.commons import *
 

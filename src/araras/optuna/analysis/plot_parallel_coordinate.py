@@ -1,3 +1,13 @@
+"""
+Module plot_parallel_coordinate of analysis
+
+Functions:
+    - plot_parallel_coordinate: Create a parallel coordinate plot for trials.
+
+Example:
+    >>> from araras.optuna.analysis.plot_parallel_coordinate import plot_parallel_coordinate
+    >>> plot_parallel_coordinate(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

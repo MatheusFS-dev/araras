@@ -1,7 +1,14 @@
 """
 Builders for Transposed Convolutional Networks (TCNNs) in Keras.
 
-Check __init__.py for an example.
+Functions:
+    - build_tcnn1d: Builds a single 1D transposed convolution block with optional batch norm and activation.
+    - build_tcnn2d: Builds a single 2D transposed convolution block with optional batch norm and activation.
+    - build_tcnn3d: Builds a single 3D transposed convolution block with optional batch norm and activation.
+
+Example:
+    >>> from araras.keras.builders.tcnn import build_tcnn1d
+    >>> build_tcnn1d(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib

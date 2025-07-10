@@ -1,3 +1,14 @@
+"""
+Callback that stops an Optuna study after many consecutive pruned trials.
+
+Classes:
+    - StopIfKeepBeingPruned: Interrupts optimization if ``threshold`` consecutive
+      trials are pruned.
+
+Example:
+    >>> from araras.optuna.callbacks.keep_being_pruned import StopIfKeepBeingPruned
+    >>> StopIfKeepBeingPruned(threshold=3)
+"""
 from araras.commons import *
 import optuna
 

@@ -1,3 +1,13 @@
+"""
+Module plot_hyperparameter_distributions of analysis
+
+Functions:
+    - plot_hyperparameter_distributions: Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
+
+Example:
+    >>> from araras.optuna.analysis.plot_hyperparameter_distributions import plot_hyperparameter_distributions
+    >>> plot_hyperparameter_distributions(...)
+"""
 from araras.commons import *
 import os
 import numpy as np

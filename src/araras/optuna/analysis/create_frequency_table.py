@@ -1,3 +1,13 @@
+"""
+Module create_frequency_table of analysis
+
+Functions:
+    - create_frequency_table: Generate frequency tables for categorical hyperparameters.
+
+Example:
+    >>> from araras.optuna.analysis.create_frequency_table import create_frequency_table
+    >>> create_frequency_table(...)
+"""
 from araras.commons import *
 import pandas as pd
 

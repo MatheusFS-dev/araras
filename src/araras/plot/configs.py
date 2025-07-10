@@ -1,12 +1,18 @@
+"""
+This module contains functions to configure matplotlib rcParams for IEEE-style
+
+Functions:
+    - config_plt: Configure matplotlib rcParams for IEEE‑style figures
+
+Example:
+    >>> from araras.plot.configs import config_plt
+    >>> config_plt(...)
+"""
 # ———————————————————————————————————————————————————————————————————————————— #
 #                      Authored by Matheus Ferreira Silva                      #
 #                           github.com/MatheusFS-dev                           #
 # ———————————————————————————————————————————————————————————————————————————— #
 
-"""
-This module contains functions to configure matplotlib rcParams for IEEE-style
-figures.
-"""
 from araras.commons import *
 
 import numpy as np

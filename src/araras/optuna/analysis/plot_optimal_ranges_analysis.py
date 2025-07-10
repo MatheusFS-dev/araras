@@ -1,3 +1,13 @@
+"""
+Module plot_optimal_ranges_analysis of analysis
+
+Functions:
+    - plot_optimal_ranges_analysis: Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
+
+Example:
+    >>> from araras.optuna.analysis.plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
+    >>> plot_optimal_ranges_analysis(...)
+"""
 from araras.commons import *
 import os
 import numpy as np

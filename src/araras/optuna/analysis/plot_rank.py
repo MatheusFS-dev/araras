@@ -1,3 +1,13 @@
+"""
+Module plot_rank of analysis
+
+Functions:
+    - plot_rank: Plot parameter relations colored by rank.
+
+Example:
+    >>> from araras.optuna.analysis.plot_rank import plot_rank
+    >>> plot_rank(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

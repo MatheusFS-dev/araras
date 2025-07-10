@@ -2,14 +2,11 @@
 This module provides a utility to convert a Keras `.keras` model archive.
 
 Functions:
-    convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
-        Converts a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
-        The output is a zip file containing the SavedModel directory structure.
+    - convert_to_saved_model: Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
 
-        Example usage:
-        convert_to_saved_model("model.keras", "saved_model.zip")
-    
-
+Example:
+    >>> from araras.keras.utils.convert import convert_to_saved_model
+    >>> convert_to_saved_model(...)
 """
 from araras.commons import *
 

@@ -1,3 +1,13 @@
+"""
+Module plot_optimization_history of analysis
+
+Functions:
+    - plot_optimization_history: Plot optimization history of the study.
+
+Example:
+    >>> from araras.optuna.analysis.plot_optimization_history import plot_optimization_history
+    >>> plot_optimization_history(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

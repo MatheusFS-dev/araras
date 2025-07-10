@@ -1,3 +1,13 @@
+"""
+Module plot_slice of analysis
+
+Functions:
+    - plot_slice: Create slice plots for each parameter.
+
+Example:
+    >>> from araras.optuna.analysis.plot_slice import plot_slice
+    >>> plot_slice(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

@@ -1,3 +1,13 @@
+"""
+Module model_stats of keras
+
+Functions:
+    - get_model_stats: Extract and return model statistics from the given Optuna trial.
+
+Example:
+    >>> from araras.optuna.keras.model_stats import get_model_stats
+    >>> get_model_stats(...)
+"""
 from araras.commons import *
 import tensorflow as tf
 import optuna

@@ -1,3 +1,14 @@
+"""
+Utility class for detecting file types and building execution commands.
+
+Classes:
+    - FileTypeHandler: Provides methods to identify file types and construct
+      commands for running them.
+
+Example:
+    >>> from araras.kernel.file_type_handler import FileTypeHandler
+    >>> FileTypeHandler.build_execution_command(Path("train.py"), "success.txt")
+"""
 from araras.commons import *
 from __future__ import annotations
 

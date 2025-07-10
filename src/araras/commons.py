@@ -1,6 +1,12 @@
 """
 Common setup for the Araras library.
-This script is called in every other script within the Araras library.
+
+Functions:
+    - make_logger: Create a logger with its own StreamHandler and ColorFormatter.
+
+Example:
+    >>> from araras.commons import make_logger
+    >>> make_logger(...)
 """
 
 # ————————————————————————————— Standard Imports ————————————————————————————— #

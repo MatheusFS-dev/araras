@@ -1,3 +1,14 @@
+"""
+Manage consolidated email notifications for restart events.
+
+Classes:
+    - ConsolidatedEmailManager: Sends aggregated status emails with retry logic.
+
+Example:
+    >>> from araras.kernel.consolidated_email_manager import ConsolidatedEmailManager
+    >>> manager = ConsolidatedEmailManager()
+    >>> manager.send_consolidated_status_email("task_complete", {})
+"""
 from araras.commons import *
 from __future__ import annotations
 

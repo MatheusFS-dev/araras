@@ -1,11 +1,18 @@
 """
 This module provides utility functions for inspecting and reporting GPU-related
-information in a TensorFlow environment. It is designed to help developers
-understand the GPU configuration and capabilities of their system when using
-TensorFlow for machine learning or deep learning tasks.
 
 Functions:
-    - get_gpu_info: Prints detailed TensorFlow and GPU configuration information.
+    - get_user_gpu_choice: Prompts the user to select a GPU index and validates the input.
+    - _get_nvidia_smi_data: Retrieves GPU information using nvidia-smi command.
+    - _print_tensorflow_info: Print TensorFlow configuration information.
+    - _print_gpu_table: Print GPU information in nvidia-smi style table format.
+    - _print_memory_summary: Print memory summary similar to nvidia-smi bottom section.
+    - get_gpu_info: Prints detailed TensorFlow and GPU configuration information in nvidia-smi style format.
+    - gpu_summary: Prints a compact GPU summary similar to nvidia-smi output.
+
+Example:
+    >>> from araras.utils.gpu import get_user_gpu_choice
+    >>> get_user_gpu_choice(...)
 """
 from araras.commons import *
 

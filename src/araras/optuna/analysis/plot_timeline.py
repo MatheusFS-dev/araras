@@ -1,3 +1,13 @@
+"""
+Module plot_timeline of analysis
+
+Functions:
+    - plot_timeline: Visualize trial durations on a timeline with detailed information.
+
+Example:
+    >>> from araras.optuna.analysis.plot_timeline import plot_timeline
+    >>> plot_timeline(...)
+"""
 from araras.commons import *
 import os
 import matplotlib.pyplot as plt

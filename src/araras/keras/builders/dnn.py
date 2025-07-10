@@ -1,7 +1,12 @@
 """
 Builders for Deep Neural Networks (DNNs) in Keras.
 
-Check __init__.py for an example.
+Functions:
+    - build_dnn: Builds a single dense neural network (DNN) block with optional regularization, batch normalization, and dropout.
+
+Example:
+    >>> from araras.keras.builders.dnn import build_dnn
+    >>> build_dnn(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib

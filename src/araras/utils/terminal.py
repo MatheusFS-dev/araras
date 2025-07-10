@@ -1,3 +1,13 @@
+"""
+Cross-platform terminal launcher utilities.
+
+Classes:
+    - SimpleTerminalLauncher: Launches commands in new terminals and captures PIDs.
+
+Example:
+    >>> from araras.utils.terminal import SimpleTerminalLauncher
+    >>> SimpleTerminalLauncher().launch(["echo", "hello"], ".")
+"""
 from araras.commons import *
 import os
 import platform

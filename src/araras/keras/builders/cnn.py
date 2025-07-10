@@ -1,7 +1,17 @@
 """
 Builders for Convolutional Neural Networks (CNNs) in Keras.
 
-Check __init__.py for an example.
+Functions:
+    - build_cnn1d: Builds a 1D convolutional layer with optional hyperparameter tuning and regularization.
+    - build_dense_as_conv1d: Simulate a Dense layer using a Conv1D with kernel_size=1.
+    - build_cnn2d: Builds a 2D convolutional layer with optional hyperparameter tuning and regularization.
+    - build_dense_as_conv2d: Simulate a Dense layer using a Conv2D with kernel_size=(1, 1).
+    - build_cnn3d: Builds a 3D convolutional layer with optional hyperparameter tuning and regularization.
+    - build_dense_as_conv3d: Simulate a Dense layer using a Conv3D with kernel_size=(1, 1, 1).
+
+Example:
+    >>> from araras.keras.builders.cnn import build_cnn1d
+    >>> build_cnn1d(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
