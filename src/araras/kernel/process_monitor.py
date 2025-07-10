@@ -46,6 +46,7 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
         pid=pid,
         interval=2,
         title=repr(title),
+        timestamp=time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime()),
         **control_files,
     )
 
@@ -129,4 +130,3 @@ def check_crash_signal(monitor_info: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
     return {}
-
