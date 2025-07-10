@@ -58,7 +58,7 @@ class ChildProcessCleanup:
             if not targets:
                 return 0, 0
 
-            print(f"Cleaning up {len(targets)} child processes")
+            logger.info(f"Cleaning up {len(targets)} child processes")
 
             # Phase 1: Graceful termination with parallel execution
             terminated_count = self._terminate_processes(targets)

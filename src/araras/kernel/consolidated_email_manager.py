@@ -39,7 +39,9 @@ class ConsolidatedEmailManager:
 
         if not (recipients_exists and credentials_exists):
             _mon.print_warning_message("Email config files not found, email alerts disabled")
-            print(f"Expected files: {self.recipients_file}, {self.credentials_file}")
+            logger.warning(
+                f"{YELLOW}Expected files: {self.recipients_file}, {self.credentials_file}{RESET}"
+            )
             return False
 
         return True

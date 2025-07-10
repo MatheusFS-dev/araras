@@ -5,13 +5,14 @@ import pkgutil
 import importlib
 import inspect
 from importlib.metadata import version, PackageNotFoundError
+from araras.commons import *
 
 __all__ = []
 
 try:
     __version__ = version(__name__)
 except PackageNotFoundError:  # package not installed
-    print(f"Package '{__name__}' is not installed.")
+    logger_error.error(f"{RED}Package '{__name__}' is not installed.{RESET}")
     __version__ = "0.0.0"
 
 
