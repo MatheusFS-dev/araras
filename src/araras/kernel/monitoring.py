@@ -165,14 +165,14 @@ def print_process_status(message: str, pid: Optional[int] = None, runtime: Optio
     if pid and runtime is not None:
         print(f"[{timestamp}] {message} (PID {pid}, runtime: {runtime:.1f}s)")
     elif pid:
-        print(f"[{timestamp}] {message} (PID {pid})")
+        print(f"[{timestamp}] {message} \033[33m(PID {pid})\033[0m")
     else:
         print(f"[{timestamp}] {message}")
 
 
 def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> None:
     """Print restart information with formatting."""
-    print(f"Restarting in {delay:.1f}s ({restart_count}/{max_restarts})")
+    print_process_status(f"Restarting in {delay:.1f}s \033[33m({restart_count}/{max_restarts})\033[0m")
 
 
 def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
@@ -462,13 +462,13 @@ def run_auto_restart(
                     stop_event.set()
                     print("\n")
                     print_process_status(
-                        "Restart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m\n"
+                        "Restart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m"
                     )
                     manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
-                print_process_status("\033[92mProcess done!\033[0m")
+                print(f"\n\033[92mProcess done!\033[0m")
 
             restart_loop()
 
