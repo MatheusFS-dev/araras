@@ -124,7 +124,8 @@ print("Monitor completed")"""
 
 
 # ——————————————————————————— Print Functions ——————————————————————————————— #
-def print_monitoring_config_summary(
+ONCE_PRINT = False # Flag to ensure print statements only run once
+def print_monitoring_config_summary( 
     file_path: str,
     file_type: str,
     success_flag_file: str,
@@ -133,7 +134,12 @@ def print_monitoring_config_summary(
     title: str,
     restart_after_delay: Optional[float] = None,
 ) -> None:
-    """Print a summary of monitoring configuration."""
+    """Print a summary of monitoring configuration only once."""
+    global ONCE_PRINT
+    if ONCE_PRINT:
+        return
+    ONCE_PRINT = True
+
     print()
     print("=" * 70)
     print("MONITORING CONFIGURATION SUMMARY")
@@ -441,7 +447,7 @@ def run_auto_restart(
                             manager.force_stop()
                             # Ensure the worker thread finishes cleanly before continuing
                             thread.join(5)
-                            clear()
+                            # clear()
 
                         else:
                             # If finished (success or crash), check if success
@@ -454,14 +460,15 @@ def run_auto_restart(
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
                     stop_event.set()
+                    print("\n")
                     print_process_status(
-                        "\nRestart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m\n"
+                        "Restart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m\n"
                     )
                     manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
-                # print_process_status("Restart-after-delay loop done")
+                print_process_status("\033[92mProcess done!\033[0m")
 
             restart_loop()
 
