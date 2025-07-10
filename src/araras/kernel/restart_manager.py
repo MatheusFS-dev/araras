@@ -22,6 +22,7 @@ from .prints import (
     print_process_status,
     print_restart_info,
     print_warning_message,
+    print_success_message,
 )
 from .process_monitor import start_monitor, stop_monitor, check_crash_signal
 
@@ -552,3 +553,17 @@ class FlagBasedRestartManager:
                 self.original_was_notebook = False
 
     def _sleep(self, duration: float) -> None:
+        """Interruptible sleep with minimal CPU usage.
+
+        Args:
+            duration: Sleep duration in seconds
+        """
+        end_time = time.time() + duration
+        while self.running and time.time() < end_time:
+            try:
+                time.sleep(min(0.1, end_time - time.time()))
+            except KeyboardInterrupt:
+                # Handle CTRL+C during sleep
+                self.running = False
+                print_process_status("CTRL+C detected during restart delay, aborting restart")
+                break
