@@ -97,8 +97,6 @@ while True:
                 pass
             send_crash_signal({pid}, {title}, restart_count)
 
-
-
     except psutil.NoSuchProcess:
         restart_count = 0
         try:
@@ -239,7 +237,6 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
         cpu_percent = proc.cpu_percent(interval=0.1)
     return mem_percent, mem_gb, cpu_percent
 
-
 def print_process_resource_usage(pid: int) -> None:
     """Display CPU and memory usage for a process in a single updating line."""
     try:
@@ -251,7 +248,6 @@ def print_process_resource_usage(pid: int) -> None:
         )
     except Exception:
         pass
-
 
 from .consolidated_email_manager import ConsolidatedEmailManager
 from .file_type_handler import FileTypeHandler
