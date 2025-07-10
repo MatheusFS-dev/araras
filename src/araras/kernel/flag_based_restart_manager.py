@@ -122,7 +122,7 @@ class FlagBasedRestartManager:
 
         # Convert notebook to Python if needed
         if file_type == "notebook":
-            _mon.print_process_status(f"Converting notebook to Python: {validated_path.name}")
+            # _mon.print_process_status(f"Converting notebook to Python: {validated_path.name}")
             try:
                 self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
                 self.original_was_notebook = True

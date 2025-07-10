@@ -139,17 +139,16 @@ def print_monitoring_config_summary(
     print("MONITORING CONFIGURATION SUMMARY")
     print("=" * 70)
     print(f"Target File: {file_path}")
-    print(f"File Type: {file_type}")
+    print(f"Success Flag Location: {success_flag_file}")
+    # print(f"File Type: {file_type}")
     print(f"Process Title: \033[33m{title}\033[0m")
-    print(f"Success Flag: {success_flag_file}")
-    print(f"Max Restarts: {max_restarts}")
-    if restart_after_delay is not None:
-        print(f"Run will force restart after: {restart_after_delay} seconds")
-
     if email_enabled:
         print(f"Email Alerts: \033[92mEnabled\033[0m")
     else:
         print(f"Email Alerts: \033[91mDisabled\033[0m")
+    print(f"Max Restarts: {max_restarts}")
+    if restart_after_delay is not None:
+        print(f"Run will force restart after: {restart_after_delay} seconds")
     print("=" * 70)
     print()
 
@@ -215,8 +214,6 @@ def _cleanup_stale_monitor_files():
 from .consolidated_email_manager import ConsolidatedEmailManager
 from .file_type_handler import FileTypeHandler
 from .flag_based_restart_manager import FlagBasedRestartManager
-
-
 
 
 def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
@@ -457,12 +454,14 @@ def run_auto_restart(
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
                     stop_event.set()
-                    print_process_status("Restart loop interrupted by user, cleaning up")
+                    print_process_status(
+                        "\nRestart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m\n"
+                    )
                     manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
-                print_process_status("Restart-after-delay loop done")
+                # print_process_status("Restart-after-delay loop done")
 
             restart_loop()
 
