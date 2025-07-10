@@ -229,13 +229,21 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
     Raises:
         psutil.NoSuchProcess: If the PID does not exist.
     """
-
     proc = psutil.Process(pid)
+
+    # First call to initialize CPU measurement (returns 0.0)
+    proc.cpu_percent()
+
+    # Wait and take actual measurement
+    time.sleep(1.0)  # Longer interval for accurate measurement
+
     with proc.oneshot():
         mem_percent = proc.memory_percent()
-        mem_gb = proc.memory_info().rss / (1024 ** 3)
-        cpu_percent = proc.cpu_percent(interval=0.1)
+        mem_gb = proc.memory_info().rss / (1024**3)
+        cpu_percent = proc.cpu_percent()  # Non-blocking call after initialization
+
     return mem_percent, mem_gb, cpu_percent
+
 
 def print_process_resource_usage(pid: int) -> None:
     """Display CPU and memory usage for a process in a single updating line."""
