@@ -89,7 +89,7 @@ def model_param_distribution(
 
     print()
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 8))
+    fig, axes = plt.subplots(1, 3, figsize=(24, 8))
     axes[0].hist(param_counts, bins=100, color="black")
     axes[0].set_xlabel("Number of parameters")
     axes[0].set_ylabel("Frequency")
