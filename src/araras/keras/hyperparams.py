@@ -92,7 +92,7 @@ class OptimizerSampler(BaseSampler):
 
     def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
         if isinstance(self.lr, tuple):
-            lr = trial.suggest_float(f"{self.name}_lr", self.lr[0], self.lr[1], log=True)
+            lr = trial.suggest_float("learning_rate", self.lr[0], self.lr[1], log=True)
         else:
             lr = self.lr
         if isinstance(choice, tf.keras.optimizers.Optimizer):
