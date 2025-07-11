@@ -78,11 +78,15 @@ def build_cnn1d(
         ValueError: If `x` is not a rank-3 tensor.
     """
 
-    if x.shape.rank != 3:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 3:
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna.
@@ -197,11 +201,15 @@ def build_dense_as_conv1d(
         ValueError: If `x` is not a rank-3 tensor.
     """
 
-    if x.shape.rank != 3:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 3:
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
     return build_cnn1d(
         trial,
@@ -280,11 +288,15 @@ def build_cnn2d(
         ValueError: If `x` is not a rank-4 tensor.
     """
 
-    if x.shape.rank != 4:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 4:
         msg = (
             f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
@@ -400,11 +412,15 @@ def build_dense_as_conv2d(
         ValueError: If `x` is not a rank-4 tensor.
     """
 
-    if x.shape.rank != 4:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 4:
         msg = (
             f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
     return build_cnn2d(
         trial,
@@ -488,11 +504,15 @@ def build_cnn3d(
         ValueError: If `x` is not a rank-5 tensor.
     """
 
-    if x.shape.rank != 5:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 5:
         msg = (
             f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
@@ -610,11 +630,15 @@ def build_dense_as_conv3d(
         ValueError: If `x` is not a rank-5 tensor.
     """
 
-    if x.shape.rank != 5:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 5:
         msg = (
             f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
         )
-        
         raise ValueError(msg)
     return build_cnn3d(
         trial,

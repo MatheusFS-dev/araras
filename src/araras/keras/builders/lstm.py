@@ -64,11 +64,16 @@ def build_lstm(
         ValueError: If `x` is not a rank-3 tensor.
     """
 
-    if x.shape.rank != 3:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank != 3:
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, timesteps, features), got {x.shape}"
         )
-        
+
         raise ValueError(msg)
 
     # Determine the number of units for the LSTM layer
