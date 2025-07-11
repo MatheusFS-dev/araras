@@ -119,8 +119,9 @@ class OptimizerSampler(BaseSampler):
         else:
             lr = self.lr
         if isinstance(choice, tf.keras.optimizers.Optimizer):
-            choice.learning_rate = lr
-            return choice
+            config = choice.get_config()
+            config["learning_rate"] = lr
+            return choice.__class__.from_config(config)
         if isinstance(choice, type) and issubclass(choice, tf.keras.optimizers.Optimizer):
             return choice(learning_rate=lr)
         if callable(choice):
