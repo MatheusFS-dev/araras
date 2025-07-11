@@ -82,7 +82,7 @@ def build_cnn1d(
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna.
@@ -201,7 +201,7 @@ def build_dense_as_conv1d(
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
     return build_cnn1d(
         trial,
@@ -284,7 +284,7 @@ def build_cnn2d(
         msg = (
             f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
@@ -404,7 +404,7 @@ def build_dense_as_conv2d(
         msg = (
             f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
     return build_cnn2d(
         trial,
@@ -492,7 +492,7 @@ def build_cnn3d(
         msg = (
             f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
@@ -614,7 +614,7 @@ def build_dense_as_conv3d(
         msg = (
             f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
     return build_cnn3d(
         trial,

@@ -67,7 +67,6 @@ def build_dnn(
         msg = (
             f"Input to {name_prefix} must be at least rank 2 (batch, features), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
         raise ValueError(msg)
 
     # Determine the number of units for the Dense layer

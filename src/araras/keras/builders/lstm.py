@@ -68,7 +68,7 @@ def build_lstm(
         msg = (
             f"Input to {name_prefix} must be rank 3 (batch, timesteps, features), got {x.shape}"
         )
-        logger_error.error(f"{RED}{msg}{RESET}")
+        
         raise ValueError(msg)
 
     # Determine the number of units for the LSTM layer

@@ -28,6 +28,7 @@ from sklearn.neighbors import NearestNeighbors
 
 PRINT_ONCE_JIT = True
 
+
 def print_warning_jit():
     """Print a warning about JIT compilation."""
     global PRINT_ONCE_JIT
@@ -76,7 +77,7 @@ def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
 
     if rows <= 0 or cols <= 0:
         msg = f"rows and cols must be positive, got rows={rows}, cols={cols}"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     n = rows * cols
     a = sp.lil_matrix((n, n), dtype=np.float32)
@@ -122,7 +123,7 @@ def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
 
     if rows <= 0 or cols <= 0 or k <= 0:
         msg = f"rows, cols and k must be positive, got rows={rows}, cols={cols}, k={k}"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
 
     n = rows * cols
@@ -192,11 +193,11 @@ def build_gcn(
 
     if x.shape.rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     if not isinstance(a_graph, tf.sparse.SparseTensor):
         msg = "a_graph must be a tf.sparse.SparseTensor"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -222,9 +223,7 @@ def build_gcn(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
-    )(x)
+    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x
@@ -259,11 +258,11 @@ def build_gat(
 
     if x.shape.rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     if not isinstance(a_graph, tf.sparse.SparseTensor):
         msg = "a_graph must be a tf.sparse.SparseTensor"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -293,9 +292,7 @@ def build_gat(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
-    )(x)
+    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x
@@ -329,11 +326,11 @@ def build_cheb(
 
     if x.shape.rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     if not isinstance(a_graph, tf.sparse.SparseTensor):
         msg = "a_graph must be a tf.sparse.SparseTensor"
-        logger_error.error(f"{RED}{msg}{RESET}")
+
         raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -362,9 +359,7 @@ def build_cheb(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
-    )(x)
+    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x
