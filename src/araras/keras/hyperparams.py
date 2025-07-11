@@ -24,6 +24,7 @@ Example using custom parameters:
 from araras.commons import *
 
 from dataclasses import dataclass, field
+from typing import Optional, Sequence, Any, Callable, List, Union
 from abc import ABC, abstractmethod
 import optuna
 import tensorflow as tf
@@ -85,13 +86,18 @@ class RegularizerSampler(BaseSampler):
 
 class OptimizerSampler(BaseSampler):
     def __init__(
-        self, choices: Sequence[Any], name: str, lr_range: tuple[float, float] = (1e-5, 1e-2)
+        self, choices: Sequence[Any], name: str, lr: Union[float, tuple[float, float]]
     ) -> None:
         super().__init__(choices, name)
-        self.lr_range = lr_range
+        self.lr = lr
 
     def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
-        lr = trial.suggest_float(f"{self.name}_lr", *self.lr_range, log=True)
+        if isinstance(self.lr, tuple):
+            lr = trial.suggest_float(
+                f"{self.name}_lr", self.lr[0], self.lr[1], log=True
+            )
+        else:
+            lr = self.lr
         if isinstance(choice, tf.keras.optimizers.Optimizer):
             choice.learning_rate = lr
             return choice
@@ -119,13 +125,30 @@ class ScalerSampler(BaseSampler):
 
 
 class InitializerSampler(BaseSampler):
+    def __init__(self, choices: Sequence[Any], name: str, seed: Optional[int] = None) -> None:
+        super().__init__(choices, name)
+        self.seed = seed
+
+    def _call_with_seed(self, obj: Callable[..., Any]):
+        if self.seed is None:
+            return obj()
+        try:
+            return obj(seed=self.seed)
+        except TypeError:
+            return obj()
+
     def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.initializers.Initializer:
         if isinstance(choice, tf.keras.initializers.Initializer):
+            if self.seed is not None:
+                try:
+                    choice.seed = self.seed
+                except Exception:
+                    pass
             return choice
         if isinstance(choice, type) and issubclass(choice, tf.keras.initializers.Initializer):
-            return choice()
+            return self._call_with_seed(choice)
         if callable(choice):
-            obj = choice()
+            obj = self._call_with_seed(choice)
             if isinstance(obj, tf.keras.initializers.Initializer):
                 return obj
         raise ValueError(f"Unsupported initializer: {choice}")
@@ -138,6 +161,9 @@ class KParams:
     # ———————————————————————————————————————————————————————————————————————————— #
     #                                Default Values                                #
     # ———————————————————————————————————————————————————————————————————————————— #
+
+    learning_rate: Union[float, tuple[float, float]] = 1e-2
+    seed: Optional[int] = None
 
     activation_choices: List[Optional[Callable[..., Any]]] = field(
         default_factory=lambda: [
@@ -201,6 +227,22 @@ class KParams:
             tf.keras.initializers.GlorotUniform,
         ]
     )
+
+    def __post_init__(self) -> None:
+        if isinstance(self.learning_rate, tuple):
+            if (
+                len(self.learning_rate) != 2
+                or self.learning_rate[0] <= 0
+                or self.learning_rate[1] <= 0
+                or self.learning_rate[0] >= self.learning_rate[1]
+            ):
+                raise ValueError(
+                    "learning_rate tuple must be (min, max) with 0 < min < max"
+                )
+        elif not isinstance(self.learning_rate, (int, float)):
+            raise TypeError(
+                "learning_rate must be a float or a tuple of two floats"
+            )
 
     # ———————————————————————————————————————————————————————————————————————————— #
 
@@ -273,7 +315,7 @@ class KParams:
     def get_optimizer(self, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
         """Sample an optimizer."""
 
-        sampler = OptimizerSampler(self.optimizer_choices, "optimizer")
+        sampler = OptimizerSampler(self.optimizer_choices, "optimizer", self.learning_rate)
         return sampler.sample(trial)
 
     def get_scaler(self, trial: optuna.Trial):
@@ -285,7 +327,7 @@ class KParams:
     def get_initializer(self, trial: optuna.Trial, name: str) -> tf.keras.initializers.Initializer:
         """Sample a kernel initializer."""
 
-        sampler = InitializerSampler(self.initializer_choices, name)
+        sampler = InitializerSampler(self.initializer_choices, name, self.seed)
         return sampler.sample(trial)
 
     @classmethod
