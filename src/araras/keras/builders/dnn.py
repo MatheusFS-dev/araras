@@ -63,7 +63,12 @@ def build_dnn(
         ValueError: If `x` does not have rank >= 2.
     """
 
-    if x.shape.rank is not None and x.shape.rank < 2:
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank < 2:
         msg = (
             f"Input to {name_prefix} must be at least rank 2 (batch, features), got {x.shape}"
         )

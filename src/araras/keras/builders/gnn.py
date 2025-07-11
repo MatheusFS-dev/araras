@@ -191,7 +191,12 @@ def build_gcn(
         ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
     """
 
-    if x.shape.rank not in (2, 3):
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
 
         raise ValueError(msg)
@@ -256,7 +261,12 @@ def build_gat(
         ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
     """
 
-    if x.shape.rank not in (2, 3):
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
 
         raise ValueError(msg)
@@ -324,7 +334,12 @@ def build_cheb(
         ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
     """
 
-    if x.shape.rank not in (2, 3):
+    rank = getattr(getattr(x, "shape", None), "rank", None)
+    if rank is None:
+        raise TypeError(
+            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
+        )
+    if rank not in (2, 3):
         msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
 
         raise ValueError(msg)
