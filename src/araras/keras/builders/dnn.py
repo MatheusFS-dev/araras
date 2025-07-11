@@ -60,19 +60,8 @@ def build_dnn(
         layers.Layer: Output tensor after applying the DNN block.
 
     Raises:
-        ValueError: If `x` does not have rank >= 2.
+        None
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank < 2:
-        msg = (
-            f"Input to {name_prefix} must be at least rank 2 (batch, features), got {x.shape}"
-        )
-        raise ValueError(msg)
 
     # Determine the number of units for the Dense layer
     if isinstance(units_range, int):

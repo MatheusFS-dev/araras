@@ -73,21 +73,7 @@ def build_cnn1d(
 
     Returns:
         layers.Layer: The output Keras layer after applying convolution, optional batch norm, and activation.
-
-    Raises:
-        ValueError: If `x` is not a rank-3 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 3:
-        msg = (
-            f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna.
     if isinstance(filters_range, int):
@@ -196,21 +182,7 @@ def build_dense_as_conv1d(
         https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers
 
         https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks
-
-    Raises:
-        ValueError: If `x` is not a rank-3 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 3:
-        msg = (
-            f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
     return build_cnn1d(
         trial,
         kparams,
@@ -283,21 +255,7 @@ def build_cnn2d(
 
     Returns:
         layers.Layer: The output Keras layer after applying convolution, optional batch norm, and activation.
-
-    Raises:
-        ValueError: If `x` is not a rank-4 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 4:
-        msg = (
-            f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
     if isinstance(filters_range, int):
@@ -407,21 +365,7 @@ def build_dense_as_conv2d(
         https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers
 
         https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks
-
-    Raises:
-        ValueError: If `x` is not a rank-4 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 4:
-        msg = (
-            f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
     return build_cnn2d(
         trial,
         kparams,
@@ -499,21 +443,7 @@ def build_cnn3d(
 
     Returns:
         layers.Layer: The output Keras layer after applying convolution, optional batch norm, and activation.
-
-    Raises:
-        ValueError: If `x` is not a rank-5 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 5:
-        msg = (
-            f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
 
     # Determine number of filters: static value or tuned via Optuna
     if isinstance(filters_range, int):
@@ -625,21 +555,7 @@ def build_dense_as_conv3d(
         https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers
 
         https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks
-
-    Raises:
-        ValueError: If `x` is not a rank-5 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 5:
-        msg = (
-            f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
-        )
-        raise ValueError(msg)
     return build_cnn3d(
         trial,
         kparams,

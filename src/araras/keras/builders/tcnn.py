@@ -69,20 +69,8 @@ def build_tcnn1d(
         layers.Layer: Final output tensor after applying the Conv1DTranspose, optional batch norm, and activation.
 
     Raises:
-        ValueError: If `x` is not a rank-3 tensor.
+        None
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 3:
-        msg = (
-            f"Input to {name_prefix} must be rank 3 (batch, length, channels), got {x.shape}"
-        )
-
-        raise ValueError(msg)
 
     # Determine number of filters for the Conv1DTranspose layer
     if isinstance(filters_range, int):
@@ -191,22 +179,7 @@ def build_tcnn2d(
 
     Returns:
         layers.Layer: Final output tensor after applying the Conv2DTranspose, optional batch norm, and activation.
-
-    Raises:
-        ValueError: If `x` is not a rank-4 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 4:
-        msg = (
-            f"Input to {name_prefix} must be rank 4 (batch, height, width, channels), got {x.shape}"
-        )
-
-        raise ValueError(msg)
 
     # Determine number of filters for the Conv2DTranspose layer
     if isinstance(filters_range, int):
@@ -324,22 +297,7 @@ def build_tcnn3d(
 
     Returns:
         layers.Layer: Final output tensor after applying the Conv3DTranspose, optional batch norm, and activation.
-
-    Raises:
-        ValueError: If `x` is not a rank-5 tensor.
     """
-
-    rank = getattr(getattr(x, "shape", None), "rank", None)
-    if rank is None:
-        raise TypeError(
-            f"Input to {name_prefix} must be a Keras tensor or layer, got {type(x).__name__}"
-        )
-    if rank != 5:
-        msg = (
-            f"Input to {name_prefix} must be rank 5 (batch, depth, height, width, channels), got {x.shape}"
-        )
-
-        raise ValueError(msg)
 
     # Determine number of filters for the Conv3DTranspose layer
     if isinstance(filters_range, int):
