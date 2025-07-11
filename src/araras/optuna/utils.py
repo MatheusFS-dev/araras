@@ -266,13 +266,13 @@ def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
         run_dir (str): Base directory for the run
         study_name (str): Name of the study directory (default: "optuna_study")
         subdirs (list): List of subdirectory names to create
-                       (default: ["args", "figures", "backup", "history", "models", "logs"])
+                       (default: ["args", "figures", "backup", "history", "models", "logs", "tensorboard"])
 
     Returns:
         tuple: (study_dir, *subdirectory_paths) in the order specified by subdirs
     """
     if subdirs is None:
-        subdirs = ["args", "figures", "backup", "history", "models", "logs"]
+        subdirs = ["args", "figures", "backup", "history", "models", "logs", "tensorboard"]
 
     study_dir = os.path.join(run_dir, study_name)
     dirs = {d: os.path.join(study_dir, d) for d in subdirs}
