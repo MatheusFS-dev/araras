@@ -69,7 +69,15 @@ def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
 
     Returns:
         tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
+
+    Raises:
+        ValueError: If `rows` or `cols` is not positive.
     """
+
+    if rows <= 0 or cols <= 0:
+        msg = f"rows and cols must be positive, got rows={rows}, cols={cols}"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
     n = rows * cols
     a = sp.lil_matrix((n, n), dtype=np.float32)
 
@@ -107,7 +115,15 @@ def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
 
     Returns:
         tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
+
+    Raises:
+        ValueError: If `rows`, `cols`, or `k` is not positive.
     """
+
+    if rows <= 0 or cols <= 0 or k <= 0:
+        msg = f"rows, cols and k must be positive, got rows={rows}, cols={cols}, k={k}"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
 
     n = rows * cols
     coords = np.array([(i // cols, i % cols) for i in range(n)], np.float32)
@@ -168,7 +184,20 @@ def build_gcn(
     trial_activity_reg: bool = False,
     name_prefix: str = "gcn",
 ) -> layers.Layer:
-    """Build a single Graph Convolutional Network (GCN) layer."""
+    """Build a single Graph Convolutional Network (GCN) layer.
+
+    Raises:
+        ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
+    """
+
+    if x.shape.rank not in (2, 3):
+        msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
+    if not isinstance(a_graph, tf.sparse.SparseTensor):
+        msg = "a_graph must be a tf.sparse.SparseTensor"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     dropout = _select_float_range_value(
@@ -222,7 +251,20 @@ def build_gat(
     trial_activity_reg: bool = False,
     name_prefix: str = "gat",
 ) -> layers.Layer:
-    """Build a single Graph Attention (GAT) layer."""
+    """Build a single Graph Attention (GAT) layer.
+
+    Raises:
+        ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
+    """
+
+    if x.shape.rank not in (2, 3):
+        msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
+    if not isinstance(a_graph, tf.sparse.SparseTensor):
+        msg = "a_graph must be a tf.sparse.SparseTensor"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     heads = _select_range_value(trial, f"{name_prefix}_heads", heads_range, heads_step)
@@ -279,7 +321,20 @@ def build_cheb(
     trial_activity_reg: bool = False,
     name_prefix: str = "cheb",
 ) -> layers.Layer:
-    """Build a single Chebyshev graph convolution layer."""
+    """Build a single Chebyshev graph convolution layer.
+
+    Raises:
+        ValueError: If `x` is not rank 2 or 3, or if `a_graph` is not a sparse tensor.
+    """
+
+    if x.shape.rank not in (2, 3):
+        msg = f"Input to {name_prefix} must be rank 2 or 3, got {x.shape}"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
+    if not isinstance(a_graph, tf.sparse.SparseTensor):
+        msg = "a_graph must be a tf.sparse.SparseTensor"
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     K = _select_range_value(trial, f"{name_prefix}_K", K_range, K_step)
