@@ -15,6 +15,7 @@ from araras.commons import *
 import time
 import tensorflow as tf
 import psutil
+from tqdm import tqdm
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
@@ -155,19 +156,17 @@ def get_memory_and_time(
 
         # Timed inference with forced sync
         times = []
-        for i in range(test_runs):
-            if verbose:
-                progress = (i + 1) / test_runs
-                bar_len = 30
-                filled = int(progress * bar_len)
-                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
+        progress_iter = range(test_runs)
+        if verbose:
+            progress_iter = tqdm(
+                progress_iter,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+            )
+        for _ in progress_iter:
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             _ = out.numpy()
             times.append(time.perf_counter() - t0)
-        if verbose:
-            print()
         avg_time = sum(times) / len(times)
 
         peak_mem = tf.config.experimental.get_memory_info(device)["peak"]
@@ -191,13 +190,13 @@ def get_memory_and_time(
         peak_rss = baseline
         times = []
         with tf.device(f"/CPU:{device_index}"):
-            for i in range(test_runs):
-                if verbose:
-                    progress = (i + 1) / test_runs
-                    bar_len = 30
-                    filled = int(progress * bar_len)
-                    bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                    print(f"\r[{bar}] {i + 1}/{test_runs}", end="", flush=True)
+            progress_iter = range(test_runs)
+            if verbose:
+                progress_iter = tqdm(
+                    progress_iter,
+                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+                )
+            for _ in progress_iter:
                 t0 = time.perf_counter()
                 out = infer(*dummy_inputs)
                 _ = out.numpy()
@@ -205,8 +204,6 @@ def get_memory_and_time(
                 rss = proc.memory_info().rss
                 if rss > peak_rss:
                     peak_rss = rss
-            if verbose:
-                print()
 
         avg_time = sum(times) / len(times)
         peak_mem = peak_rss - baseline

@@ -13,6 +13,7 @@ from araras.commons import *
 import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
+from tqdm import tqdm
 
 from araras.plot.configs import config_plt
 from .memory_estimator import estimate_training_memory
@@ -42,8 +43,13 @@ def model_param_distribution(
     model_sizes_mb = []
     training_memory = []
 
-    bar_len = 50
-    for i in range(n_trials):
+    progress_iter = range(n_trials)
+    if n_trials:
+        progress_iter = tqdm(
+            progress_iter,
+            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+        )
+    for _ in progress_iter:
         trial = study.ask()
         model = build_model_fn(trial)
         
@@ -57,13 +63,6 @@ def model_param_distribution(
         training_memory.append(training_memory_mb)
 
         study.tell(trial, 0.0)
-
-        progress = (i + 1) / n_trials
-        filled = int(progress * bar_len)
-        bar = "=" * filled + ">" + " " * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-        print(f"\r[{bar}] {i + 1}/{n_trials}", end="", flush=True)
-
-    print()
 
     fig, axes = plt.subplots(1, 3, figsize=(24, 8))
     axes[0].hist(param_counts, bins=100, color="black")

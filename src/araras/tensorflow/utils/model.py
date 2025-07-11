@@ -13,6 +13,7 @@ from araras.commons import *
 import time
 import pynvml
 import tensorflow as tf
+from tqdm import tqdm
 
 
 def get_model_usage_stats(
@@ -138,13 +139,13 @@ def get_model_usage_stats(
             except Exception as e:
                 raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
 
-        for i in range(n_trials):
-            if verbose:
-                progress = (i + 1) / n_trials
-                bar_len = 30
-                filled = int(progress * bar_len)
-                bar = "=" * filled + ">" + "." * (bar_len - filled - 1) if filled < bar_len else "=" * bar_len
-                print(f"\r[{bar}] {i + 1}/{n_trials}", end="", flush=True)
+        progress_iter = range(n_trials)
+        if verbose:
+            progress_iter = tqdm(
+                progress_iter,
+                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+            )
+        for _ in progress_iter:
 
             start_time = time.time()
 
@@ -172,8 +173,6 @@ def get_model_usage_stats(
 
             times.append(elapsed)
 
-        if verbose:
-            print()
 
         if device == "gpu":
             pynvml.nvmlShutdown()
