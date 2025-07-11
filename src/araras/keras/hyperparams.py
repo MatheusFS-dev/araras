@@ -12,11 +12,11 @@ Example using only default parameters:
 Example using custom parameters:
     >>> from araras.keras.kparams import KParams
     >>> kparams = KParams(
-    ...     activation_choices=[tf.keras.activations.relu, tf.keras.activations.tanh],
-    ...     regularizer_choices=[tf.keras.regularizers.L2(1e-3)],
-    ...     optimizer_choices=[tf.keras.optimizers.Adam],
-    ...     scaler_choices=[StandardScaler, MinMaxScaler],
-    ...     initializer_choices=[tf.keras.initializers.GlorotUniform],
+    ...     activation_choices={"relu": tf.keras.activations.relu, "tanh": tf.keras.activations.tanh},
+    ...     regularizer_choices={"l2": tf.keras.regularizers.L2(1e-3)},
+    ...     optimizer_choices={"adam": tf.keras.optimizers.Adam},
+    ...     scaler_choices={"standard": StandardScaler, "minmax": MinMaxScaler},
+    ...     initializer_choices={"glorot": tf.keras.initializers.GlorotUniform},
     ... )
 
 """
@@ -24,7 +24,7 @@ Example using custom parameters:
 from araras.commons import *
 
 from dataclasses import dataclass, field
-from typing import Optional, Sequence, Any, Callable, List, Union
+from typing import Optional, Sequence, Any, Callable, Union, Mapping, Dict
 from abc import ABC, abstractmethod
 import optuna
 import tensorflow as tf
@@ -44,16 +44,39 @@ def _sample_choice(trial: optuna.Trial, name: str, choices: Sequence[Any]) -> An
     return trial.suggest_categorical(name, list(choices))
 
 
+def _ensure_mapping(choices: Union[Sequence[Any], Mapping[str, Any]]) -> Dict[str, Any]:
+    """Convert choices to a ``dict`` keyed by unique strings."""
+    if isinstance(choices, Mapping):
+        return dict(choices)
+    mapping: Dict[str, Any] = {}
+    for idx, choice in enumerate(choices):
+        if hasattr(choice, "__name__"):
+            base = str(choice.__name__)
+        elif hasattr(choice, "__class__"):
+            base = str(choice.__class__.__name__)
+        else:
+            base = f"choice_{idx}"
+        key = base
+        counter = 1
+        while key in mapping:
+            key = f"{base}_{counter}"
+            counter += 1
+        mapping[key] = choice
+    return mapping
+
+
 class BaseSampler(ABC):
     """Abstract sampler for Keras hyperparameters."""
 
-    def __init__(self, choices: Sequence[Any], name: str) -> None:
-        self.choices = choices
+    def __init__(self, choices: Union[Sequence[Any], Mapping[str, Any]], name: str) -> None:
+        self.mapping = _ensure_mapping(choices)
+        self.choices = list(self.mapping.keys())
         self.name = name
 
     def sample(self, trial: optuna.Trial) -> Any:
         try:
-            choice = _sample_choice(trial, self.name, self.choices)
+            key = _sample_choice(trial, self.name, self.choices)
+            choice = self.mapping[key]
             return self._process(choice, trial)
         except Exception as exc:  # noqa: BLE001
             traceback.print_exc()
@@ -162,67 +185,70 @@ class KParams:
     learning_rate: Union[float, tuple[float, float]] = 1e-2
     seed: Optional[int] = None
 
-    activation_choices: List[Optional[Callable[..., Any]]] = field(
-        default_factory=lambda: [
-            tf.keras.activations.relu,
-            tf.keras.activations.gelu,
-            tf.keras.activations.silu,
-            tf.keras.activations.elu,
-            tf.keras.activations.sigmoid,
-            tf.keras.activations.tanh,
-            None,
-        ]
+    activation_choices: Dict[str, Optional[Callable[..., Any]]] = field(
+        default_factory=lambda: {
+            "relu": tf.keras.activations.relu,
+            "gelu": tf.keras.activations.gelu,
+            "silu": tf.keras.activations.silu,
+            "elu": tf.keras.activations.elu,
+            "sigmoid": tf.keras.activations.sigmoid,
+            "tanh": tf.keras.activations.tanh,
+            "none": None,
+        }
     )
 
-    regularizer_choices: List[
+    regularizer_choices: Dict[
+        str,
         Optional[
             Union[
                 type[tf.keras.regularizers.Regularizer],
                 tf.keras.regularizers.Regularizer,
                 Callable[[], tf.keras.regularizers.Regularizer],
             ]
-        ]
+        ],
     ] = field(
-        default_factory=lambda: [
-            None,
-            tf.keras.regularizers.L2(1e-2),
-        ]
+        default_factory=lambda: {
+            "none": None,
+            "l2": tf.keras.regularizers.L2(1e-2),
+        }
     )
 
-    optimizer_choices: List[
+    optimizer_choices: Dict[
+        str,
         Union[
             type[tf.keras.optimizers.Optimizer],
             tf.keras.optimizers.Optimizer,
             Callable[[], tf.keras.optimizers.Optimizer],
-        ]
+        ],
     ] = field(
-        default_factory=lambda: [
-            tf.keras.optimizers.SGD(momentum=0.9),
-            tf.keras.optimizers.Adam(),
-            tf.keras.optimizers.AdamW(weight_decay=1e-4),
-            tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
-            tf.keras.optimizers.RMSprop(),
-        ]
+        default_factory=lambda: {
+            "sgd": tf.keras.optimizers.SGD(momentum=0.9),
+            "adam": tf.keras.optimizers.Adam(),
+            "adamw": tf.keras.optimizers.AdamW(weight_decay=1e-4),
+            "lion": tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
+            "rmsprop": tf.keras.optimizers.RMSprop(),
+        }
     )
 
-    scaler_choices: List[Union[type, Callable[[], Any], Any]] = field(
-        default_factory=lambda: [
-            StandardScaler,
-            lambda: MinMaxScaler(feature_range=(0, 1)),
-            lambda: MinMaxScaler(feature_range=(-1, 1)),
-        ]
+    scaler_choices: Dict[str, Union[type, Callable[[], Any], Any]] = field(
+        default_factory=lambda: {
+            "standard": StandardScaler,
+            "minmax_0_1": lambda: MinMaxScaler(feature_range=(0, 1)),
+            "minmax_-1_1": lambda: MinMaxScaler(feature_range=(-1, 1)),
+        }
     )
 
-    initializer_choices: List[
+    initializer_choices: Dict[
+        str,
         Union[
             type[tf.keras.initializers.Initializer],
             tf.keras.initializers.Initializer,
             Callable[[], tf.keras.initializers.Initializer],
-        ]
+        ],
     ] = field(
-        default_factory=lambda: [
-            tf.keras.initializers.GlorotUniform,
-        ]
+        default_factory=lambda: {
+            "glorot_uniform": tf.keras.initializers.GlorotUniform,
+        }
     )
 
     def __post_init__(self) -> None:
@@ -239,59 +265,68 @@ class KParams:
 
     # ———————————————————————————————————————————————————————————————————————————— #
 
-    def set_activation_choices(self, choices: Sequence[Optional[Callable[..., Any]]]) -> None:
+    def set_activation_choices(self, choices: Union[Sequence[Any], Mapping[str, Any]]) -> None:
         """Set the available activation choices."""
 
-        self.activation_choices = list(choices)
+        self.activation_choices = _ensure_mapping(choices)
 
     def set_regularizer_choices(
         self,
-        choices: Sequence[
-            Optional[
-                Union[
-                    type[tf.keras.regularizers.Regularizer],
-                    tf.keras.regularizers.Regularizer,
-                    Callable[[], tf.keras.regularizers.Regularizer],
+        choices: Union[
+            Sequence[
+                Optional[
+                    Union[
+                        type[tf.keras.regularizers.Regularizer],
+                        tf.keras.regularizers.Regularizer,
+                        Callable[[], tf.keras.regularizers.Regularizer],
+                    ]
                 ]
-            ]
+            ],
+            Mapping[str, Any],
         ],
     ) -> None:
         """Set the available regularizer choices."""
 
-        self.regularizer_choices = list(choices)
+        self.regularizer_choices = _ensure_mapping(choices)
 
     def set_optimizer_choices(
         self,
-        choices: Sequence[
-            Union[
-                type[tf.keras.optimizers.Optimizer],
-                tf.keras.optimizers.Optimizer,
-                Callable[[], tf.keras.optimizers.Optimizer],
-            ]
+        choices: Union[
+            Sequence[
+                Union[
+                    type[tf.keras.optimizers.Optimizer],
+                    tf.keras.optimizers.Optimizer,
+                    Callable[[], tf.keras.optimizers.Optimizer],
+                ]
+            ],
+            Mapping[str, Any],
         ],
     ) -> None:
         """Set the available optimizer choices."""
 
-        self.optimizer_choices = list(choices)
+        self.optimizer_choices = _ensure_mapping(choices)
 
-    def set_scaler_choices(self, choices: Sequence[Any]) -> None:
+    def set_scaler_choices(self, choices: Union[Sequence[Any], Mapping[str, Any]]) -> None:
         """Set the available scaler choices."""
 
-        self.scaler_choices = list(choices)
+        self.scaler_choices = _ensure_mapping(choices)
 
     def set_initializer_choices(
         self,
-        choices: Sequence[
-            Union[
-                type[tf.keras.initializers.Initializer],
-                tf.keras.initializers.Initializer,
-                Callable[[], tf.keras.initializers.Initializer],
-            ]
+        choices: Union[
+            Sequence[
+                Union[
+                    type[tf.keras.initializers.Initializer],
+                    tf.keras.initializers.Initializer,
+                    Callable[[], tf.keras.initializers.Initializer],
+                ]
+            ],
+            Mapping[str, Any],
         ],
     ) -> None:
         """Set the available initializer choices."""
 
-        self.initializer_choices = list(choices)
+        self.initializer_choices = _ensure_mapping(choices)
 
     def get_activation(self, trial: optuna.Trial, name: str) -> Optional[Callable[..., Any]]:
         """Sample or return an activation."""
@@ -345,92 +380,92 @@ class KParams:
         """
 
         return cls(
-            activation_choices=[
-                tf.keras.activations.celu,
-                tf.keras.activations.elu,
-                tf.keras.activations.exponential,
-                tf.keras.activations.gelu,
-                tf.keras.activations.glu,
-                tf.keras.activations.hard_shrink,
-                tf.keras.activations.hard_sigmoid,
-                tf.keras.activations.hard_silu,
-                tf.keras.activations.hard_tanh,
-                tf.keras.activations.leaky_relu,
-                tf.keras.activations.linear,
-                tf.keras.activations.log_sigmoid,
-                tf.keras.activations.log_softmax,
-                tf.keras.activations.mish,
-                tf.keras.activations.relu,
-                tf.keras.activations.relu6,
-                tf.keras.activations.selu,
-                tf.keras.activations.sigmoid,
-                tf.keras.activations.silu,
-                tf.keras.activations.softmax,
-                tf.keras.activations.soft_shrink,
-                tf.keras.activations.softplus,
-                tf.keras.activations.softsign,
-                tf.keras.activations.sparse_plus,
-                tf.keras.activations.sparsemax,
-                tf.keras.activations.squareplus,
-                tf.keras.activations.tanh,
-                tf.keras.activations.tanh_shrink,
-                tf.keras.activations.threshold,
-                None,
-            ],
-            regularizer_choices=[
-                tf.keras.regularizers.L1(1e-2),
-                tf.keras.regularizers.L2(1e-2),
-                tf.keras.regularizers.L1L2(l1=1e-2, l2=1e-2),
-                # tf.keras.regularizers.OrthogonalRegularizer(factor=0.01, mode="rows"),
-                None,
-            ],
-            optimizer_choices=[
-                tf.keras.optimizers.SGD(momentum=0.0, nesterov=False),
-                tf.keras.optimizers.RMSprop(rho=0.9, momentum=0.0),
-                tf.keras.optimizers.Adam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.AdamW(weight_decay=0.0, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.Adadelta(rho=0.95, epsilon=1e-7),
-                tf.keras.optimizers.Adagrad(initial_accumulator_value=0.1, epsilon=1e-7),
-                tf.keras.optimizers.Adamax(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.Nadam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.Ftrl(
+            activation_choices={
+                "celu": tf.keras.activations.celu,
+                "elu": tf.keras.activations.elu,
+                "exponential": tf.keras.activations.exponential,
+                "gelu": tf.keras.activations.gelu,
+                "glu": tf.keras.activations.glu,
+                "hard_shrink": tf.keras.activations.hard_shrink,
+                "hard_sigmoid": tf.keras.activations.hard_sigmoid,
+                "hard_silu": tf.keras.activations.hard_silu,
+                "hard_tanh": tf.keras.activations.hard_tanh,
+                "leaky_relu": tf.keras.activations.leaky_relu,
+                "linear": tf.keras.activations.linear,
+                "log_sigmoid": tf.keras.activations.log_sigmoid,
+                "log_softmax": tf.keras.activations.log_softmax,
+                "mish": tf.keras.activations.mish,
+                "relu": tf.keras.activations.relu,
+                "relu6": tf.keras.activations.relu6,
+                "selu": tf.keras.activations.selu,
+                "sigmoid": tf.keras.activations.sigmoid,
+                "silu": tf.keras.activations.silu,
+                "softmax": tf.keras.activations.softmax,
+                "soft_shrink": tf.keras.activations.soft_shrink,
+                "softplus": tf.keras.activations.softplus,
+                "softsign": tf.keras.activations.softsign,
+                "sparse_plus": tf.keras.activations.sparse_plus,
+                "sparsemax": tf.keras.activations.sparsemax,
+                "squareplus": tf.keras.activations.squareplus,
+                "tanh": tf.keras.activations.tanh,
+                "tanh_shrink": tf.keras.activations.tanh_shrink,
+                "threshold": tf.keras.activations.threshold,
+                "none": None,
+            },
+            regularizer_choices={
+                "l1": tf.keras.regularizers.L1(1e-2),
+                "l2": tf.keras.regularizers.L2(1e-2),
+                "l1_l2": tf.keras.regularizers.L1L2(l1=1e-2, l2=1e-2),
+                # "orthogonal": tf.keras.regularizers.OrthogonalRegularizer(factor=0.01, mode="rows"),
+                "none": None,
+            },
+            optimizer_choices={
+                "sgd": tf.keras.optimizers.SGD(momentum=0.0, nesterov=False),
+                "rmsprop": tf.keras.optimizers.RMSprop(rho=0.9, momentum=0.0),
+                "adam": tf.keras.optimizers.Adam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                "adamw": tf.keras.optimizers.AdamW(weight_decay=0.0, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                "adadelta": tf.keras.optimizers.Adadelta(rho=0.95, epsilon=1e-7),
+                "adagrad": tf.keras.optimizers.Adagrad(initial_accumulator_value=0.1, epsilon=1e-7),
+                "adamax": tf.keras.optimizers.Adamax(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                "nadam": tf.keras.optimizers.Nadam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                "ftrl": tf.keras.optimizers.Ftrl(
                     learning_rate_power=-0.5,
                     l1_regularization_strength=0.0,
                     l2_regularization_strength=0.0,
                 ),
-                tf.keras.optimizers.Adafactor(learning_rate=None, relative_step=True, weight_decay=0.0),
-                tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
-                tf.keras.optimizers.Lamb(beta_1=0.9, beta_2=0.999, epsilon=1e-6),
-                tf.keras.optimizers.Muon(weight_decay=0.1),
-                tf.keras.optimizers.LossScaleOptimizer(
+                "adafactor": tf.keras.optimizers.Adafactor(learning_rate=None, relative_step=True, weight_decay=0.0),
+                "lion": tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
+                "lamb": tf.keras.optimizers.Lamb(beta_1=0.9, beta_2=0.999, epsilon=1e-6),
+                "muon": tf.keras.optimizers.Muon(weight_decay=0.1),
+                "loss_scale": tf.keras.optimizers.LossScaleOptimizer(
                     inner_optimizer=tf.keras.optimizers.Adam(), initial_scale=2**15
                 ),
-            ],
-            scaler_choices=[
-                StandardScaler,
-                lambda: MinMaxScaler(feature_range=(0, 1)),
-                lambda: MinMaxScaler(feature_range=(-1, 1)),
-                RobustScaler,
-                QuantileTransformer,
-                PowerTransformer,
-            ],
-            initializer_choices=[
-                tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.05),
-                tf.keras.initializers.RandomUniform(minval=-0.05, maxval=0.05),
-                tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=0.05),
-                tf.keras.initializers.Zeros(),
-                tf.keras.initializers.Ones(),
-                tf.keras.initializers.GlorotNormal(),
-                tf.keras.initializers.GlorotUniform(),
-                tf.keras.initializers.HeNormal(),
-                tf.keras.initializers.HeUniform(),
-                tf.keras.initializers.Orthogonal(gain=1.0),
-                tf.keras.initializers.Constant(value=0.0),
-                tf.keras.initializers.VarianceScaling(
+            },
+            scaler_choices={
+                "standard": StandardScaler,
+                "minmax_0_1": lambda: MinMaxScaler(feature_range=(0, 1)),
+                "minmax_-1_1": lambda: MinMaxScaler(feature_range=(-1, 1)),
+                "robust": RobustScaler,
+                "quantile": QuantileTransformer,
+                "power": PowerTransformer,
+            },
+            initializer_choices={
+                "random_normal": tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.05),
+                "random_uniform": tf.keras.initializers.RandomUniform(minval=-0.05, maxval=0.05),
+                "truncated_normal": tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=0.05),
+                "zeros": tf.keras.initializers.Zeros(),
+                "ones": tf.keras.initializers.Ones(),
+                "glorot_normal": tf.keras.initializers.GlorotNormal(),
+                "glorot_uniform": tf.keras.initializers.GlorotUniform(),
+                "he_normal": tf.keras.initializers.HeNormal(),
+                "he_uniform": tf.keras.initializers.HeUniform(),
+                "orthogonal": tf.keras.initializers.Orthogonal(gain=1.0),
+                "constant": tf.keras.initializers.Constant(value=0.0),
+                "variance_scaling": tf.keras.initializers.VarianceScaling(
                     scale=1.0, mode="fan_in", distribution="truncated_normal"
                 ),
-                tf.keras.initializers.LecunNormal(),
-                tf.keras.initializers.LecunUniform(),
-                tf.keras.initializers.Identity(gain=1.0),
-            ],
+                "lecun_normal": tf.keras.initializers.LecunNormal(),
+                "lecun_uniform": tf.keras.initializers.LecunUniform(),
+                "identity": tf.keras.initializers.Identity(gain=1.0),
+            },
         )
