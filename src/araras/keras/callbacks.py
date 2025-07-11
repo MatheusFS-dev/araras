@@ -1,13 +1,15 @@
 """
 Keras callback for pruning Optuna trials when the training loss becomes NaN.
+It does the same as `keras.callbacks.TerminateOnNaN()`, but also reports the NaN loss to Optuna.
 
 Classes:
-    - NanLossPrunerCallback: Stops a trial once ``loss`` is NaN.
+    - NanLossPrunerOptuna: Stops a trial once `loss` is NaN.
 
 Example:
-    >>> from araras.keras.callbacks.nan_loss_pruner import NanLossPrunerCallback
-    >>> NanLossPrunerCallback(trial)
+    >>> from araras.keras.callbacks.nan_loss_pruner import NanLossPrunerOptuna
+    >>> NanLossPrunerOptuna(trial)
 """
+
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 import numpy as np
@@ -15,7 +17,7 @@ import optuna
 from tensorflow.keras import callbacks
 
 
-class NanLossPrunerCallback(callbacks.Callback):
+class NanLossPrunerOptuna(callbacks.Callback):
     """
     A custom Keras callback that prunes an Optuna trial if NaN is encountered in training loss.
 
@@ -26,7 +28,7 @@ class NanLossPrunerCallback(callbacks.Callback):
         trial (optuna.Trial): The Optuna trial associated with this model run.
 
     Example:
-        model.fit(..., callbacks=[NanLossPrunerCallback(trial)])
+        model.fit(..., callbacks=[NanLossPrunerOptuna(trial)])
     """
 
     def __init__(self, trial: optuna.Trial) -> None:

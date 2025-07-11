@@ -2,18 +2,17 @@
 Hyperparameter utilities for Keras models.
 
 Classes:
-    - HParams: Dataclass with methods to sample activation functions,
+    - KParams: Dataclass with methods to sample activation functions,
       regularizers, optimizers, and scalers.
 
 Example:
-    >>> from araras.keras.hparams import HParams
-    >>> hp = HParams()
+    >>> from araras.keras.kparams import KParams
+    >>> hp = KParams()
     >>> hp.get_optimizer(optuna.trial.FixedTrial({}))
 """
 from araras.commons import *
 
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 import optuna
 import tensorflow as tf
 from sklearn.preprocessing import (
@@ -26,7 +25,7 @@ from sklearn.preprocessing import (
 
 
 @dataclass
-class HParams:
+class KParams:
     """Container for hyperparameter search spaces.
 
     The class stores lists of possible options for activations, regularizers,
@@ -276,7 +275,7 @@ class HParams:
         raise ValueError(choice)
 
     @classmethod
-    def default(cls) -> "HParams":
-        """Return an ``HParams`` instance with all default options."""
+    def default(cls) -> "KParams":
+        """Return an ``KParams`` instance with all default options."""
 
         return cls()

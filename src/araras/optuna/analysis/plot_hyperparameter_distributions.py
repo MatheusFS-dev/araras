@@ -15,7 +15,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     format_title,
     get_param_display_name,
@@ -120,7 +120,7 @@ def plot_hyperparameter_distributions(
                 x_range = np.linspace(values.min(), values.max(), 200)
                 kde_values = kde(x_range)
             except Exception as e:
-                print(f"Warning: could not generate KDE for {col}: {e}")
+                logger_error(f"{RED}Error generating KDE for {col}: {e}{RESET}")
                 ax.text(
                     0.5,
                     0.5,
@@ -519,7 +519,6 @@ def plot_hyperparameter_distributions(
         )
         plt.close(fig)
 
-    # Print summary
     if not numeric_cols and not categorical_cols:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters found for distribution plotting.")

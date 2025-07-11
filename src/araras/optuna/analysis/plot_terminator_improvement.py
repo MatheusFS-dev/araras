@@ -30,7 +30,7 @@ from optuna.terminator.improvement.evaluator import (
     DEFAULT_MIN_N_TRIALS,
 )
 
-from .analyze import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box
 
 
 PADDING_RATIO_Y = 0.05

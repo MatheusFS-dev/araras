@@ -2,18 +2,17 @@
 Builders for Graph Neural Networks (GNNs) in Keras.
 
 Functions:
-    - print_warning_jit: Print a warning about JIT compilation.
-    - build_grid_adjacency: Build a grid adjacency matrix with GCN normalization.
-    - build_knn_adjacency: Construct a k-nearest neighbour adjacency matrix on a 2-D grid.
-    - _select_range_value: Helper to pick an integer from a fixed value or an Optuna range.
-    - _select_float_range_value: Helper to pick a float from a fixed value or an Optuna range.
-    - build_gcn: Build a single Graph Convolutional Network (GCN) layer.
-    - build_gat: Build a single Graph Attention (GAT) layer.
-    - build_cheb: Build a single Chebyshev graph convolution layer.
+    - build_grid_adjacency: Builds a grid adjacency matrix with GCN normalization.
+    - build_knn_adjacency: Constructs a k-nearest neighbour adjacency matrix on a 2-D grid.
+    - build_gcn: Builds a single Graph Convolutional Network (GCN) layer.
+    - build_gat: Builds a single Graph Attention (GAT) layer.
+    - build_cheb: Builds a single Chebyshev graph convolution layer.
 
 Example:
-    >>> from araras.keras.builders.gnn import print_warning_jit
-    >>> print_warning_jit(...)
+    >>> from araras.keras.builders.gnn import build_grid_adjacency, build_gcn
+    >>> A = build_grid_adjacency(...)
+    >>> x_graph, a_graph = GraphMasking(..., A)
+    >>> x = build_gcn(..., x_graph, a_graph)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
@@ -21,7 +20,7 @@ from araras.commons import *  # Common imports and configs for the Araras lib
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 from spektral.layers import GCNConv, GATConv, ChebConv
 import scipy.sparse as sp
 from spektral.utils import convolution
@@ -153,7 +152,7 @@ def _select_float_range_value(
 
 def build_gcn(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     a_graph: tf.sparse.SparseTensor,
     units_range: Union[int, Tuple[int, int]],
@@ -175,9 +174,9 @@ def build_gcn(
     dropout = _select_float_range_value(
         trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
     )
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     x = GCNConv(
         channels=units,
@@ -195,7 +194,7 @@ def build_gcn(
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
+        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
     )(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
@@ -204,7 +203,7 @@ def build_gcn(
 
 def build_gat(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     a_graph: tf.sparse.SparseTensor,
     units_range: Union[int, Tuple[int, int]],
@@ -231,9 +230,9 @@ def build_gat(
         trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
     )
 
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     x = GATConv(
         channels=units,
@@ -253,7 +252,7 @@ def build_gat(
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
+        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
     )(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
@@ -262,7 +261,7 @@ def build_gat(
 
 def build_cheb(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     a_graph: tf.sparse.SparseTensor,
     units_range: Union[int, Tuple[int, int]],
@@ -288,9 +287,9 @@ def build_cheb(
         trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
     )
 
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     x = ChebConv(
         channels=units,
@@ -309,7 +308,7 @@ def build_cheb(
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
+        kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act"
     )(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)

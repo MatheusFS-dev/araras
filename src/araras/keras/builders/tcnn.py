@@ -8,18 +8,18 @@ Functions:
 
 Example:
     >>> from araras.keras.builders.tcnn import build_tcnn1d
-    >>> build_tcnn1d(...)
+    >>> x = build_tcnn1d(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 
 
 def build_tcnn1d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
     filters_step: int,
@@ -46,7 +46,7 @@ def build_tcnn1d(
 
     Args:
         trial (Any): Hyperparameter tuning object, such as from Optuna.
-        hparams (HParams): Hyperparameter manager providing activation and regularizer configurations.
+        kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, tuple[int, int]]): Fixed or tunable number of filters.
         filters_step (int): Step size for filter tuning.
@@ -89,13 +89,13 @@ def build_tcnn1d(
         kernel_size = trial.suggest_int(f"{name_prefix}_kernel_size", min_k, max_k, step=kernel_size_step)
 
     # Get kernel regularizer if tuning is enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Get bias regularizer if tuning is enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Get activity regularizer if tuning is enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Apply Conv1DTranspose layer
     x = layers.Conv1DTranspose(
@@ -119,9 +119,9 @@ def build_tcnn1d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize outputs to stabilize learning
 
-    # Apply activation function as defined by hparams
+    # Apply activation function as defined by kparams
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),  # Retrieve activation function from hparams
+        kparams.get_activation(trial, f"{name_prefix}_act"),  # Retrieve activation function from kparams
         name=f"{name_prefix}_act",
     )(x)
 
@@ -130,7 +130,7 @@ def build_tcnn1d(
 
 def build_tcnn2d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
     filters_step: int,
@@ -157,7 +157,7 @@ def build_tcnn2d(
 
     Args:
         trial (Any): Hyperparameter tuning object, such as from Optuna.
-        hparams (HParams): Hyperparameter manager providing activation and regularizer configurations.
+        kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, tuple[int, int]]): Fixed or tunable number of filters.
         filters_step (int): Step size for filter tuning.
@@ -202,13 +202,13 @@ def build_tcnn2d(
         kernel_size = (kernel_height, kernel_width)
 
     # Get kernel regularizer if tuning is enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Get bias regularizer if tuning is enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Get activity regularizer if tuning is enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Apply Conv2DTranspose layer
     x = layers.Conv2DTranspose(
@@ -232,9 +232,9 @@ def build_tcnn2d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply activation function as defined by hparams
+    # Apply activation function as defined by kparams
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),
+        kparams.get_activation(trial, f"{name_prefix}_act"),
         name=f"{name_prefix}_act",
     )(x)
 
@@ -243,7 +243,7 @@ def build_tcnn2d(
 
 def build_tcnn3d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, Tuple[int, int]],
     filters_step: int,
@@ -273,7 +273,7 @@ def build_tcnn3d(
 
     Args:
         trial (Any): Hyperparameter tuning object, such as from Optuna.
-        hparams (HParams): Hyperparameter manager providing activation and regularizer configurations.
+        kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, Tuple[int, int]]): Fixed or tunable number of filters.
         filters_step (int): Step size for filter tuning.
@@ -322,13 +322,13 @@ def build_tcnn3d(
         kernel_size = (kernel_depth, kernel_height, kernel_width)
 
     # Get kernel regularizer if tuning is enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Get bias regularizer if tuning is enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Get activity regularizer if tuning is enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Apply Conv3DTranspose layer
     x = layers.Conv3DTranspose(
@@ -352,9 +352,9 @@ def build_tcnn3d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply activation function as defined by hparams
+    # Apply activation function as defined by kparams
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),
+        kparams.get_activation(trial, f"{name_prefix}_act"),
         name=f"{name_prefix}_act",
     )(x)
 

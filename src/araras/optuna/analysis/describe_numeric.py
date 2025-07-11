@@ -11,7 +11,7 @@ Example:
 from araras.commons import *
 import pandas as pd
 
-from .analyze import format_numeric_value
+from .analyzer import format_numeric_value
 
 
 def describe_numeric(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:

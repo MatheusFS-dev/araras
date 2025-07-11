@@ -1,19 +1,78 @@
 """
-Utilities for penalizing objective values based on model complexity.
+A Collection on tools for using with Keras.
 
-Functions:
+Funtions:
+    - convert_to_saved_model: Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
+    - capture_model_summary: Capture model summary as a string.
     - punish_model_flops: Penalize an objective according to the model's FLOPs.
     - punish_model_params: Penalize an objective according to the model's parameter count.
-    - punish_model: Apply both FLOPs and parameter penalties to an objective.
-
-Example:
-    >>> from araras.keras.utils.punish import punish_model_flops
-    >>> punish_model_flops(...)
+    - punish_model: A convenience function to apply both FLOPs and parameter penalties to an objective.
 """
+
 from araras.commons import *
 
+
+import tempfile
+import zipfile
+from pathlib import Path
+
 import tensorflow as tf
-from araras.keras.utils.profiler import get_flops
+
+
+def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
+    """Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
+
+    This will load the model, export it in SavedModel directory format,
+    then compress that directory into a .zip file.
+
+    Args:
+        input_keras_path (str): Path to the source `.keras` model file.
+        output_zip_path (str): Desired path for the output zip (e.g. 'saved_model.zip').
+
+    Returns:
+        None
+
+    Raises:
+        Any exception raised by TensorFlow I/O (e.g. file not found, load/save errors).
+    """
+    # Create a temp workspace for the SavedModel directory
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        saved_model_dir = Path(tmp_dir) / "saved_model"
+
+        # Load the single-file Keras archive (.keras)
+        model = tf.keras.models.load_model(input_keras_path)
+
+        # Export the model in SavedModel format (creates a folder with saved_model.pb, variables/, assets/)
+        tf.saved_model.save(model, str(saved_model_dir))
+
+        # Compress the entire SavedModel directory tree into a zip file
+        with zipfile.ZipFile(output_zip_path, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
+            for file_path in saved_model_dir.rglob("*"):
+                # Compute the archive name by stripping off the temp-dir prefix
+                arcname = file_path.relative_to(saved_model_dir.parent)
+                zf.write(file_path, arcname)
+
+
+def capture_model_summary(model):
+    """
+    Capture model summary as a string.
+
+    Args:
+        model: Keras model
+
+    Returns:
+        str: Model summary as string
+    """
+    summary_list = []
+    model.summary(
+        print_fn=lambda x: summary_list.append(x),
+        expand_nested=True,
+        show_trainable=True,
+    )
+    return "\n".join(summary_list)
+
+
+from araras.keras.analysis.profiler import get_flops
 
 
 def punish_model_flops(
@@ -44,10 +103,7 @@ def punish_model_flops(
 
     # Apply penalty to single value or list
     if isinstance(target, (list, tuple)):
-        return [
-            t + penalty if direction == "minimize" else t - penalty
-            for t in target
-        ]
+        return [t + penalty if direction == "minimize" else t - penalty for t in target]
     return target + penalty if direction == "minimize" else target - penalty
 
 
@@ -80,10 +136,7 @@ def punish_model_params(
 
     # Apply penalty to single value or list
     if isinstance(target, (list, tuple)):
-        return [
-            t + penalty if direction == "minimize" else t - penalty
-            for t in target
-        ]
+        return [t + penalty if direction == "minimize" else t - penalty for t in target]
     return target + penalty if direction == "minimize" else target - penalty
 
 
@@ -112,15 +165,11 @@ def punish_model(
     if type is None:
         # If no type is specified, return the target unchanged
         return target
-    
+
     if type == "flops":
-        target = punish_model_flops(
-            target, model, flops_penalty_factor, direction
-        )
+        target = punish_model_flops(target, model, flops_penalty_factor, direction)
     elif type == "params":
-        target = punish_model_params(
-            target, model, params_penalty_factor, direction
-        )
+        target = punish_model_params(target, model, params_penalty_factor, direction)
     else:
         raise ValueError("`type` must be either 'flops', 'params' or None.")
 

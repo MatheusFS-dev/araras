@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     format_title,
     get_param_display_name,
@@ -454,7 +454,7 @@ def plot_optimal_ranges_analysis(
                     plt.close(standalone_fig)
 
             except Exception as e:
-                print(f"Error plotting parameter '{col}': {e}")
+                logger_error.error(f"{RED}Error plotting parameter '{col}': {e}{RESET}")
                 # Create an error plot but still show the parameter
                 ax.text(
                     0.5,

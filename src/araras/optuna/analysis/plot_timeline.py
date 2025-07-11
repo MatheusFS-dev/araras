@@ -17,7 +17,7 @@ from datetime import timedelta
 import numpy as np
 import optuna
 
-from .analyze import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box
 
 import warnings
 

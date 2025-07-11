@@ -1,25 +1,28 @@
 """
 This module provides a function to build a Squeeze-and-Excitation (SE) block with hyperparameter tuning using Optuna.
 
+Based on the paper: https://arxiv.org/pdf/1709.01507
+
 Functions:
     - build_squeeze_excite_1d: Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
 
 Example:
     >>> from araras.keras.builders.se import build_squeeze_excite_1d
-    >>> build_squeeze_excite_1d(...)
+    >>> x = build_squeeze_excite_1d(...)
 """
+
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 import optuna
 import tensorflow as tf
 from tensorflow.keras import layers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 
 
 def build_squeeze_excite_1d(
     x: tf.keras.layers.Layer,
     trial: optuna.Trial,
-    hparams: HParams,
+    kparams: KParams,
     ratio_choices: List[int],
     name_prefix: str = "se_block",
 ) -> tf.keras.layers.Layer:
@@ -28,7 +31,7 @@ def build_squeeze_excite_1d(
     Args:
         x: Input 3D tensor (batch, length, channels).
         trial: Optuna Trial object for suggesting hyperparameters.
-        hparams: HParams object containing hyperparameter choices.
+        kparams: KParams object containing hyperparameter choices.
         ratio_choices: List of integers representing reduction ratios for SE block.
         name_prefix: Prefix for naming layers and trial parameters.
 
@@ -43,10 +46,10 @@ def build_squeeze_excite_1d(
     if channels is None:
         raise ValueError(f"Cannot infer channels for SE block with prefix {name_prefix}")
 
-    # 2. Optuna suggestions using ratio_choices and HParams
+    # 2. Optuna suggestions using ratio_choices and KParams
     ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
-    act_reduce = hparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
-    act_expand = hparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+    act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+    act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
 
     # 3. Squeeze
     se = layers.GlobalAveragePooling1D(name=f"{name_prefix}_se_squeeze")(x)

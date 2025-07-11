@@ -22,11 +22,6 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
     """
     Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regular time intervals.
 
-    Logic:
-        -> Create log directory
-        -> Define logging functions for each resource type
-        -> Start logging functions in parallel threads based on keyword arguments
-
     Args:
         log_dir (str): Directory where log files will be stored.
         interval (int): Time interval between consecutive logs in seconds. Defaults to 5.

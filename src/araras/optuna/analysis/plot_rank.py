@@ -17,7 +17,7 @@ import numpy as np
 from itertools import combinations
 import pandas as pd
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     get_param_display_name,
     format_title,

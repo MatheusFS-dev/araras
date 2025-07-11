@@ -15,7 +15,7 @@ import optuna
 import numpy as np
 import scipy.interpolate
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
 )

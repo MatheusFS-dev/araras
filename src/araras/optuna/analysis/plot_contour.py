@@ -16,7 +16,7 @@ import numpy as np
 from itertools import combinations
 from matplotlib.tri import Triangulation
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     format_title,
     get_param_display_name,
@@ -114,8 +114,8 @@ def plot_contour(
                 )
                 fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
             except Exception as e:
-                print(
-                    f"Warning: could not generate contour for {p1} vs {p2}: {e}"
+                logger_error.error(
+                    f"{RED}Error generating contour for {p1} vs {p2}: {e}{RESET}"
                 )
                 draw_warning_box(ax, "No Data or Error Generating")
 
@@ -170,8 +170,8 @@ def plot_contour(
                     )
                     fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
                 except Exception as e:
-                    print(
-                        f"Warning: could not generate standalone contour for {p1} vs {p2}: {e}"
+                    logger_error.error(
+                        f"{RED}Error generating standalone contour for {p1} vs {p2}: {e}{RESET}"
                     )
                     draw_warning_box(ax, "No Data or Error Generating")
 

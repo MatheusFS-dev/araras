@@ -19,8 +19,8 @@ Functions:
     - run_auto_restart: Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
 Example:
-    >>> from araras.kernel.monitoring import print_monitoring_config_summary
-    >>> print_monitoring_config_summary(...)
+    >>> from araras.kernel.monitoring import run_auto_restart
+    >>> run_auto_restart("train.py", title="Training Process")
 """
 from araras.commons import *
 
@@ -31,16 +31,12 @@ import json
 import glob
 import psutil
 import tempfile
-import subprocess
 from pathlib import Path
 
 from threading import Event, Thread
 
 # Local imports
-from araras.utils.cleanup import ChildProcessCleanup
 from araras.utils.terminal import SimpleTerminalLauncher
-from araras.utils.misc import NotebookConverter, clear
-
 
 # Enhanced HTML template for consolidated status reports
 CONSOLIDATED_STATUS_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:{color}">{status_title}</h2><div style="background:#f9f9f9;padding:15px;margin:15px 0;border-left:4px solid {color}"><h3>Process Information</h3><p><strong>Process:</strong> {title}</p><p><strong>Status:</strong> {status_description}</p><p><strong>Timestamp:</strong> {timestamp}</p></div>{details_section}<div style="background:#f0f0f0;padding:10px;margin-top:20px;font-size:12px;color:#666"><p>This is an automated status report from the process monitoring system.</p></div></div></body></html>"""
@@ -161,11 +157,11 @@ def print_monitoring_config_summary(
     print(f"Target File: {file_path}")
     print(f"Success Flag Location: {success_flag_file}")
     # print(f"File Type: {file_type}")
-    print(f"Process Title: \033[33m{title}\033[0m")
+    print(f"Process Title: {ORANGE}{title}{RESET}")
     if email_enabled:
-        print(f"Email Alerts: \033[92mEnabled\033[0m")
+        print(f"Email Alerts: {GREEN}Enabled{RESET}")
     else:
-        print(f"Email Alerts: \033[91mDisabled\033[0m")
+        print(f"Email Alerts: {RED}Disabled{RESET}")
     print(f"Max Restarts: {max_restarts}")
     if restart_after_delay is not None:
         print(f"Run will force restart after: {restart_after_delay} seconds")
@@ -192,9 +188,9 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
 def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
     """Print final completion summary."""
     # print("\n" + "=" * 50)
-    print("\n\033[Process Completed\033[0m")
+    print(f"\n{GREEN}Process Completed{RESET}")
     # print("=" * 50)
-    print(f"Total Restarts: \033[33m{restart_count}\033[0m")
+    print(f"Total Restarts: {ORANGE}{restart_count}{RESET}")
     # if total_runtime is not None:
     #     print(f"Total Runtime:  {total_runtime:.1f}s")
     # print("=" * 50)
@@ -204,21 +200,20 @@ def print_error_message(error_type: str, message: str) -> None:
     """Print error messages with consistent formatting."""
     logger_error.error(f"{RED}ERROR [{error_type}]: {message}{RESET}")
 
-
 def print_warning_message(message: str) -> None:
     """Print warning messages with consistent formatting."""
-    logger.warning(f"{YELLOW}Warning: {message}{RESET}")
+    logger_time.warning(f"{YELLOW}Warning: {message}{RESET}")
 
 
 def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
-    logger.info(f"SUCCESS: {message}")
+    logger_time.info(f"SUCCESS: {message}")
 
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
-        logger.info(f"Child cleanup: {terminated} terminated, {killed} killed")
+        logger_time.info(f"Child cleanup: {terminated} terminated, {killed} killed")
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
@@ -277,8 +272,6 @@ def print_process_resource_usage(pid: int) -> None:
     except Exception:
         pass
 
-from .consolidated_email_manager import ConsolidatedEmailManager
-from .file_type_handler import FileTypeHandler
 from .flag_based_restart_manager import FlagBasedRestartManager
 
 
@@ -522,13 +515,13 @@ def run_auto_restart(
                     stop_event.set()
                     print("\n")
                     print_process_status(
-                        "Restart loop interrupted by user, cleaning up. \033[91mPlease wait...\033[0m"
+                        f"Restart loop interrupted by user, cleaning up. {ORANGE}Please wait...{RESET}"
                     )
                     manager.force_stop()
                     manager._cleanup_converted_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
-                print(f"\n\033[92mProcess done!\033[0m")
+                print(f"\n{GREEN}Process done!{RESET}")
 
             restart_loop()
 

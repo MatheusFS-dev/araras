@@ -8,13 +8,14 @@ Example:
     >>> from araras.optuna.analysis.plot_trend_analysis import plot_trend_analysis
     >>> plot_trend_analysis(...)
 """
+
 from araras.commons import *
 import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     format_title,
     get_param_display_name,
@@ -22,6 +23,7 @@ from .analyze import (
     calculate_grid,
     draw_warning_box,
 )
+
 
 def plot_trend_analysis(
     df: pd.DataFrame,
@@ -111,7 +113,9 @@ def plot_trend_analysis(
 
         # Check if we have enough valid data points
         if len(x_clean) < 2:
-            print(f"Warning: Not enough valid data points for parameter '{col}'. Skipping trend analysis.")
+            logger.warning(
+                f"{YELLOW}Not enough valid data points for parameter '{col}'. Skipping trend analysis.{RESET}"
+            )
             ax.text(
                 0.5,
                 0.5,
@@ -135,7 +139,9 @@ def plot_trend_analysis(
 
         # Check for constant values (no variance)
         if np.var(x_clean) == 0 or np.var(y_clean) == 0:
-            print(f"Warning: Parameter '{col}' or loss has no variance. Skipping trend analysis.")
+            logger.warning(
+                f"{YELLOW}Parameter '{col}' or loss has no variance. Skipping trend analysis.{RESET}"
+            )
             ax.text(
                 0.5,
                 0.5,
@@ -169,7 +175,7 @@ def plot_trend_analysis(
             fit_status = "Success"
 
         except (np.linalg.LinAlgError, ValueError) as e:
-            print(f"Warning: Could not fit trend line for parameter '{col}': {e}")
+            logger_error.error(f"{RED}Error fitting trend line for parameter '{col}': {e}{RESET}")
             # Set default values
             slope = 0.0
             intercept = np.mean(y_clean) if len(y_clean) > 0 else 0.0
@@ -210,22 +216,10 @@ def plot_trend_analysis(
 
             # Plot the line using only the endpoints to ensure correct visualization
             ax.plot([x_min, x_max], [y_at_x_min, y_at_x_max], linewidth=2, color="red", alpha=0.8)
-
-            # Verify the slope calculation is correct by checking the line's visual slope
-            # Visual slope = (y_max - y_min) / (x_max - x_min) should equal our calculated slope
-            visual_slope = (y_at_x_max - y_at_x_min) / (x_max - x_min)
-
-            # Debug print to verify consistency (remove in production)
-            if abs(visual_slope - slope) > 1e-10:
-                print(
-                    f"Warning: Slope mismatch for {col}. Calculated: {slope:.6f}, Visual: {visual_slope:.6f}"
-                )
         else:
             # For flat line case (slope ≈ 0)
             y_flat = intercept
             ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
-
-
 
         ax.set_xlabel(display_name, fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.label_fs)
@@ -236,8 +230,6 @@ def plot_trend_analysis(
             pad=PLOT_CFG.title_pad,
         )
         ax.grid(True, alpha=0.3)
-
-
 
         # Add text box with statistics
         stats_text = f"Slope: {slope:.6f}\n"  # Show more decimal places for slope
@@ -275,7 +267,6 @@ def plot_trend_analysis(
                 y_flat = intercept
                 standalone_ax.axhline(y=y_flat, color="gray", linewidth=2, alpha=0.8)
 
-
             standalone_ax.set_xlabel(display_name, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_ylabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
             standalone_ax.set_title(
@@ -290,7 +281,6 @@ def plot_trend_analysis(
             standalone_ax.grid(True, alpha=0.3)
             standalone_ax.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
             standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
-
 
             standalone_ax.text(
                 0.05,
@@ -336,5 +326,3 @@ def plot_trend_analysis(
     save_path = os.path.join(dirs["figs"], "params_trends.pdf")
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()  # Close figure to free memory
-
-

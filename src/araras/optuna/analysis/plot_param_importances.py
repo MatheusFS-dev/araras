@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
-from .analyze import PLOT_CFG, save_data_for_latex, get_param_display_name, draw_warning_box
+from .analyzer import PLOT_CFG, save_data_for_latex, get_param_display_name, draw_warning_box
 
 
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:

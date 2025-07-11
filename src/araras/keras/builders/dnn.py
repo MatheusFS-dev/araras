@@ -6,18 +6,18 @@ Functions:
 
 Example:
     >>> from araras.keras.builders.dnn import build_dnn
-    >>> build_dnn(...)
+    >>> x = build_dnn(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 
 
 def build_dnn(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     units_range: Union[int, tuple[int, int]],
     dropout_rate_range: Union[float, tuple[float, float]],
@@ -41,7 +41,7 @@ def build_dnn(
 
     Args:
         trial (Any): Hyperparameter tuning trial object, e.g., from Optuna.
-        hparams (HParams): Custom hyperparameter handler that provides regularizers and activations.
+        kparams (KParams): Custom hyperparameter handler that provides regularizers and activations.
         x (layers.Layer): Input tensor or layer to build on.
         units_range (Union[int, tuple[int, int]]): Either a fixed unit count or a range for tuning.
         units_step (int): Step size for unit range tuning.
@@ -82,13 +82,13 @@ def build_dnn(
         )
 
     # Configure kernel regularizer if requested
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Configure bias regularizer if requested
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Configure activity regularizer if requested
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Add a Dense layer without activation
     x = layers.Dense(
@@ -107,9 +107,9 @@ def build_dnn(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize batch with moving statistics
 
-    # Apply activation function as determined by hparams
+    # Apply activation function as determined by kparams
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),  # Retrieve activation from hparams
+        kparams.get_activation(trial, f"{name_prefix}_act"),  # Retrieve activation from kparams
         name=f"{name_prefix}_act",
     )(x)
 

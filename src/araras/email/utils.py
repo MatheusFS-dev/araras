@@ -5,10 +5,6 @@ Functions:
     - get_credentials: Reads the sender's email and password from a JSON file.
     - get_recipient_emails: Reads a list of recipient email addresses from a JSON file.
     - send_email: Sends an email notification with the specified subject and body content to multiple recipients.
-
-Example:
-    >>> from araras.email.utils import get_credentials
-    >>> get_credentials(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
@@ -111,7 +107,7 @@ def send_email(
         message["Subject"] = subject
         message.attach(MIMEText(body, text_type))
     except Exception as e:
-        logger_error.error(f"{RED}[ERROR] {e}")
+        logger_error.error(f"{RED}[ERROR] {e}{RESET}")
         return
 
     try:
@@ -122,4 +118,4 @@ def send_email(
             server.sendmail(sender_email, recipient_emails, message.as_string())  # Send email
         logger.info("Email sent successfully.")
     except Exception as e:
-        logger_error.error(f"{RED}[ERROR] Failed to send email: {e}")
+        logger_error.error(f"{RED}[ERROR] Failed to send email: {e}{RESET}")

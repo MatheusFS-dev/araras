@@ -11,18 +11,18 @@ Functions:
 
 Example:
     >>> from araras.keras.builders.cnn import build_cnn1d
-    >>> build_cnn1d(...)
+    >>> x = build_cnn1d(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 
 
 def build_cnn1d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
     kernel_size_range: Union[int, tuple[int, int]],
@@ -51,7 +51,7 @@ def build_cnn1d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer.
         filters_range (Union[int, tuple[int, int]]): Number of filters or a range for tuning.
         kernel_size_range (Union[int, tuple[int, int]]): Kernel size or a range for tuning.
@@ -94,13 +94,13 @@ def build_cnn1d(
         )  # Suggest a value
 
     # Retrieve kernel regularizer if enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Retrieve bias regularizer if enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Retrieve activity regularizer if enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Create the Conv1D layer with all specified and optional parameters, activation set to None
     x = layers.Conv1D(
@@ -125,9 +125,9 @@ def build_cnn1d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from hparams using the trial
+    # Apply the activation function retrieved from kparams using the trial
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),
+        kparams.get_activation(trial, f"{name_prefix}_act"),
         name=f"{name_prefix}_act",
     )(x)
 
@@ -137,7 +137,7 @@ def build_cnn1d(
 
 def build_dense_as_conv1d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: int,
     filters_step: int = 10,
@@ -163,7 +163,7 @@ def build_dense_as_conv1d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer, expected to be of shape (batch_size, length, features_in).
         filters_range (int): The number of output filters for the Conv1D layer.
         filters_step (int): Step size for tuning the number of filters.
@@ -185,7 +185,7 @@ def build_dense_as_conv1d(
     """
     return build_cnn1d(
         trial,
-        hparams,
+        kparams,
         x,
         filters_range=filters_range,
         filters_step=filters_step,
@@ -203,7 +203,7 @@ def build_dense_as_conv1d(
 
 def build_cnn2d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
     kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]],
@@ -232,7 +232,7 @@ def build_cnn2d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer.
         filters_range (Union[int, tuple[int, int]]): Number of filters or a range for tuning.
         kernel_size_range (Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]]):
@@ -278,13 +278,13 @@ def build_cnn2d(
         kernel_size = (kernel_height, kernel_width)
 
     # Retrieve kernel regularizer if enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Retrieve bias regularizer if enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Retrieve activity regularizer if enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Create the Conv2D layer with specified and optional parameters, activation set to None
     x = layers.Conv2D(
@@ -309,9 +309,9 @@ def build_cnn2d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from hparams using the trial
+    # Apply the activation function retrieved from kparams using the trial
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),
+        kparams.get_activation(trial, f"{name_prefix}_act"),
         name=f"{name_prefix}_act",
     )(x)
 
@@ -320,7 +320,7 @@ def build_cnn2d(
 
 def build_dense_as_conv2d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: int,
     filters_step: int = 10,
@@ -346,7 +346,7 @@ def build_dense_as_conv2d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer, expected to be of shape (batch_size, height, width, features_in).
         filters_range (int): The number of output filters for the Conv2D layer.
         filters_step (int): Step size for tuning the number of filters.
@@ -368,7 +368,7 @@ def build_dense_as_conv2d(
     """
     return build_cnn2d(
         trial,
-        hparams,
+        kparams,
         x,
         filters_range=filters_range,
         filters_step=filters_step,
@@ -384,14 +384,9 @@ def build_dense_as_conv2d(
     )
 
 
-from typing import Any, Union, Tuple
-from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
-
-
 def build_cnn3d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, Tuple[int, int]],
     kernel_size_range: Union[
@@ -423,7 +418,7 @@ def build_cnn3d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer.
         filters_range (Union[int, Tuple[int, int]]): Number of filters or a range for tuning.
         kernel_size_range (Union[
@@ -473,13 +468,13 @@ def build_cnn3d(
         kernel_size = (kernel_depth, kernel_height, kernel_width)
 
     # Retrieve kernel regularizer if enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Retrieve bias regularizer if enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Retrieve activity regularizer if enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Create the Conv3D layer with specified and optional parameters, activation set to None
     x = layers.Conv3D(
@@ -504,9 +499,9 @@ def build_cnn3d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from hparams using the trial
+    # Apply the activation function retrieved from kparams using the trial
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),
+        kparams.get_activation(trial, f"{name_prefix}_act"),
         name=f"{name_prefix}_act",
     )(x)
 
@@ -515,7 +510,7 @@ def build_cnn3d(
 
 def build_dense_as_conv3d(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     filters_range: int,
     filters_step: int = 10,
@@ -541,7 +536,7 @@ def build_dense_as_conv3d(
 
     Args:
         trial (Any): An Optuna trial object used for hyperparameter optimization.
-        hparams (HParams): A utility object to provide regularizers and activations.
+        kparams (KParams): A utility object to provide regularizers and activations.
         x (layers.Layer): The input Keras layer, expected to be of shape (batch_size, depth, height, width, features_in).
         filters_range (int): The number of output filters for the Conv3D layer.
         filters_step (int): Step size for tuning the number of filters.
@@ -556,14 +551,14 @@ def build_dense_as_conv3d(
 
     References:
         https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer
-        
+
         https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers
 
         https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks
     """
     return build_cnn3d(
         trial,
-        hparams,
+        kparams,
         x,
         filters_range=filters_range,
         filters_step=filters_step,

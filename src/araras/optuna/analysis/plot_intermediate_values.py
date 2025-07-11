@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import optuna
 import numpy as np
 
-from .analyze import (
+from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
 )

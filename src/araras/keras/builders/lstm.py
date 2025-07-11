@@ -6,18 +6,18 @@ Functions:
 
 Example:
     >>> from araras.keras.builders.lstm import build_lstm
-    >>> build_lstm(...)
+    >>> x = build_lstm(...)
 """
 
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 from tensorflow.keras import layers, initializers
-from araras.keras.hparams import HParams
+from araras.keras.hyperparams import KParams
 
 
 def build_lstm(
     trial: Any,
-    hparams: HParams,
+    kparams: KParams,
     x: layers.Layer,
     return_sequences: bool,
     units_range: Union[int, tuple[int, int]],
@@ -41,7 +41,7 @@ def build_lstm(
 
     Args:
         trial (Any): Object used for suggesting hyperparameters, typically from a tuner like Optuna.
-        hparams (HParams): Hyperparameter manager used to retrieve regularizers and activations.
+        kparams (KParams): Hyperparameter manager used to retrieve regularizers and activations.
         x (layers.Layer): Input tensor or layer.
         return_sequences (bool): Whether to return the full sequence of outputs or just the last output.
         units_range (Union[int, tuple[int, int]]): Fixed or tunable number of LSTM units.
@@ -88,13 +88,13 @@ def build_lstm(
         )
 
     # Get kernel regularizer if enabled
-    kernel_reg = hparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
 
     # Get bias regularizer if enabled
-    bias_reg = hparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
 
     # Get activity regularizer if enabled
-    act_reg = hparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
     # Apply LSTM layer without activation function
     x = layers.LSTM(
@@ -116,9 +116,9 @@ def build_lstm(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize the activations
 
-    # Apply activation function retrieved from hparams
+    # Apply activation function retrieved from kparams
     x = layers.Activation(
-        hparams.get_activation(trial, f"{name_prefix}_act"),  # Get activation function from hparams
+        kparams.get_activation(trial, f"{name_prefix}_act"),  # Get activation function from kparams
         name=f"{name_prefix}_act",
     )(x)
 

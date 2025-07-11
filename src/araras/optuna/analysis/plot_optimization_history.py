@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import optuna
 import pandas as pd
 
-from .analyze import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box
 
 
 def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None:

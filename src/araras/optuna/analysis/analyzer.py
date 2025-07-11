@@ -2,26 +2,12 @@
 Utility functions for analyzing Optuna study results.
 
 Functions:
-    - set_plot_config_param: Set a single parameter in :data:`PLOT_CFG`.
-    - set_plot_config_params: Set multiple parameters in :data:`PLOT_CFG`.
-    - format_title: Format a title template with the given display name.
-    - calculate_grid: Calculate grid dimensions ensuring the resulting figure stays within
-    - draw_warning_box: Display a warning message inside a plot area.
-    - create_directories: Create organized subdirectories for storing analysis outputs.
-    - save_data_for_latex: Save graph data to CSV files for LaTeX plotting.
-    - get_param_display_name: Get display name for parameter, using mapping if provided.
-    - prepare_dataframe: Extract and clean completed trial data from Optuna study.
-    - classify_columns: Split DataFrame columns into numeric and categorical parameter types.
-    - get_trial_subsets: Extract best and worst performing trial subsets based on loss values.
-    - format_numeric_value: Format numeric values with appropriate precision for readability.
-    - save_summary_tables: Generate and save statistical summary tables for different trial subsets.
-    - _safe_plot: Execute a plotting function, catching and reporting any errors.
-    - print_study_columns: Print the names of the DataFrame columns from the study as a bullet list.
+    - set_plot_config_param: Set a single parameter in the global PlotConfig.
     - analyze_study: Comprehensive analysis of Optuna hyperparameter optimization study results.
 
 Example:
-    >>> from araras.optuna.analysis.analyze import set_plot_config_param
-    >>> set_plot_config_param(...)
+    >>> from araras.optuna.analysis.analyze import analyze_study
+    >>> analyze_study("path/to/study")
 """
 from araras.commons import *
 
@@ -301,8 +287,6 @@ def prepare_dataframe(study: optuna.Study) -> pd.DataFrame:
     df = df.drop(columns=["number", "state"], errors="ignore")
 
     if df.empty:
-        print("Warning: No completed trials found in the study.")
-        print("Please verify that the study contains successful trials.")
         return df
 
     df = df.rename(columns={"value": "loss"})
@@ -385,7 +369,7 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
     try:
         func(*args, **kwargs)
     except Exception as e:  # pragma: no cover - errors are user-facing
-        print(f"Error generating {plot_name} plot: {e}")
+        logger_error.error(f"{RED}Error generating {plot_name} plot: {e}{RESET}")
 
 def print_study_columns(
     study: optuna.Study,
@@ -420,9 +404,9 @@ def print_study_columns(
             print("}")
             print("-" * 50)
         else:
-            print("No columns to display after applying exclusions.")
+            print(f"{ORANGE}No columns to display after applying exclusions.{RESET}")
     except Exception as e:
-        print(f"Error extracting study information: {str(e)}")
+        logger_error.error(f"{RED}Error extracting study information: {str(e)}{RESET}")
 
 
 def analyze_study(
@@ -482,14 +466,14 @@ def analyze_study(
         plots_to_generate = set(plots)
         invalid_plots = plots_to_generate - all_plots
         if invalid_plots:
-            print(f"Warning: Invalid plot types ignored: {invalid_plots}")
+            logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
             plots_to_generate = plots_to_generate & all_plots
 
     dirs = create_directories(table_dir, create_standalone, save_data)
 
     df = prepare_dataframe(study)
     if df.empty:
-        print("No completed trials to analyze.")
+        logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
         return
 
     numeric_cols, categorical_cols = classify_columns(df)

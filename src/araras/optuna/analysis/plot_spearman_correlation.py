@@ -14,7 +14,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .analyze import PLOT_CFG, save_data_for_latex, draw_warning_box
+from .analyzer import PLOT_CFG, save_data_for_latex, draw_warning_box
 
 
 def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:

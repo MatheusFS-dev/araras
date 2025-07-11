@@ -186,6 +186,9 @@ def get_model_usage_stats(
 
         attempt += 1
         if attempt > MAX_RETRIES:
-            print("\033[31mWarning: Average power measurement failed, returning 0.\033[0m")
+            logger_error.error(
+                f"{RED}Average power measurement failed after {MAX_RETRIES} attempts, returning 0.{RESET}"
+            )
+        
             return per_run_time, 0.0, 0.0
-        print("\033[33mWarning: Negative average power measured, retrying measurement...\033[0m")
+        logger.warning(f"{YELLOW}Negative average power measured, retrying measurement...{RESET}")

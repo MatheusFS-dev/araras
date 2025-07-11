@@ -11,9 +11,9 @@ Example:
 from araras.commons import *
 import tensorflow as tf
 import optuna
-from araras.keras.utils.profiler import get_flops, get_macs, get_memory_and_time
-from araras.keras.utils.summary import capture_model_summary
-from araras.tensorflow.utils.model import get_model_usage_stats
+from araras.keras.analysis.profiler import get_flops, get_macs, get_memory_and_time
+from araras.keras.utils import capture_model_summary
+from araras.tensorflow.model import get_model_usage_stats
 
 
 def get_model_stats(

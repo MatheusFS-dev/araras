@@ -21,16 +21,6 @@ import subprocess
 from datetime import datetime
 
 
-# ANSI color codes
-RESET = "\033[0m"
-BOLD = "\033[1m"
-BLUE = "\033[34m"
-GREEN = "\033[32m"
-RED = "\033[31m"
-CYAN = "\033[36m"
-YELLOW = "\033[33m"
-
-
 def get_user_gpu_choice():
     """
     Prompts the user to select a GPU index and validates the input.
@@ -78,14 +68,14 @@ def get_user_gpu_choice():
             gpu_index = int(user_input)
 
             if 0 <= gpu_index < num_gpus:
-                print(f"{GREEN}Selected GPU {gpu_index}{RESET}")
+                logger.info(f"Selected GPU {gpu_index}")
                 return str(gpu_index)
             else:
                 print(f"{RED}Invalid index. Please enter a number between 0 and {num_gpus-1}.{RESET}")
         except ValueError:
-            print(f"{RED}Invalid input. Please enter a valid number.{RESET}")
+            logger_error.error(f"{RED}Invalid input. Please enter a valid number.{RESET}")
         except KeyboardInterrupt:
-            print(f"\n{YELLOW}Operation cancelled. Using GPU 0 as default.{RESET}")
+            logger_error.warning(f"\n{RED}Operation cancelled. Using GPU 0 as default.{RESET}")
 
 
 def _get_nvidia_smi_data():

@@ -118,9 +118,9 @@ Below is a summary of all modules and their functions.
   - `subject`: subject line for the email.
   - `text_type`: MIME type for the message.
 
-### `araras.keras.hparams`
+### `araras.keras.kparams`
 
-- **`HParams`** – dataclass storing hyperparameter options. The predefined
+- **`KParams`** – dataclass storing hyperparameter options. The predefined
   choices include strings and ready‑to‑use Keras/scikit‑learn objects.
   - `get_activation(trial, name)` – sample an activation or return one of the
     provided objects.

@@ -23,6 +23,9 @@ YELLOW = "\x1b[33m"
 RED = "\x1b[31m"
 ORANGE = "\x1b[38;5;208m"
 BLUE = "\x1b[34m"
+GREEN = "\x1b[32m"
+CYAN = "\x1b[36m"
+BOLD = "\x1b[1m"
 
 
 # ——————————————————————————— Logger configurations —————————————————————————— #

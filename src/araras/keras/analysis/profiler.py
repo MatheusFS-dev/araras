@@ -114,7 +114,7 @@ def get_memory_and_time(
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
             Measure with batch_size=1 to get base per-sample latency.
-        device (str): The device to run the model on, e.g. "GPU:0" or "CPU:0".
+        device (str): The device to run the model on and their index, e.g. "GPU:0" or "CPU:0".
         warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
         test_runs (int): Number of runs to measure average inference time. Defaults to 50.
         verbose (bool): If True, displays a progress bar during test runs.
@@ -216,13 +216,13 @@ def get_memory_and_time(
         peak_mem, avg_time = _measure_cpu()
         if peak_mem != 0:
             break
-        if attempt < max_retries:
-            print(
-                "\033[33mWarning: CPU memory usage measured as 0 bytes, retrying measurement...\033[0m"
+        if attempt < max_retries: 
+            logger.warning(
+                f"{YELLOW}CPU memory usage measured as 0 bytes, retrying measurement...{RESET}"
             )
         else:
-            print(
-                "\033[31mWarning: CPU memory usage could not be measured, returning 0.\033[0m"
+            logger.error(
+                f"{RED}CPU memory usage could not be measured, returning 0.{RESET}"
             )
 
     return peak_mem, avg_time

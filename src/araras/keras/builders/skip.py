@@ -2,16 +2,14 @@
 This module provides a function to create skip connections in a Keras model using Optuna trials.
 
 Function:
-    - `trial_skip_connections`: Creates skip connections based on a trial object and a list of layers.
+    - trial_skip_connections: Creates skip connections based on a trial object and a list of layers.
 
-Usage example:
-    ```python
-    from araras.keras.skip_connections import trial_skip_connections
-    import tensorflow as tf
-    # Assuming `trial` is an Optuna trial object and `layers_list` is a list of Keras layers
-    final_tensor = trial_skip_connections(trial, layers_list)
-    ```
+Example:
+    >>> from araras.keras.skip import trial_skip_connections
+    >>> # Assuming `trial` is an Optuna trial object and `layers_list` is a list of Keras layers
+    >>> final_tensor = trial_skip_connections(trial, layers_list)
 """
+
 from araras.commons import *  # Common imports and configs for the Araras lib
 
 import optuna
@@ -98,10 +96,12 @@ def trial_skip_connections(
 
     # Optionally print every combination of skip configuration
     if print_combinations:
+        print("=" * 50)
         print(f"Total skip possibilities: {total_combinations}")
         for combo in itertools.product([False, True], repeat=num_skips):
             settings = {f"skip_{i}_{j}": val for (i, j), val in zip(pairs, combo)}
             print(settings)
+        print("=" * 50)
 
     # Validate merge mode
     if merge_mode not in ("concat", "add"):
