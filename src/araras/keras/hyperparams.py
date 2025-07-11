@@ -56,6 +56,7 @@ class BaseSampler(ABC):
             choice = _sample_choice(trial, self.name, self.choices)
             return self._process(choice, trial)
         except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
             raise RuntimeError(f"Error sampling {self.name}") from exc
 
     @abstractmethod
