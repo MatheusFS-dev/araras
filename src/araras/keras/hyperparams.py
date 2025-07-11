@@ -13,6 +13,7 @@ Example:
 from araras.commons import *
 
 from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
 import optuna
 import tensorflow as tf
 from sklearn.preprocessing import (
@@ -24,258 +25,191 @@ from sklearn.preprocessing import (
 )
 
 
+def _sample_choice(trial: optuna.Trial, name: str, choices: Sequence[Any]) -> Any:
+    """Sample a value from ``choices`` using Optuna."""
+    if len(choices) == 1:
+        return choices[0]
+    return trial.suggest_categorical(name, list(choices))
+
+
+class BaseSampler(ABC):
+    """Abstract sampler for Keras hyperparameters."""
+
+    def __init__(self, choices: Sequence[Any], name: str) -> None:
+        self.choices = choices
+        self.name = name
+
+    def sample(self, trial: optuna.Trial) -> Any:
+        try:
+            choice = _sample_choice(trial, self.name, self.choices)
+            return self._process(choice, trial)
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Error sampling {self.name}") from exc
+
+    @abstractmethod
+    def _process(self, choice: Any, trial: optuna.Trial) -> Any:
+        """Transform the chosen value into the final object."""
+        raise NotImplementedError
+
+
+class ActivationSampler(BaseSampler):
+    def _process(self, choice: Any, trial: optuna.Trial) -> Any:  # noqa: D401
+        return choice
+
+
+class RegularizerSampler(BaseSampler):
+    def _process(self, choice: Any, trial: optuna.Trial) -> Any:
+        if choice is None:
+            return None
+        if isinstance(choice, tf.keras.regularizers.Regularizer):
+            return choice
+        if isinstance(choice, type) and issubclass(choice, tf.keras.regularizers.Regularizer):
+            return choice()
+        if callable(choice):
+            obj = choice()
+            if isinstance(obj, tf.keras.regularizers.Regularizer):
+                return obj
+        raise ValueError(f"Unsupported regularizer: {choice}")
+
+
+class OptimizerSampler(BaseSampler):
+    def __init__(self, choices: Sequence[Any], name: str, lr_range: tuple[float, float] = (1e-5, 1e-2)) -> None:
+        super().__init__(choices, name)
+        self.lr_range = lr_range
+
+    def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
+        lr = trial.suggest_float(f"{self.name}_lr", *self.lr_range, log=True)
+        if isinstance(choice, tf.keras.optimizers.Optimizer):
+            choice.learning_rate = lr
+            return choice
+        if isinstance(choice, type) and issubclass(choice, tf.keras.optimizers.Optimizer):
+            return choice(learning_rate=lr)
+        if callable(choice):
+            obj = choice()
+            if isinstance(obj, tf.keras.optimizers.Optimizer):
+                obj.learning_rate = lr
+                return obj
+        raise ValueError(f"Unsupported optimizer: {choice}")
+
+
+class ScalerSampler(BaseSampler):
+    def _process(self, choice: Any, trial: optuna.Trial) -> Any:
+        if isinstance(choice, (StandardScaler, MinMaxScaler, RobustScaler, QuantileTransformer, PowerTransformer)):
+            return choice
+        if isinstance(choice, type):
+            return choice()
+        if callable(choice):
+            return choice()
+        raise ValueError(f"Unsupported scaler: {choice}")
+
+
+class InitializerSampler(BaseSampler):
+    def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.initializers.Initializer:
+        if isinstance(choice, tf.keras.initializers.Initializer):
+            return choice
+        if isinstance(choice, type) and issubclass(choice, tf.keras.initializers.Initializer):
+            return choice()
+        if callable(choice):
+            obj = choice()
+            if isinstance(obj, tf.keras.initializers.Initializer):
+                return obj
+        raise ValueError(f"Unsupported initializer: {choice}")
+
+
 @dataclass
 class KParams:
-    """Container for hyperparameter search spaces.
+    """Container for hyperparameter search spaces."""
 
-    The class stores lists of possible options for activations, regularizers,
-    optimizers, scalers and initializers. Options can be specified as strings or
-    as the actual objects themselves, offering maximum flexibility.
-    """
-
-    activation_choices: List[
-        Union[str, Callable[..., Any], tf.keras.layers.Layer, None]
-    ] = field(
+    activation_choices: List[Optional[Callable[..., Any]]] = field(
         default_factory=lambda: [
-            "relu",
-            "tanh",
-            "sigmoid",
-            "linear",
+            tf.keras.activations.relu,
+            tf.keras.activations.tanh,
+            tf.keras.activations.sigmoid,
+            tf.keras.activations.linear,
             None,
         ]
     )
-    regularizer_choices: List[
-        Union[str, tf.keras.regularizers.Regularizer, None]
-    ] = field(default_factory=lambda: ["none", "l1", "l2", "l1l2"])
-    optimizer_choices: List[
-        Union[str, type[tf.keras.optimizers.Optimizer], tf.keras.optimizers.Optimizer]
-    ] = field(
+
+    regularizer_choices: List[Optional[Union[type[tf.keras.regularizers.Regularizer], tf.keras.regularizers.Regularizer, Callable[[], tf.keras.regularizers.Regularizer]]]] = field(
         default_factory=lambda: [
-            "Adam",
-            "RMSprop",
-            "SGD",
-            "AdamW",
+            None,
+            tf.keras.regularizers.L1(1e-2),
+            tf.keras.regularizers.L2(1e-2),
+            tf.keras.regularizers.L1L2(l1=1e-2, l2=1e-2),
         ]
     )
-    scaler_choices: List[Union[str, Any]] = field(
+
+    optimizer_choices: List[Union[type[tf.keras.optimizers.Optimizer], tf.keras.optimizers.Optimizer, Callable[[], tf.keras.optimizers.Optimizer]]] = field(
         default_factory=lambda: [
-            "StandardScaler",
-            "MinMaxScaler_0_1",
-            "MinMaxScaler_-1_1",
-            "RobustScaler",
-            "QuantileTransformer",
-            "PowerTransformer",
+            tf.keras.optimizers.Adam,
+            tf.keras.optimizers.RMSprop,
+            tf.keras.optimizers.SGD,
+            tf.keras.optimizers.AdamW,
         ]
     )
-    initializer_choices: List[
-        Union[str, tf.keras.initializers.Initializer]
-    ] = field(
+
+    scaler_choices: List[Union[type, Callable[[], Any], Any]] = field(
         default_factory=lambda: [
-            "glorot_uniform",
-            "glorot_normal",
+            StandardScaler,
+            lambda: MinMaxScaler(feature_range=(0, 1)),
+            lambda: MinMaxScaler(feature_range=(-1, 1)),
+            RobustScaler,
+            QuantileTransformer,
+            PowerTransformer,
+        ]
+    )
+
+    initializer_choices: List[Union[type[tf.keras.initializers.Initializer], tf.keras.initializers.Initializer, Callable[[], tf.keras.initializers.Initializer]]] = field(
+        default_factory=lambda: [
+            tf.keras.initializers.GlorotUniform,
+            tf.keras.initializers.GlorotNormal,
             tf.keras.initializers.HeNormal(),
             tf.keras.initializers.HeUniform(),
         ]
     )
 
-    dropout_range: Tuple[float, float] = (0.0, 0.5)
+    def get_activation(self, trial: optuna.Trial, name: str) -> Optional[Callable[..., Any]]:
+        """Sample or return an activation."""
 
-    l1_value: float = 1e-2
-    l2_value: float = 1e-2
-    orthogonal_factor: float = 0.01
-    orthogonal_mode: str = "rows"
-
-    min_lr: float = 1e-5
-    max_lr: float = 1e-2
-
-    lr_value: float = None # Can be set for fixed learning rate
-
-    def get_activation(
-        self, trial: optuna.Trial, name: str
-    ) -> Optional[Union[str, Callable[..., Any], tf.keras.layers.Layer]]:
-        """Sample or return an activation.
-
-        The returned object can be a string, callable, ``tf.keras.layers.Layer``
-        instance or ``None``.
-        """
-
-        if len(self.activation_choices) == 1:
-            choice = self.activation_choices[0]
-        else:
-            idx = trial.suggest_int(name, 0, len(self.activation_choices) - 1)
-            choice = self.activation_choices[idx]
-
-        if isinstance(choice, str):
-            return None if choice.lower() == "none" else choice
-
-        return choice
+        sampler = ActivationSampler(self.activation_choices, name)
+        return sampler.sample(trial)
 
     def get_regularizer(
-        self,
-        trial: optuna.Trial,
-        name: str,
+        self, trial: optuna.Trial, name: str
     ) -> Optional[tf.keras.regularizers.Regularizer]:
-        """
-        Samples and maps a string regularizer to a TensorFlow regularizer object.
+        """Sample a regularizer."""
 
-        Args:
-            trial (optuna.Trial): The Optuna trial object.
-            name (str): Unique identifier for the regularizer parameter.
+        sampler = RegularizerSampler(self.regularizer_choices, name)
+        return sampler.sample(trial)
 
-        Returns:
-            Optional[tf.keras.regularizers.Regularizer]: A TensorFlow regularizer or None.
+    def get_optimizer(self, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
+        """Sample an optimizer."""
 
-        Raises:
-            ValueError: If the sampled regularizer name is unknown.
-        """
-
-        if len(self.regularizer_choices) == 1:
-            choice = self.regularizer_choices[0]
-        else:
-            idx = trial.suggest_int(name, 0, len(self.regularizer_choices) - 1)
-            choice = self.regularizer_choices[idx]
-
-        if isinstance(choice, str):
-            if choice == "none":
-                return None
-            if choice == "l1":
-                return tf.keras.regularizers.L1(l1=self.l1_value)
-            if choice == "l2":
-                return tf.keras.regularizers.L2(l2=self.l2_value)
-            if choice == "l1l2":
-                return tf.keras.regularizers.L1L2(
-                    l1=self.l1_value, l2=self.l2_value
-                )
-            if choice == "orthogonal":
-                return tf.keras.regularizers.OrthogonalRegularizer(
-                    factor=self.orthogonal_factor, mode=self.orthogonal_mode
-                )
-            raise ValueError(f"Unknown regularizer {choice}")
-
-        return choice
-
-    def get_optimizer(
-        self,
-        trial: optuna.Trial,
-    ) -> tf.keras.optimizers.Optimizer:
-        """
-        Samples an optimizer type and learning rate, returning a configured optimizer instance.
-
-        Args:
-            trial (optuna.Trial): The Optuna trial object.
-
-        Returns:
-            tf.keras.optimizers.Optimizer: A configured TensorFlow optimizer instance.
-        """
-        if len(self.optimizer_choices) == 1:
-            optim = self.optimizer_choices[0]
-        else:
-            idx = trial.suggest_int("optimizer", 0, len(self.optimizer_choices) - 1)
-            optim = self.optimizer_choices[idx]
-
-        lr = self.lr_value if self.lr_value is not None else trial.suggest_float(
-            "lr", self.min_lr, self.max_lr, log=True
-        )
-
-        if isinstance(optim, str):
-            mapping = {
-                "SGD": tf.keras.optimizers.SGD,
-                "RMSprop": tf.keras.optimizers.RMSprop,
-                "Adam": tf.keras.optimizers.Adam,
-                "AdamW": tf.keras.optimizers.AdamW,
-                "Adadelta": tf.keras.optimizers.Adadelta,
-                "Adagrad": tf.keras.optimizers.Adagrad,
-                "Adamax": tf.keras.optimizers.Adamax,
-                "Adafactor": tf.keras.optimizers.Adafactor,
-                "Nadam": tf.keras.optimizers.Nadam,
-                "Ftrl": tf.keras.optimizers.Ftrl,
-                "Lion": tf.keras.optimizers.Lion,
-                "Lamb": tf.keras.optimizers.Lamb,
-            }
-
-            return mapping[optim](learning_rate=lr)
-
-        if isinstance(optim, type) and issubclass(optim, tf.keras.optimizers.Optimizer):
-            return optim(learning_rate=lr)
-
-        if isinstance(optim, tf.keras.optimizers.Optimizer):
-            optim.learning_rate = lr
-            return optim
-
-        raise ValueError(f"Unknown optimizer {optim}")
+        sampler = OptimizerSampler(self.optimizer_choices, "optimizer")
+        return sampler.sample(trial)
 
     def get_scaler(self, trial: optuna.Trial):
-        """
-        Samples and returns a configured scikit-learn scaler object.
+        """Sample a scikit-learn scaler."""
 
-        Args:
-            trial (optuna.Trial): The Optuna trial object.
-
-        Returns:
-            A scikit-learn scaler object.
-
-        Raises:
-            ValueError: If the selected scaler name is not recognized.
-        """
-        if len(self.scaler_choices) == 1:
-            choice = self.scaler_choices[0]
-        else:
-            idx = trial.suggest_int("scaler", 0, len(self.scaler_choices) - 1)
-            choice = self.scaler_choices[idx]
-
-        if isinstance(choice, str):
-            if choice == "StandardScaler":
-                return StandardScaler()
-            if choice == "MinMaxScaler_0_1":
-                return MinMaxScaler(feature_range=(0, 1))
-            if choice == "MinMaxScaler_-1_1":
-                return MinMaxScaler(feature_range=(-1, 1))
-            if choice == "RobustScaler":
-                return RobustScaler()
-            if choice == "QuantileTransformer":
-                return QuantileTransformer(output_distribution="normal")
-            if choice == "PowerTransformer":
-                return PowerTransformer(method="yeo-johnson")
-
-            raise ValueError(choice)
-
-        return choice
+        sampler = ScalerSampler(self.scaler_choices, "scaler")
+        return sampler.sample(trial)
 
     def get_initializer(
         self, trial: optuna.Trial, name: str
     ) -> tf.keras.initializers.Initializer:
-        """Sample or return a kernel initializer."""
+        """Sample a kernel initializer."""
 
-        if len(self.initializer_choices) == 1:
-            choice = self.initializer_choices[0]
-        else:
-            idx = trial.suggest_int(name, 0, len(self.initializer_choices) - 1)
-            choice = self.initializer_choices[idx]
+        sampler = InitializerSampler(self.initializer_choices, name)
+        return sampler.sample(trial)
 
-        if isinstance(choice, str):
-            mapping = {
-                "glorot_uniform": tf.keras.initializers.GlorotUniform,
-                "glorot_normal": tf.keras.initializers.GlorotNormal,
-                "he_uniform": tf.keras.initializers.HeUniform,
-                "he_normal": tf.keras.initializers.HeNormal,
-                "orthogonal": tf.keras.initializers.Orthogonal,
-            }
-            if choice not in mapping:
-                raise ValueError(choice)
-            return mapping[choice]()
+    @classmethod
+    def get_default_params(cls) -> "KParams":
+        """Return an instance with all default options."""
 
-        if isinstance(choice, type) and issubclass(
-            choice, tf.keras.initializers.Initializer
-        ):
-            return choice()
-
-        if isinstance(choice, tf.keras.initializers.Initializer):
-            return choice
-
-        raise ValueError(choice)
+        return cls()
 
     @classmethod
     def default(cls) -> "KParams":
-        """Return an ``KParams`` instance with all default options."""
+        """Alias for :meth:`get_default_params`."""
 
-        return cls()
+        return cls.get_default_params()
