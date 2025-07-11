@@ -8,7 +8,7 @@ Classes:
 Example using only default parameters:
     >>> from araras.keras.kparams import KParams
     >>> kparams = KParams.default()
-    
+
 Example using custom parameters:
     >>> from araras.keras.kparams import KParams
     >>> kparams = KParams(
@@ -18,8 +18,9 @@ Example using custom parameters:
     ...     scaler_choices=[StandardScaler, MinMaxScaler],
     ...     initializer_choices=[tf.keras.initializers.GlorotUniform],
     ... )
-    
+
 """
+
 from araras.commons import *
 
 from dataclasses import dataclass, field
@@ -83,7 +84,9 @@ class RegularizerSampler(BaseSampler):
 
 
 class OptimizerSampler(BaseSampler):
-    def __init__(self, choices: Sequence[Any], name: str, lr_range: tuple[float, float] = (1e-5, 1e-2)) -> None:
+    def __init__(
+        self, choices: Sequence[Any], name: str, lr_range: tuple[float, float] = (1e-5, 1e-2)
+    ) -> None:
         super().__init__(choices, name)
         self.lr_range = lr_range
 
@@ -104,7 +107,9 @@ class OptimizerSampler(BaseSampler):
 
 class ScalerSampler(BaseSampler):
     def _process(self, choice: Any, trial: optuna.Trial) -> Any:
-        if isinstance(choice, (StandardScaler, MinMaxScaler, RobustScaler, QuantileTransformer, PowerTransformer)):
+        if isinstance(
+            choice, (StandardScaler, MinMaxScaler, RobustScaler, QuantileTransformer, PowerTransformer)
+        ):
             return choice
         if isinstance(choice, type):
             return choice()
@@ -130,31 +135,50 @@ class InitializerSampler(BaseSampler):
 class KParams:
     """Container for hyperparameter search spaces."""
 
+    # ———————————————————————————————————————————————————————————————————————————— #
+    #                                Default Values                                #
+    # ———————————————————————————————————————————————————————————————————————————— #
+
     activation_choices: List[Optional[Callable[..., Any]]] = field(
         default_factory=lambda: [
             tf.keras.activations.relu,
-            tf.keras.activations.tanh,
+            tf.keras.activations.gelu,
+            tf.keras.activations.silu,
+            tf.keras.activations.elu,
             tf.keras.activations.sigmoid,
-            tf.keras.activations.linear,
+            tf.keras.activations.tanh,
             None,
         ]
     )
 
-    regularizer_choices: List[Optional[Union[type[tf.keras.regularizers.Regularizer], tf.keras.regularizers.Regularizer, Callable[[], tf.keras.regularizers.Regularizer]]]] = field(
+    regularizer_choices: List[
+        Optional[
+            Union[
+                type[tf.keras.regularizers.Regularizer],
+                tf.keras.regularizers.Regularizer,
+                Callable[[], tf.keras.regularizers.Regularizer],
+            ]
+        ]
+    ] = field(
         default_factory=lambda: [
             None,
-            tf.keras.regularizers.L1(1e-2),
             tf.keras.regularizers.L2(1e-2),
-            tf.keras.regularizers.L1L2(l1=1e-2, l2=1e-2),
         ]
     )
 
-    optimizer_choices: List[Union[type[tf.keras.optimizers.Optimizer], tf.keras.optimizers.Optimizer, Callable[[], tf.keras.optimizers.Optimizer]]] = field(
+    optimizer_choices: List[
+        Union[
+            type[tf.keras.optimizers.Optimizer],
+            tf.keras.optimizers.Optimizer,
+            Callable[[], tf.keras.optimizers.Optimizer],
+        ]
+    ] = field(
         default_factory=lambda: [
-            tf.keras.optimizers.Adam,
-            tf.keras.optimizers.RMSprop,
-            tf.keras.optimizers.SGD,
-            tf.keras.optimizers.AdamW,
+            tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9),
+            tf.keras.optimizers.Adam(learning_rate=0.001),
+            tf.keras.optimizers.AdamW(learning_rate=0.001, weight_decay=1e-4),
+            tf.keras.optimizers.Lion(learning_rate=0.001, beta_1=0.9, beta_2=0.99),
+            tf.keras.optimizers.RMSprop(learning_rate=0.001),
         ]
     )
 
@@ -163,24 +187,24 @@ class KParams:
             StandardScaler,
             lambda: MinMaxScaler(feature_range=(0, 1)),
             lambda: MinMaxScaler(feature_range=(-1, 1)),
-            RobustScaler,
-            QuantileTransformer,
-            PowerTransformer,
         ]
     )
 
-    initializer_choices: List[Union[type[tf.keras.initializers.Initializer], tf.keras.initializers.Initializer, Callable[[], tf.keras.initializers.Initializer]]] = field(
+    initializer_choices: List[
+        Union[
+            type[tf.keras.initializers.Initializer],
+            tf.keras.initializers.Initializer,
+            Callable[[], tf.keras.initializers.Initializer],
+        ]
+    ] = field(
         default_factory=lambda: [
             tf.keras.initializers.GlorotUniform,
-            tf.keras.initializers.GlorotNormal,
-            tf.keras.initializers.HeNormal(),
-            tf.keras.initializers.HeUniform(),
         ]
     )
 
-    def set_activation_choices(
-        self, choices: Sequence[Optional[Callable[..., Any]]]
-    ) -> None:
+    # ———————————————————————————————————————————————————————————————————————————— #
+
+    def set_activation_choices(self, choices: Sequence[Optional[Callable[..., Any]]]) -> None:
         """Set the available activation choices."""
 
         self.activation_choices = list(choices)
@@ -240,9 +264,7 @@ class KParams:
         sampler = ActivationSampler(self.activation_choices, name)
         return sampler.sample(trial)
 
-    def get_regularizer(
-        self, trial: optuna.Trial, name: str
-    ) -> Optional[tf.keras.regularizers.Regularizer]:
+    def get_regularizer(self, trial: optuna.Trial, name: str) -> Optional[tf.keras.regularizers.Regularizer]:
         """Sample a regularizer."""
 
         sampler = RegularizerSampler(self.regularizer_choices, name)
@@ -260,9 +282,7 @@ class KParams:
         sampler = ScalerSampler(self.scaler_choices, "scaler")
         return sampler.sample(trial)
 
-    def get_initializer(
-        self, trial: optuna.Trial, name: str
-    ) -> tf.keras.initializers.Initializer:
+    def get_initializer(self, trial: optuna.Trial, name: str) -> tf.keras.initializers.Initializer:
         """Sample a kernel initializer."""
 
         sampler = InitializerSampler(self.initializer_choices, name)
@@ -279,3 +299,106 @@ class KParams:
         """Alias for :meth:`get_default_params`."""
 
         return cls.get_default_params()
+
+    @classmethod
+    def full_search_space(cls) -> "KParams":
+        """
+        Return an instance of the class with all available options from Keras for the search spaces.
+        Excluded options:
+            - OrthogonalRegularizer
+
+        """
+
+        return cls(
+            activation_choices=[
+                tf.keras.activations.celu,
+                tf.keras.activations.elu,
+                tf.keras.activations.exponential,
+                tf.keras.activations.gelu,
+                tf.keras.activations.glu,
+                tf.keras.activations.hard_shrink,
+                tf.keras.activations.hard_sigmoid,
+                tf.keras.activations.hard_silu,
+                tf.keras.activations.hard_tanh,
+                tf.keras.activations.leaky_relu,
+                tf.keras.activations.linear,
+                tf.keras.activations.log_sigmoid,
+                tf.keras.activations.log_softmax,
+                tf.keras.activations.mish,
+                tf.keras.activations.relu,
+                tf.keras.activations.relu6,
+                tf.keras.activations.selu,
+                tf.keras.activations.sigmoid,
+                tf.keras.activations.silu,
+                tf.keras.activations.softmax,
+                tf.keras.activations.soft_shrink,
+                tf.keras.activations.softplus,
+                tf.keras.activations.softsign,
+                tf.keras.activations.sparse_plus,
+                tf.keras.activations.sparsemax,
+                tf.keras.activations.squareplus,
+                tf.keras.activations.tanh,
+                tf.keras.activations.tanh_shrink,
+                tf.keras.activations.threshold,
+                None,
+            ],
+            regularizer_choices=[
+                tf.keras.regularizers.L1(1e-2),
+                tf.keras.regularizers.L2(1e-2),
+                tf.keras.regularizers.L1L2(l1=1e-2, l2=1e-2),
+                # tf.keras.regularizers.OrthogonalRegularizer(factor=0.01, mode="rows"),
+                None,
+            ],
+            optimizer_choices=[
+                tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.0, nesterov=False),
+                tf.keras.optimizers.RMSprop(learning_rate=0.001, rho=0.9, momentum=0.0),
+                tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.AdamW(
+                    learning_rate=0.001, weight_decay=0.0, beta_1=0.9, beta_2=0.999, epsilon=1e-7
+                ),
+                tf.keras.optimizers.Adadelta(learning_rate=1.0, rho=0.95, epsilon=1e-7),
+                tf.keras.optimizers.Adagrad(learning_rate=0.001, initial_accumulator_value=0.1, epsilon=1e-7),
+                tf.keras.optimizers.Adamax(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.Nadam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.Ftrl(
+                    learning_rate=0.001,
+                    learning_rate_power=-0.5,
+                    l1_regularization_strength=0.0,
+                    l2_regularization_strength=0.0,
+                ),
+                tf.keras.optimizers.Adafactor(learning_rate=None, relative_step=True, weight_decay=0.0),
+                tf.keras.optimizers.Lion(learning_rate=0.001, beta_1=0.9, beta_2=0.99),
+                tf.keras.optimizers.Lamb(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-6),
+                tf.keras.optimizers.Muon(learning_rate=0.001, weight_decay=0.1),
+                tf.keras.optimizers.LossScaleOptimizer(
+                    inner_optimizer=tf.keras.optimizers.Adam(), initial_scale=2**15
+                ),
+            ],
+            scaler_choices=[
+                StandardScaler,
+                lambda: MinMaxScaler(feature_range=(0, 1)),
+                lambda: MinMaxScaler(feature_range=(-1, 1)),
+                RobustScaler,
+                QuantileTransformer,
+                PowerTransformer,
+            ],
+            initializer_choices=[
+                tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.05, seed=None),
+                tf.keras.initializers.RandomUniform(minval=-0.05, maxval=0.05, seed=None),
+                tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=0.05, seed=None),
+                tf.keras.initializers.Zeros(),
+                tf.keras.initializers.Ones(),
+                tf.keras.initializers.GlorotNormal(seed=None),
+                tf.keras.initializers.GlorotUniform(seed=None),
+                tf.keras.initializers.HeNormal(seed=None),
+                tf.keras.initializers.HeUniform(seed=None),
+                tf.keras.initializers.Orthogonal(gain=1.0, seed=None),
+                tf.keras.initializers.Constant(value=0.0),
+                tf.keras.initializers.VarianceScaling(
+                    scale=1.0, mode="fan_in", distribution="truncated_normal", seed=None
+                ),
+                tf.keras.initializers.LecunNormal(seed=None),
+                tf.keras.initializers.LecunUniform(seed=None),
+                tf.keras.initializers.Identity(gain=1.0),
+            ],
+        )
