@@ -3,7 +3,7 @@ Hyperparameter utilities for Keras models.
 
 Classes:
     - KParams: Dataclass with methods to sample activation functions,
-      regularizers, optimizers, and scalers.
+      regularizers, optimizers, and scalers, and to set custom search spaces.
 
 Example using only default parameters:
     >>> from araras.keras.kparams import KParams
@@ -177,6 +177,62 @@ class KParams:
             tf.keras.initializers.HeUniform(),
         ]
     )
+
+    def set_activation_choices(
+        self, choices: Sequence[Optional[Callable[..., Any]]]
+    ) -> None:
+        """Set the available activation choices."""
+
+        self.activation_choices = list(choices)
+
+    def set_regularizer_choices(
+        self,
+        choices: Sequence[
+            Optional[
+                Union[
+                    type[tf.keras.regularizers.Regularizer],
+                    tf.keras.regularizers.Regularizer,
+                    Callable[[], tf.keras.regularizers.Regularizer],
+                ]
+            ]
+        ],
+    ) -> None:
+        """Set the available regularizer choices."""
+
+        self.regularizer_choices = list(choices)
+
+    def set_optimizer_choices(
+        self,
+        choices: Sequence[
+            Union[
+                type[tf.keras.optimizers.Optimizer],
+                tf.keras.optimizers.Optimizer,
+                Callable[[], tf.keras.optimizers.Optimizer],
+            ]
+        ],
+    ) -> None:
+        """Set the available optimizer choices."""
+
+        self.optimizer_choices = list(choices)
+
+    def set_scaler_choices(self, choices: Sequence[Any]) -> None:
+        """Set the available scaler choices."""
+
+        self.scaler_choices = list(choices)
+
+    def set_initializer_choices(
+        self,
+        choices: Sequence[
+            Union[
+                type[tf.keras.initializers.Initializer],
+                tf.keras.initializers.Initializer,
+                Callable[[], tf.keras.initializers.Initializer],
+            ]
+        ],
+    ) -> None:
+        """Set the available initializer choices."""
+
+        self.initializer_choices = list(choices)
 
     def get_activation(self, trial: optuna.Trial, name: str) -> Optional[Callable[..., Any]]:
         """Sample or return an activation."""
