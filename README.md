@@ -120,8 +120,9 @@ Below is a summary of all modules and their functions.
 
 ### `araras.keras.kparams`
 
-- **`KParams`** – dataclass storing hyperparameter options. The predefined
-  choices include strings and ready‑to‑use Keras/scikit‑learn objects.
+- **`KParams`** – dataclass storing hyperparameter options. Each option is
+  identified by a short string key so that Optuna can persist the selections.
+  The dataclass still exposes the underlying Keras or scikit‑learn objects.
   - `get_activation(trial, name)` – sample an activation or return one of the
     provided objects.
   - `get_regularizer(trial, name)` – return a TensorFlow regularizer instance.
