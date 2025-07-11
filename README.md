@@ -129,6 +129,11 @@ Below is a summary of all modules and their functions.
   - `get_scaler(trial)` – select a scikit‑learn scaler.
   - `get_initializer(trial, name)` – sample a kernel initializer.
   - `default()` – create an instance with all default options.
+  - `set_activation_choices(choices)` – replace activation options.
+  - `set_regularizer_choices(choices)` – replace regularizer options.
+  - `set_optimizer_choices(choices)` – replace optimizer options.
+  - `set_scaler_choices(choices)` – replace scaler options.
+  - `set_initializer_choices(choices)` – replace initializer options.
 
 ### `araras.keras.utils.profiler`
 
