@@ -85,17 +85,13 @@ class RegularizerSampler(BaseSampler):
 
 
 class OptimizerSampler(BaseSampler):
-    def __init__(
-        self, choices: Sequence[Any], name: str, lr: Union[float, tuple[float, float]]
-    ) -> None:
+    def __init__(self, choices: Sequence[Any], name: str, lr: Union[float, tuple[float, float]]) -> None:
         super().__init__(choices, name)
         self.lr = lr
 
     def _process(self, choice: Any, trial: optuna.Trial) -> tf.keras.optimizers.Optimizer:
         if isinstance(self.lr, tuple):
-            lr = trial.suggest_float(
-                f"{self.name}_lr", self.lr[0], self.lr[1], log=True
-            )
+            lr = trial.suggest_float(f"{self.name}_lr", self.lr[0], self.lr[1], log=True)
         else:
             lr = self.lr
         if isinstance(choice, tf.keras.optimizers.Optimizer):
@@ -200,11 +196,11 @@ class KParams:
         ]
     ] = field(
         default_factory=lambda: [
-            tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.9),
-            tf.keras.optimizers.Adam(learning_rate=0.001),
-            tf.keras.optimizers.AdamW(learning_rate=0.001, weight_decay=1e-4),
-            tf.keras.optimizers.Lion(learning_rate=0.001, beta_1=0.9, beta_2=0.99),
-            tf.keras.optimizers.RMSprop(learning_rate=0.001),
+            tf.keras.optimizers.SGD(momentum=0.9),
+            tf.keras.optimizers.Adam(),
+            tf.keras.optimizers.AdamW(weight_decay=1e-4),
+            tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
+            tf.keras.optimizers.RMSprop(),
         ]
     )
 
@@ -236,13 +232,9 @@ class KParams:
                 or self.learning_rate[1] <= 0
                 or self.learning_rate[0] >= self.learning_rate[1]
             ):
-                raise ValueError(
-                    "learning_rate tuple must be (min, max) with 0 < min < max"
-                )
+                raise ValueError("learning_rate tuple must be (min, max) with 0 < min < max")
         elif not isinstance(self.learning_rate, (int, float)):
-            raise TypeError(
-                "learning_rate must be a float or a tuple of two floats"
-            )
+            raise TypeError("learning_rate must be a float or a tuple of two floats")
 
     # ———————————————————————————————————————————————————————————————————————————— #
 
@@ -345,7 +337,7 @@ class KParams:
     @classmethod
     def full_search_space(cls) -> "KParams":
         """
-        Return an instance of the class with all available options from Keras for the search spaces.
+        Return an instance of the class with all available options from Keras and their default values for the search space.
         Excluded options:
             - OrthogonalRegularizer
 
@@ -392,26 +384,23 @@ class KParams:
                 None,
             ],
             optimizer_choices=[
-                tf.keras.optimizers.SGD(learning_rate=0.01, momentum=0.0, nesterov=False),
-                tf.keras.optimizers.RMSprop(learning_rate=0.001, rho=0.9, momentum=0.0),
-                tf.keras.optimizers.Adam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.AdamW(
-                    learning_rate=0.001, weight_decay=0.0, beta_1=0.9, beta_2=0.999, epsilon=1e-7
-                ),
-                tf.keras.optimizers.Adadelta(learning_rate=1.0, rho=0.95, epsilon=1e-7),
-                tf.keras.optimizers.Adagrad(learning_rate=0.001, initial_accumulator_value=0.1, epsilon=1e-7),
-                tf.keras.optimizers.Adamax(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
-                tf.keras.optimizers.Nadam(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.SGD(momentum=0.0, nesterov=False),
+                tf.keras.optimizers.RMSprop(rho=0.9, momentum=0.0),
+                tf.keras.optimizers.Adam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.AdamW(weight_decay=0.0, beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.Adadelta(rho=0.95, epsilon=1e-7),
+                tf.keras.optimizers.Adagrad(initial_accumulator_value=0.1, epsilon=1e-7),
+                tf.keras.optimizers.Adamax(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
+                tf.keras.optimizers.Nadam(beta_1=0.9, beta_2=0.999, epsilon=1e-7),
                 tf.keras.optimizers.Ftrl(
-                    learning_rate=0.001,
                     learning_rate_power=-0.5,
                     l1_regularization_strength=0.0,
                     l2_regularization_strength=0.0,
                 ),
                 tf.keras.optimizers.Adafactor(learning_rate=None, relative_step=True, weight_decay=0.0),
-                tf.keras.optimizers.Lion(learning_rate=0.001, beta_1=0.9, beta_2=0.99),
-                tf.keras.optimizers.Lamb(learning_rate=0.001, beta_1=0.9, beta_2=0.999, epsilon=1e-6),
-                tf.keras.optimizers.Muon(learning_rate=0.001, weight_decay=0.1),
+                tf.keras.optimizers.Lion(beta_1=0.9, beta_2=0.99),
+                tf.keras.optimizers.Lamb(beta_1=0.9, beta_2=0.999, epsilon=1e-6),
+                tf.keras.optimizers.Muon(weight_decay=0.1),
                 tf.keras.optimizers.LossScaleOptimizer(
                     inner_optimizer=tf.keras.optimizers.Adam(), initial_scale=2**15
                 ),
@@ -425,22 +414,22 @@ class KParams:
                 PowerTransformer,
             ],
             initializer_choices=[
-                tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.05, seed=None),
-                tf.keras.initializers.RandomUniform(minval=-0.05, maxval=0.05, seed=None),
-                tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=0.05, seed=None),
+                tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.05),
+                tf.keras.initializers.RandomUniform(minval=-0.05, maxval=0.05),
+                tf.keras.initializers.TruncatedNormal(mean=0.0, stddev=0.05),
                 tf.keras.initializers.Zeros(),
                 tf.keras.initializers.Ones(),
-                tf.keras.initializers.GlorotNormal(seed=None),
-                tf.keras.initializers.GlorotUniform(seed=None),
-                tf.keras.initializers.HeNormal(seed=None),
-                tf.keras.initializers.HeUniform(seed=None),
-                tf.keras.initializers.Orthogonal(gain=1.0, seed=None),
+                tf.keras.initializers.GlorotNormal(),
+                tf.keras.initializers.GlorotUniform(),
+                tf.keras.initializers.HeNormal(),
+                tf.keras.initializers.HeUniform(),
+                tf.keras.initializers.Orthogonal(gain=1.0),
                 tf.keras.initializers.Constant(value=0.0),
                 tf.keras.initializers.VarianceScaling(
-                    scale=1.0, mode="fan_in", distribution="truncated_normal", seed=None
+                    scale=1.0, mode="fan_in", distribution="truncated_normal"
                 ),
-                tf.keras.initializers.LecunNormal(seed=None),
-                tf.keras.initializers.LecunUniform(seed=None),
+                tf.keras.initializers.LecunNormal(),
+                tf.keras.initializers.LecunUniform(),
                 tf.keras.initializers.Identity(gain=1.0),
             ],
         )
