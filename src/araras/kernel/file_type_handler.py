@@ -10,7 +10,6 @@ Example:
     >>> FileTypeHandler.build_execution_command(Path("train.py"), "success.txt")
 """
 from araras.commons import *
-from __future__ import annotations
 
 import sys
 from pathlib import Path

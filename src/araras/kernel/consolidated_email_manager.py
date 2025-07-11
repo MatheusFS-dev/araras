@@ -10,7 +10,6 @@ Example:
     >>> manager.send_consolidated_status_email("task_complete", {})
 """
 from araras.commons import *
-from __future__ import annotations
 
 import time
 from pathlib import Path

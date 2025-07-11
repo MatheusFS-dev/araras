@@ -11,7 +11,6 @@ Example:
     >>> manager.run_file_with_restart("train.py")
 """
 from araras.commons import *
-from __future__ import annotations
 
 import os
 import psutil
