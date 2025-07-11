@@ -38,6 +38,9 @@ from threading import Event, Thread
 # Local imports
 from araras.utils.terminal import SimpleTerminalLauncher
 
+# Path where resource usage logs will be written. If ``None`` no logging occurs
+RESOURCE_USAGE_LOG_FILE: Optional[str] = None
+
 # Enhanced HTML template for consolidated status reports
 CONSOLIDATED_STATUS_TEMPLATE = """<html><body style="font-family:Arial,sans-serif;color:#333;padding:20px"><div style="max-width:600px;margin:auto;background:#fff;padding:20px;border:1px solid #ddd"><h2 style="color:{color}">{status_title}</h2><div style="background:#f9f9f9;padding:15px;margin:15px 0;border-left:4px solid {color}"><h3>Process Information</h3><p><strong>Process:</strong> {title}</p><p><strong>Status:</strong> {status_description}</p><p><strong>Timestamp:</strong> {timestamp}</p></div>{details_section}<div style="background:#f0f0f0;padding:10px;margin-top:20px;font-size:12px;color:#666"><p>This is an automated status report from the process monitoring system.</p></div></div></body></html>"""
 
@@ -251,11 +254,16 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
         mem_gb = proc.memory_info().rss / (1024**3)
         cpu_percent = proc.cpu_percent()  # Non-blocking call after initialization
         
-    # write to a log file in the root directory
-    log_file = os.path.join(os.getcwd(), "process_resource_usage.log")
-    with open(log_file, "a") as f:
-        timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
-        f.write(f"Time: {timestamp}, PID: {pid}, MEM: {mem_percent:.2f}%, {mem_gb:.2f} GB, CPU: {cpu_percent:.2f}%\n")
+    # Write usage information to a log file if configured
+    if RESOURCE_USAGE_LOG_FILE:
+        try:
+            with open(RESOURCE_USAGE_LOG_FILE, "a") as f:
+                timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
+                f.write(
+                    f"Time: {timestamp}, PID: {pid}, MEM: {mem_percent:.2f}%, {mem_gb:.2f} GB, CPU: {cpu_percent:.2f}%\n"
+                )
+        except Exception:
+            pass
 
     return mem_percent, mem_gb, cpu_percent
 
@@ -430,6 +438,7 @@ def run_auto_restart(
     restart_after_delay: Optional[float] = None,
     retry_attempts: int = None,
     supress_tf_warnings: bool = False,
+    resource_usage_log_file: Optional[str] = None,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -444,12 +453,16 @@ def run_auto_restart(
         restart_after_delay: restart the run after a delay in seconds
         retry_attempts: Number of retry attempts before sending failure email
         supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+        resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
 
     Raises:
         FileNotFoundError: If file doesn't exist
         ValueError: If file type is unsupported
         ImportError: If notebook dependencies missing for .ipynb files
     """
+
+    global RESOURCE_USAGE_LOG_FILE
+    RESOURCE_USAGE_LOG_FILE = resource_usage_log_file
 
     try:
         # Clean up any existing success flag file before starting

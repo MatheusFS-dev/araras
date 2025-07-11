@@ -187,7 +187,7 @@ Below is a summary of all modules and their functions.
 -  - `monitor_info`: control info returned by `start_monitor`.
 - **`check_crash_signal(monitor_info)`** – check if the monitored process crashed.
 -  - `monitor_info`: dictionary from `start_monitor`.
-- **`run_auto_restart(file_path, success_flag_file="/tmp/success.flag", title=None, max_restarts=10, restart_delay=3.0, recipients_file=None, credentials_file=None, restart_after_delay=None, retry_attempts=None, supress_tf_warnings=False)`** – run a script with auto‑restart and optional email alerts.
+- **`run_auto_restart(file_path, success_flag_file="/tmp/success.flag", title=None, max_restarts=10, restart_delay=3.0, recipients_file=None, credentials_file=None, restart_after_delay=None, retry_attempts=None, supress_tf_warnings=False, resource_usage_log_file=None)`** – run a script with auto‑restart and optional email alerts.
 -  - `file_path`: path to script or notebook.
 -  - `success_flag_file`: path for success flag file.
 -  - `title`: optional human‑readable title.
@@ -198,6 +198,7 @@ Below is a summary of all modules and their functions.
 -  - `restart_after_delay`: restart automatically after this delay.
 -  - `retry_attempts`: retry count before failure email.
 -  - `supress_tf_warnings`: suppress TensorFlow warnings.
+-  - `resource_usage_log_file`: path to write process resource usage log or `None` to disable logging.
 - **`FlagBasedRestartManager`** – class implementing `run_file_with_restart` and restart logic.
 -  - `max_restarts`, `restart_delay`, `recipients_file`, `credentials_file`, `retry_attempts` – constructor options.
 -  - `run_file_with_restart(file_path, success_flag_file, title=None, restart_after_delay=None, supress_tf_warnings=False)` – run file with restart logic.
