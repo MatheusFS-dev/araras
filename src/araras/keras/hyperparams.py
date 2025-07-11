@@ -5,10 +5,20 @@ Classes:
     - KParams: Dataclass with methods to sample activation functions,
       regularizers, optimizers, and scalers.
 
-Example:
+Example using only default parameters:
     >>> from araras.keras.kparams import KParams
-    >>> hp = KParams()
-    >>> hp.get_optimizer(optuna.trial.FixedTrial({}))
+    >>> kparams = KParams.default()
+    
+Example using custom parameters:
+    >>> from araras.keras.kparams import KParams
+    >>> kparams = KParams(
+    ...     activation_choices=[tf.keras.activations.relu, tf.keras.activations.tanh],
+    ...     regularizer_choices=[tf.keras.regularizers.L2(1e-3)],
+    ...     optimizer_choices=[tf.keras.optimizers.Adam],
+    ...     scaler_choices=[StandardScaler, MinMaxScaler],
+    ...     initializer_choices=[tf.keras.initializers.GlorotUniform],
+    ... )
+    
 """
 from araras.commons import *
 
