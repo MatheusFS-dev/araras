@@ -61,8 +61,15 @@ def build_lstm(
         layers.Layer: Output tensor after applying the LSTM block.
 
     Raises:
-        None
+        ValueError: If `x` is not a rank-3 tensor.
     """
+
+    if x.shape.rank != 3:
+        msg = (
+            f"Input to {name_prefix} must be rank 3 (batch, timesteps, features), got {x.shape}"
+        )
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
 
     # Determine the number of units for the LSTM layer
     if isinstance(units_range, int):

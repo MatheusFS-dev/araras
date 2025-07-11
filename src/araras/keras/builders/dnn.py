@@ -60,8 +60,15 @@ def build_dnn(
         layers.Layer: Output tensor after applying the DNN block.
 
     Raises:
-        None
+        ValueError: If `x` does not have rank >= 2.
     """
+
+    if x.shape.rank is not None and x.shape.rank < 2:
+        msg = (
+            f"Input to {name_prefix} must be at least rank 2 (batch, features), got {x.shape}"
+        )
+        logger_error.error(f"{RED}{msg}{RESET}")
+        raise ValueError(msg)
 
     # Determine the number of units for the Dense layer
     if isinstance(units_range, int):
