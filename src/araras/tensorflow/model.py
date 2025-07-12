@@ -19,7 +19,7 @@ from tqdm import tqdm
 def get_model_usage_stats(
     saved_model: str | tf.keras.Model,
     n_trials: int = 10000,
-    device: str = "cpu",
+    device: int = -1,
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
@@ -40,13 +40,13 @@ def get_model_usage_stats(
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
             a .keras model file, or a Keras Model instance.
         n_trials (int): Number of inference trials to perform. Defaults to 100000.
-        device (str): Device for power measurement; must be 'cpu' or 'gpu'. Defaults to 'cpu'.
+        device (int): GPU index for power measurement, or ``-1`` to use the CPU.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
         verbose (bool): If True, displays a progress bar during the trials.
 
     Raises:
-        RuntimeError: If GPU NVML initialization fails when device='gpu'.
-        ValueError: If `device` is not 'cpu' or 'gpu'.
+        RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
+        ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
 
     Returns:
         Tuple[float, float, float]:
@@ -132,10 +132,10 @@ def get_model_usage_stats(
         times: list[float] = []  # store inference durations
 
         # Initialize NVML each attempt if required
-        if device == "gpu":
+        if device >= 0:
             try:
                 pynvml.nvmlInit()
-                handle = pynvml.nvmlDeviceGetHandleByIndex(0)
+                handle = pynvml.nvmlDeviceGetHandleByIndex(device)
             except Exception as e:
                 raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
 
@@ -149,22 +149,22 @@ def get_model_usage_stats(
 
             start_time = time.time()
 
-            if device == "gpu":
+            if device >= 0:
                 start_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-            elif device == "cpu":
+            elif device == -1:
                 start_energy = read_cpu_power_rapl()
             else:
-                raise ValueError("Unsupported device: choose 'gpu' or 'cpu'")
+                raise ValueError("Unsupported device index")
 
             _ = infer()
 
             elapsed = time.time() - start_time
 
-            if device == "gpu":
+            if device >= 0:
                 end_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
                 avg_instant_power = (start_power + end_power) / 2
                 powers.append(avg_instant_power)
-            elif device == "cpu" and start_energy is not None:
+            elif device == -1 and start_energy is not None:
                 end_energy = read_cpu_power_rapl()
                 if end_energy is not None:
                     energy_used = end_energy - start_energy
@@ -174,7 +174,7 @@ def get_model_usage_stats(
             times.append(elapsed)
 
 
-        if device == "gpu":
+        if device >= 0:
             pynvml.nvmlShutdown()
 
         per_run_time = sum(times) / len(times)

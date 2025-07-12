@@ -83,7 +83,7 @@ Return the FLOPs required for a single forward pass.
 #### `get_macs(model: tf.keras.Model, batch_size: int = 1) -> int`
 Return the number of MAC operations for a forward pass (``1 MAC = 2 FLOPs``).
 
-#### `get_memory_and_time(model: tf.keras.Model, batch_size: int = 1, device: str = "GPU:0", warmup_runs: int = 10, test_runs: int = 50, verbose: bool = True) -> Tuple[int, float]`
+#### `get_memory_and_time(model: tf.keras.Model, batch_size: int = 1, device: int = 0, warmup_runs: int = 10, test_runs: int = 50, verbose: bool = True) -> Tuple[int, float]`
 Measure peak memory usage and average inference time on ``device``.
 
 ### `keras.builders`
@@ -191,7 +191,7 @@ Perform a full analysis of an Optuna study and save figures and tables to ``tabl
 
 ### `optuna.keras.stats`
 
-#### `get_model_stats(trial: optuna.Trial, model: tf.keras.Model, bits_per_param: int, batch_size: int, n_trials: int = 10000, verbose: bool = False) -> Dict[str, float]`
+#### `get_model_stats(trial: optuna.Trial, model: tf.keras.Model, bits_per_param: int, batch_size: int, n_trials: int = 10000, device: int = 0, verbose: bool = False) -> Dict[str, float]`
 Extract model statistics and attach them as user attributes of ``trial``.
 
 ### `optuna.callbacks`
@@ -235,7 +235,7 @@ Configure ``matplotlib`` for single or double column figures.
 
 ### `tensorflow.model`
 
-#### `get_model_usage_stats(saved_model: str | tf.keras.Model, n_trials: int = 100000, device: str = "cpu", rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj", verbose: bool = True) -> Tuple[float, float, float]`
+#### `get_model_usage_stats(saved_model: str | tf.keras.Model, n_trials: int = 100000, device: int = -1, rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj", verbose: bool = True) -> Tuple[float, float, float]`
 Estimate average inference time, power draw and energy consumption for ``saved_model``.
 
 ### `utils.dir`
