@@ -188,7 +188,7 @@ def format_number_commas(number, precision=2):
         return f"{number:,.{precision}f}"
     else:
         logger_error.error(f"{RED}Invalid input type: {type(number)}. Must be int or float.{RESET}")
-        raise ValueError("Input must be an integer or float")
+        return "Invalid input: " + str(number)
 
 
 # ——————————————————————————— Notebook Converter ———————————————————————————— #
