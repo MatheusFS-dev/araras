@@ -187,7 +187,7 @@ def draw_warning_box(ax: plt.Axes, message: str) -> None:
     ax.set_yticks([])
 
 
-# Context manager to automatically export figures as Plotly HTML files
+# ——— Context manager to automatically export figures as Plotly HTML files ——— #
 class PlotlySaver:
     """Intercept ``Figure.savefig`` calls to also generate Plotly HTML."""
 
@@ -198,33 +198,36 @@ class PlotlySaver:
         self._Figure = Figure
         self._orig_savefig = Figure.savefig
 
-    def _wrapper(self, fname: str, *args: Any, **kwargs: Any) -> Any:
-        # 'self' here is actually the Figure instance, not PlotlySaver instance
-        fig = self
-        result = self._plotly_saver_instance._orig_savefig(fig, fname, *args, **kwargs)
-        html_path = os.path.join(
-            self._plotly_saver_instance.base_dir,
-            "plotly",
-            os.path.relpath(
-                os.path.splitext(os.path.abspath(fname))[0] + ".html", self._plotly_saver_instance.base_dir
-            ),
-        )
-        try:
-            import plotly.io as pio
-            import plotly.tools as tls
-
-            os.makedirs(os.path.dirname(html_path), exist_ok=True)
-            pio.write_html(tls.mpl_to_plotly(fig), html_path, auto_open=False)
-        except Exception as e:  # pragma: no cover - optional feature
-            logger.warning(f"Failed to save Plotly HTML {html_path}: {e}")
-        return result
-
     def __enter__(self):
-        self._Figure.savefig = self._wrapper
+        # Create a closure that captures the PlotlySaver instance
+        plotly_saver = self
+
+        def wrapper(fig, fname: str, *args: Any, **kwargs: Any) -> Any:
+            # Call original savefig first
+            result = plotly_saver._orig_savefig(fig, fname, *args, **kwargs)
+
+            # Generate Plotly HTML
+            html_path = os.path.join(
+                plotly_saver.base_dir,
+                "plotly",
+                os.path.relpath(os.path.splitext(os.path.abspath(fname))[0] + ".html", plotly_saver.base_dir),
+            )
+            try:
+                import plotly.io as pio
+                import plotly.tools as tls
+
+                os.makedirs(os.path.dirname(html_path), exist_ok=True)
+                pio.write_html(tls.mpl_to_plotly(fig), html_path, auto_open=False)
+            except Exception as e:  # pragma: no cover - optional feature
+                logger.warning(f"Failed to save Plotly HTML {html_path}: {e}")
+            return result
+
+        self._Figure.savefig = wrapper
         return self
 
     def __exit__(self, exc_type, exc, tb):
         self._Figure.savefig = self._orig_savefig
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
