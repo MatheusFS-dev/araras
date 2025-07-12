@@ -162,7 +162,10 @@ def save_trial_params_to_file(filepath: str, params: dict[str, float], **kwargs:
 
 
 def get_top_trials(
-    study: optuna.Study, top_k: int, rank_key: str = "value", rank_descending: bool = True
+    study: optuna.Study,
+    top_k: int,
+    rank_key: str = "value",
+    order: str = "descending",
 ) -> List[optuna.Trial]:
     """
     Get the top-K trials from an Optuna study based on ranking criteria.
@@ -172,8 +175,8 @@ def get_top_trials(
         top_k (int): Number of top trials to retrieve.
         rank_key (str): Key to rank trials by ("value" for objective value,
                        or any user attribute key).
-        rank_descending (bool): If True, rank in descending order (higher is better).
-                               If False, rank in ascending order (lower is better).
+        order (str): "descending" for highest values first or "ascending" for
+            lowest values first.
 
     Returns:
         List[optuna.Trial]: List of top-K trials sorted by the ranking criteria.
@@ -184,11 +187,14 @@ def get_top_trials(
     else:
         getter = lambda t: t.user_attrs.get(rank_key, float("nan"))
 
+    if order not in ("descending", "ascending"):
+        raise ValueError("order must be 'descending' or 'ascending'")
+
     # Filter and sort trials
     top_trials = sorted(
         (t for t in study.trials if (v := getter(t)) is not None and not math.isnan(v)),
         key=getter,
-        reverse=rank_descending,
+        reverse=(order == "descending"),
     )[:top_k]
 
     return top_trials
