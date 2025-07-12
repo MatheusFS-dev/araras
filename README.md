@@ -211,7 +211,7 @@ Ignore warnings emitted by Optuna experimental features.
 Return how many trials are left to reach ``num_trials``.
 
 #### `cleanup_non_top_trials(all_trial_ids: Set[int], top_trial_ids: Set[int], cleanup_paths: List[Tuple[str, str]]) -> None`
-Remove files associated with trials that are not in ``top_trial_ids``.
+Remove files or directories associated with trials that are not in ``top_trial_ids``.
 
 #### `rename_top_k_files(top_trials: List[optuna.Trial], file_configs: List[Tuple[str, str]]) -> None`
 Rename trial files by ranking.
@@ -238,11 +238,6 @@ Configure ``matplotlib`` for single or double column figures.
 #### `get_model_usage_stats(saved_model: str | tf.keras.Model, n_trials: int = 100000, device: str = "cpu", rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj", verbose: bool = True) -> Tuple[float, float, float]`
 Estimate average inference time, power draw and energy consumption for ``saved_model``.
 
-### `utils.cleanup`
-
-#### `ChildProcessCleanup(termination_timeout: float = 2.0, kill_timeout: float = 1.0)`
-Utility class to gracefully terminate or kill child processes.
-
 ### `utils.dir`
 
 #### `create_run_directory(prefix: str, base_dir: str = "runs") -> str`
@@ -253,23 +248,8 @@ Create a unique run directory under ``base_dir`` and return its path.
 #### `get_user_gpu_choice() -> str`
 Prompt the user to select a GPU index interactively.
 
-#### `_get_nvidia_smi_data()`
-Return GPU information from ``nvidia-smi``.
-
-#### `_print_tensorflow_info()`
-Display TensorFlow version and CUDA configuration.
-
-#### `_print_gpu_table(gpu_data)`
-Print GPU usage in a table format.
-
-#### `_print_memory_summary(gpu_data)`
-Show a memory usage summary similar to ``nvidia-smi``.
-
 #### `get_gpu_info() -> None`
 Print a detailed GPU report.
-
-#### `gpu_summary() -> None`
-Display a compact one‑line GPU summary.
 
 ### `utils.logs`
 

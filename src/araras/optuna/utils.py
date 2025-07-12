@@ -17,7 +17,7 @@ Example:
 """
 from araras.commons import *
 
-import os
+import os, shutil
 import math
 import warnings
 import optuna
@@ -72,7 +72,7 @@ def cleanup_non_top_trials(
     all_trial_ids: Set[int], top_trial_ids: Set[int], cleanup_paths: List[Tuple[str, str]]
 ) -> None:
     """
-    Remove files for trials not in the top-K set.
+    Remove files or directories for trials not in the top-K set.
 
     Args:
         all_trial_ids (Set[int]): Set of all trial IDs in the study.
@@ -94,8 +94,15 @@ def cleanup_non_top_trials(
         for base_dir, filename_template in cleanup_paths:
             try:
                 file_path = os.path.join(base_dir, filename_template.format(trial_id=trial_id))
-                if os.path.exists(file_path):
-                    os.remove(file_path)
+                
+                # Check if it is a directory or file
+                if os.path.isdir(file_path):
+                    # Remove directory and all its contents
+                    shutil.rmtree(file_path)
+                else:
+                    # Remove file
+                    if os.path.isfile(file_path):
+                        os.remove(file_path)
             except OSError as e:
                 # Log the error but continue with other files
                 print(f"Warning: Failed to remove {file_path}: {e}")
