@@ -43,7 +43,6 @@ def get_model_stats(
     _, avg_power, avg_energy = get_model_usage_stats(model, device="gpu", n_trials=n_trials, verbose=verbose)
 
     trial.set_user_attr("num_params", params)
-    print(f"Number of parameters: {params}")
     trial.set_user_attr("model_size", params * bits_per_param)
     trial.set_user_attr("flops", get_flops(model))
     trial.set_user_attr("macs", get_macs(model))
