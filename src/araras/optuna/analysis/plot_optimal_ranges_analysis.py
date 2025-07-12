@@ -21,6 +21,8 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 from araras.utils.misc import format_scientific
@@ -32,6 +34,7 @@ def plot_optimal_ranges_analysis(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
     """
     Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
@@ -47,6 +50,7 @@ def plot_optimal_ranges_analysis(
         dirs (Dict[str, str]): Directory paths for saving outputs
         param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
         create_standalone (bool): Whether to create standalone images for each parameter
+        create_plotly (bool): Whether to save interactive HTML versions
 
     Returns:
         None: Saves the optimal ranges visualization to fig_ranges directory
@@ -55,7 +59,7 @@ def plot_optimal_ranges_analysis(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No numeric parameters to analyze")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_ranges.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_ranges", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -448,8 +452,12 @@ def plot_optimal_ranges_analysis(
                     )
 
                     plt.tight_layout()
-                    standalone_fig.savefig(
-                        os.path.join(dirs["standalone_ranges"], f"ranges_{col}.pdf"), bbox_inches="tight"
+                    save_plot(
+                        standalone_fig,
+                        dirs,
+                        f"ranges_{col}",
+                        "standalone_ranges",
+                        create_plotly,
                     )
                     plt.close(standalone_fig)
 
@@ -497,7 +505,17 @@ def plot_optimal_ranges_analysis(
     )
     plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
+    pfig = None
+    if create_plotly:
+        import plotly.express as px
+        long_data = []
+        for col in numeric_cols:
+            long_data.append(pd.DataFrame({"value": df[col].dropna(), "param": col, "subset": "all"}))
+            long_data.append(pd.DataFrame({"value": best[col].dropna(), "param": col, "subset": "best"}))
+        if long_data:
+            long_df = pd.concat(long_data)
+            pfig = px.histogram(long_df, x="value", color="subset", facet_col="param", facet_col_wrap=n_cols, barmode="overlay")
+
     # Save the comprehensive plot
-    save_path = os.path.join(dirs["figs"], "params_optimal_ranges.pdf")
-    plt.savefig(save_path, bbox_inches="tight")
+    save_plot(fig, dirs, "params_optimal_ranges", "figs", create_plotly, pfig)
     plt.close()

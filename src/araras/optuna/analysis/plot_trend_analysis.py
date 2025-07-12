@@ -22,6 +22,8 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
@@ -31,6 +33,7 @@ def plot_trend_analysis(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
     """
     Create a single comprehensive plot with trend analysis for parameter-loss relationships.
@@ -45,6 +48,7 @@ def plot_trend_analysis(
         dirs (Dict[str, str]): Directory paths for saving outputs
         param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
         create_standalone (bool): Whether to create standalone images for each parameter
+        create_plotly (bool): Whether to save interactive HTML versions
 
     Returns:
         None: Saves single comprehensive trend plot as pdf file and trend statistics as CSV
@@ -53,7 +57,7 @@ def plot_trend_analysis(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No numeric parameters to analyze")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_trends.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_trends", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -295,8 +299,12 @@ def plot_trend_analysis(
             )
 
             plt.tight_layout()
-            standalone_fig.savefig(
-                os.path.join(dirs["standalone_trends"], f"trend_{col}.pdf"), bbox_inches="tight"
+            save_plot(
+                standalone_fig,
+                dirs,
+                f"trend_{col}",
+                "standalone_trends",
+                create_plotly,
             )
             plt.close(standalone_fig)
 
@@ -322,7 +330,22 @@ def plot_trend_analysis(
     )
     plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
+    pfig = None
+    if create_plotly:
+        import plotly.graph_objects as go
+        from plotly.subplots import make_subplots
+
+        pfig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[get_param_display_name(c, param_name_mapping) for c in numeric_cols])
+        for idx, col in enumerate(numeric_cols):
+            row = idx // n_cols + 1
+            col_idx = idx % n_cols + 1
+            x = df[col].values
+            y = df["loss"].values
+            mask = np.isfinite(x) & np.isfinite(y)
+            x = x[mask]
+            y = y[mask]
+            pfig.add_trace(go.Scatter(x=x, y=y, mode="markers", name=col), row=row, col=col_idx)
+
     # Save the comprehensive trend plot
-    save_path = os.path.join(dirs["figs"], "params_trends.pdf")
-    plt.savefig(save_path, bbox_inches="tight")
+    save_plot(fig, dirs, "params_trends", "figs", create_plotly, pfig)
     plt.close()  # Close figure to free memory

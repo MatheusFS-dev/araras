@@ -23,7 +23,34 @@ from .analyzer import (
     format_title,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
+
+
+def make_rank_plotly(df: pd.DataFrame, pairs: List[Tuple[str, str]]):
+    import plotly.express as px
+    from plotly.subplots import make_subplots
+
+    n_plots = len(pairs)
+    n_rows, n_cols = calculate_grid(
+        n_plots,
+        PLOT_CFG.numeric_subplot_size,
+        PLOT_CFG.numeric_subplot_size,
+        PLOT_CFG.max_cols + 2,
+    )
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[f"{p1} vs {p2}" for p1, p2 in pairs])
+
+    for idx, (p1, p2) in enumerate(pairs):
+        row = idx // n_cols + 1
+        col_idx = idx % n_cols + 1
+        fig.add_trace(
+            px.scatter(df, x=p1, y=p2, color="loss").data[0],
+            row=row,
+            col=col_idx,
+        )
+    fig.update_layout(template="plotly_white")
+    return fig
 
 
 def plot_rank(
@@ -31,13 +58,20 @@ def plot_rank(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
-    """Plot parameter relations colored by rank."""
+    """Plot parameter relations colored by rank.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save interactive HTML versions of the plots.
+    """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters available for rank plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_study_value_rank", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -47,7 +81,7 @@ def plot_rank(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for rank plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_study_value_rank", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -70,7 +104,7 @@ def plot_rank(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "Need at least two numeric parameters for rank plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_study_value_rank", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -146,7 +180,13 @@ def plot_rank(
         axes[row, col].set_visible(False)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+
+    pfig = None
+    if create_plotly:
+        import plotly.express as px
+        pfig = make_rank_plotly(df, pairs)
+
+    save_plot(fig, dirs, "params_study_value_rank", "figs", create_plotly, pfig)
     plt.close(fig)
 
     if create_standalone:
@@ -185,6 +225,10 @@ def plot_rank(
             ax_s.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
             plt.tight_layout()
-            fname = os.path.join(dirs["standalone_ranks"], f"rank_{p1}_{p2}.pdf")
-            fig_s.savefig(fname, bbox_inches="tight")
+            fname = f"rank_{p1}_{p2}"
+            pfig_s = None
+            if create_plotly:
+                pfig_s = make_rank_plotly(df, [(p1, p2)])
+
+            save_plot(fig_s, dirs, fname, "standalone_ranks", create_plotly, pfig_s)
             plt.close(fig_s)

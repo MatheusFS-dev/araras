@@ -23,6 +23,8 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 def plot_hyperparameter_distributions(
@@ -32,6 +34,7 @@ def plot_hyperparameter_distributions(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
     """
     Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
@@ -47,7 +50,8 @@ def plot_hyperparameter_distributions(
         categorical_cols (List[str]): List of categorical column names
         dirs (Dict[str, str]): Dictionary of directory paths for saving plots
         param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
-        create_standalone (bool): Whether to create standalone images for each parameter
+    create_standalone (bool): Whether to create standalone images for each parameter
+    create_plotly (bool): Whether to save interactive HTML versions
     """
 
     # ———————————————————————— Numeric Parameters Figure ——————————————————————— #
@@ -275,9 +279,12 @@ def plot_hyperparameter_distributions(
                 )
 
                 plt.tight_layout()
-                standalone_fig.savefig(
-                    os.path.join(dirs["standalone_distributions"], f"numeric_distribution_{col}.pdf"),
-                    bbox_inches="tight",
+                save_plot(
+                    standalone_fig,
+                    dirs,
+                    f"numeric_distribution_{col}",
+                    "standalone_distributions",
+                    create_plotly,
                 )
                 plt.close(standalone_fig)
 
@@ -296,10 +303,17 @@ def plot_hyperparameter_distributions(
         )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
-        plt.savefig(
-            os.path.join(dirs["figs"], "params_numeric_distributions.pdf"),
-            bbox_inches="tight",
-        )
+        pfig = None
+        if create_plotly:
+            import plotly.express as px
+            long_data = []
+            for col in numeric_cols:
+                long_data.append(pd.DataFrame({"value": df[col].dropna(), "param": col}))
+            if long_data:
+                long_df = pd.concat(long_data)
+                pfig = px.histogram(long_df, x="value", facet_col="param", facet_col_wrap=n_cols)
+
+        save_plot(fig, dirs, "params_numeric_distributions", "figs", create_plotly, pfig)
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -310,10 +324,7 @@ def plot_hyperparameter_distributions(
             pad=PLOT_CFG.title_pad,
         )
         plt.tight_layout()
-        plt.savefig(
-            os.path.join(dirs["figs"], "params_numeric_distributions.pdf"),
-            bbox_inches="tight",
-        )
+        save_plot(fig, dirs, "params_numeric_distributions", "figs", create_plotly)
         plt.close(fig)
 
     # ——————————————————————— Categorical Parameters Figure ————————————————————— #
@@ -478,9 +489,12 @@ def plot_hyperparameter_distributions(
                 standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
                 plt.tight_layout()
-                standalone_fig.savefig(
-                    os.path.join(dirs["standalone_distributions"], f"categorical_distribution_{col}.pdf"),
-                    bbox_inches="tight",
+                save_plot(
+                    standalone_fig,
+                    dirs,
+                    f"categorical_distribution_{col}",
+                    "standalone_distributions",
+                    create_plotly,
                 )
                 plt.close(standalone_fig)
 
@@ -499,10 +513,18 @@ def plot_hyperparameter_distributions(
         )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
-        plt.savefig(
-            os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
-            bbox_inches="tight",
-        )
+        pfig = None
+        if create_plotly:
+            import plotly.express as px
+            long_data = []
+            for col in categorical_cols:
+                counts = df[col].value_counts()
+                long_data.append(pd.DataFrame({"category": counts.index.astype(str), "count": counts.values, "param": col}))
+            if long_data:
+                long_df = pd.concat(long_data)
+                pfig = px.bar(long_df, x="category", y="count", facet_col="param", facet_col_wrap=n_cols)
+
+        save_plot(fig, dirs, "params_categorical_distributions", "figs", create_plotly, pfig)
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -513,15 +535,12 @@ def plot_hyperparameter_distributions(
             pad=PLOT_CFG.title_pad,
         )
         plt.tight_layout()
-        plt.savefig(
-            os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
-            bbox_inches="tight",
-        )
+        save_plot(fig, dirs, "params_categorical_distributions", "figs", create_plotly)
         plt.close(fig)
 
     if not numeric_cols and not categorical_cols:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters found for distribution plotting.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_no_distributions.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_no_distributions", "figs", create_plotly)
         plt.close(fig)

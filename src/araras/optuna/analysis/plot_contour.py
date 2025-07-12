@@ -22,6 +22,8 @@ from .analyzer import (
     get_param_display_name,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
@@ -30,17 +32,23 @@ def plot_contour(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
     """Generate contour plots for parameter pairs.
 
     This creates a single multipanel figure covering all provided parameters
     and optionally standalone figures for each pair of parameters.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save interactive HTML versions of the plots.
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters available for contour plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_contour", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -50,7 +58,7 @@ def plot_contour(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for contour plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_contour", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -59,7 +67,7 @@ def plot_contour(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "Need at least two parameters for contour plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_contour", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -135,7 +143,17 @@ def plot_contour(
         axes[row, col].set_visible(False)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_contour(study, params=params)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "params_contour", "figs", create_plotly, pfig)
     plt.close(fig)
 
     if create_standalone:
@@ -186,6 +204,13 @@ def plot_contour(
             ax.grid(True, alpha=0.3)
 
             plt.tight_layout()
-            filename = f"contour_{p1}_{p2}.pdf"
-            fig.savefig(os.path.join(dirs["standalone_contours"], filename), bbox_inches="tight")
+            filename = f"contour_{p1}_{p2}"
+            pfig_s = None
+            if create_plotly:
+                try:
+                    pfig_s = ov.plot_contour(study, params=[p1, p2])
+                except Exception:
+                    pfig_s = None
+
+            save_plot(fig, dirs, filename, "standalone_contours", create_plotly, pfig_s)
             plt.close(fig)

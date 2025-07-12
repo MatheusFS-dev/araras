@@ -18,11 +18,21 @@ import scipy.interpolate
 from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
-def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
-    """Plot the empirical distribution function of objective values."""
+def plot_edf(
+    study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False
+) -> None:
+    """Plot the empirical distribution function of objective values.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save an interactive HTML version of the plot.
+    """
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'")
     values = df["value"].astype(float).sort_values()
@@ -35,7 +45,7 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
             fontsize=PLOT_CFG.standalone_title_fs,
         )
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_edf", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -50,8 +60,27 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.step(high_res_values, high_res_ecdf, where="post", color="black")
     ax.set_xlabel(PLOT_CFG.study_value_label, fontsize=PLOT_CFG.standalone_label_fs)
     ax.set_ylabel("Cumulative Proportion", fontsize=PLOT_CFG.standalone_label_fs)
-    ax.set_title("Empirical Distribution of Study Values", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
+    ax.set_title(
+        "Empirical Distribution of Study Values",
+        pad=PLOT_CFG.title_pad,
+        fontsize=PLOT_CFG.standalone_title_fs,
+    )
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")
+
+    pfig = None
+    if create_plotly:
+        import plotly.graph_objects as go
+
+        pfig = go.Figure(
+            go.Scatter(x=high_res_values, y=high_res_ecdf, mode="lines")
+        )
+        pfig.update_layout(
+            xaxis_title=PLOT_CFG.study_value_label,
+            yaxis_title="Cumulative Proportion",
+            title="Empirical Distribution of Study Values",
+            template="plotly_white",
+        )
+
+    save_plot(fig, dirs, "study_edf", "figs", create_plotly, pfig)
     plt.close(fig)

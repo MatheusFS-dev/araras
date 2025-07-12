@@ -17,7 +17,7 @@ from datetime import timedelta
 import numpy as np
 import optuna
 
-from .analyzer import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box, save_plot, save_plotly_html
 
 import warnings
 
@@ -28,8 +28,16 @@ warnings.filterwarnings(
 )
 
 
-def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
-    """Visualize trial durations on a timeline with detailed information."""
+def plot_timeline(
+    study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False
+) -> None:
+    """Visualize trial durations on a timeline with detailed information.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save an interactive HTML version of the plot.
+    """
     considered_states = {
         optuna.trial.TrialState.COMPLETE,
         optuna.trial.TrialState.PRUNED,
@@ -40,7 +48,7 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No finished trials for timeline plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_timeline", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -144,5 +152,14 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
 
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_timeline(study)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "study_timeline", "figs", create_plotly, pfig)
     plt.close(fig)

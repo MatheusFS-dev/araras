@@ -21,6 +21,8 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 def plot_parameter_boxplots(
@@ -31,6 +33,7 @@ def plot_parameter_boxplots(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
     """
     Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
@@ -43,6 +46,7 @@ def plot_parameter_boxplots(
         dirs (Dict[str, str]): Directory paths for saving outputs
         param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
         create_standalone (bool): Whether to create standalone images for each parameter
+        create_plotly (bool): Whether to save interactive HTML versions
 
     Returns:
         None: Saves separate boxplot files for numeric parameters
@@ -210,8 +214,12 @@ def plot_parameter_boxplots(
                 standalone_ax.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
 
                 plt.tight_layout()
-                standalone_fig.savefig(
-                    os.path.join(dirs["standalone_boxplots"], f"boxplot_{col}.pdf"), bbox_inches="tight"
+                save_plot(
+                    standalone_fig,
+                    dirs,
+                    f"boxplot_{col}",
+                    "standalone_boxplots",
+                    create_plotly,
                 )
                 plt.close(standalone_fig)
 
@@ -230,9 +238,21 @@ def plot_parameter_boxplots(
         )
         plt.tight_layout(pad=3.0, rect=[0, 0, 1, 0.96])  # Leave space for suptitle
 
+        # Create Plotly version
+        pfig = None
+        if create_plotly:
+            import plotly.express as px
+            long_data = []
+            for col in numeric_cols:
+                long_data.append(pd.DataFrame({"value": df[col].dropna(), "subset": "all", "param": col}))
+                long_data.append(pd.DataFrame({"value": best[col].dropna(), "subset": "best", "param": col}))
+                long_data.append(pd.DataFrame({"value": worst[col].dropna(), "subset": "worst", "param": col}))
+            if long_data:
+                long_df = pd.concat(long_data)
+                pfig = px.box(long_df, x="subset", y="value", facet_col="param", facet_col_wrap=n_cols, points="outliers")
+
         # Save the numeric parameters boxplot
-        save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.pdf")
-        plt.savefig(save_path, bbox_inches="tight")
+        save_plot(fig, dirs, "params_numeric_boxplots", "figs", create_plotly, pfig)
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -243,7 +263,7 @@ def plot_parameter_boxplots(
             pad=PLOT_CFG.title_pad,
         )
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_numeric_boxplots.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_numeric_boxplots", "figs", create_plotly)
         plt.close(fig)
 
 
