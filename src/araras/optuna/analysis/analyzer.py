@@ -198,12 +198,16 @@ class PlotlySaver:
         self._Figure = Figure
         self._orig_savefig = Figure.savefig
 
-    def _wrapper(self, fig: "Figure", fname: str, *args: Any, **kwargs: Any) -> Any:
-        result = self._orig_savefig(fig, fname, *args, **kwargs)
+    def _wrapper(self, fname: str, *args: Any, **kwargs: Any) -> Any:
+        # 'self' here is actually the Figure instance, not PlotlySaver instance
+        fig = self
+        result = self._plotly_saver_instance._orig_savefig(fig, fname, *args, **kwargs)
         html_path = os.path.join(
-            self.base_dir,
+            self._plotly_saver_instance.base_dir,
             "plotly",
-            os.path.relpath(os.path.splitext(os.path.abspath(fname))[0] + ".html", self.base_dir),
+            os.path.relpath(
+                os.path.splitext(os.path.abspath(fname))[0] + ".html", self._plotly_saver_instance.base_dir
+            ),
         )
         try:
             import plotly.io as pio
