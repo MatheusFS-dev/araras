@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import optuna
+import plotly.io as pio
 
 from optuna.terminator import (
     BaseErrorEvaluator,
@@ -30,7 +31,7 @@ from optuna.terminator.improvement.evaluator import (
     DEFAULT_MIN_N_TRIALS,
 )
 
-from .analyzer import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box, save_plotly_html
 
 
 PADDING_RATIO_Y = 0.05
@@ -120,6 +121,7 @@ def plot_terminator_improvement(
     improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     error_evaluator: Optional[BaseErrorEvaluator] = None,
     min_n_trials: int = DEFAULT_MIN_N_TRIALS,
+    save_plotly: bool = False,
 ) -> None:
     """Plot the potentials for future objective improvement using Matplotlib."""
 
@@ -135,6 +137,8 @@ def plot_terminator_improvement(
         draw_warning_box(ax, "No completed trials for terminator improvement plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_terminator_improvement.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_terminator_improvement.html"))
         plt.close(fig)
         return
 
@@ -197,4 +201,6 @@ def plot_terminator_improvement(
     plt.tight_layout()
 
     fig.savefig(os.path.join(dirs["figs"], "terminator_improvement.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "terminator_improvement.html"))
     plt.close(fig)

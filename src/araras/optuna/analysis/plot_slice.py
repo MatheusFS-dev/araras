@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import optuna
 import numpy as np
 import pandas as pd
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
@@ -21,6 +22,7 @@ from .analyzer import (
     format_title,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
@@ -29,6 +31,7 @@ def plot_slice(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """Create slice plots for each parameter."""
     if not params:
@@ -36,6 +39,8 @@ def plot_slice(
         draw_warning_box(ax, "No parameters available for slice plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_slice.html"))
         plt.close(fig)
         return
 
@@ -46,6 +51,8 @@ def plot_slice(
         draw_warning_box(ax, "No completed trials for slice plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_slice.html"))
         plt.close(fig)
         return
 
@@ -64,6 +71,8 @@ def plot_slice(
         draw_warning_box(ax, "No numeric parameters available for slice plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_slice.html"))
         plt.close(fig)
         return
 
@@ -158,6 +167,8 @@ def plot_slice(
             ax_s.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
             plt.tight_layout()
             fig_s.savefig(os.path.join(dirs["standalone_slices"], f"slice_{p}.pdf"), bbox_inches="tight")
+            if save_plotly and dirs.get("plotly_standalone_slices"):
+                save_plotly_html(fig_s, os.path.join(dirs["plotly_standalone_slices"], f"slice_{p}.html"))
             plt.close(fig_s)
 
     for idx in range(n_plots, n_rows * n_cols):
@@ -167,4 +178,6 @@ def plot_slice(
 
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_slice.html"))
     plt.close(fig)

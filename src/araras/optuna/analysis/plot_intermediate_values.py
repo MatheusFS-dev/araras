@@ -13,14 +13,20 @@ import os
 import matplotlib.pyplot as plt
 import optuna
 import numpy as np
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
-def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_intermediate_values(
+    study: optuna.Study,
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """Plot intermediate values reported during trials."""
     trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not trials:
@@ -28,6 +34,8 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
         draw_warning_box(ax, "No completed trials for intermediate values plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_intermediate_values.html"))
         plt.close(fig)
         return
 
@@ -55,4 +63,6 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "study_intermediate_values.html"))
     plt.close(fig)

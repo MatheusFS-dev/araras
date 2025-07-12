@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import optuna
 import numpy as np
+import plotly.io as pio
 from itertools import combinations
 import pandas as pd
 
@@ -23,6 +24,7 @@ from .analyzer import (
     format_title,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
@@ -31,6 +33,7 @@ def plot_rank(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """Plot parameter relations colored by rank."""
     if not params:
@@ -38,6 +41,8 @@ def plot_rank(
         draw_warning_box(ax, "No parameters available for rank plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_study_value_rank.html"))
         plt.close(fig)
         return
 
@@ -48,6 +53,8 @@ def plot_rank(
         draw_warning_box(ax, "No completed trials for rank plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_study_value_rank.html"))
         plt.close(fig)
         return
 
@@ -71,6 +78,8 @@ def plot_rank(
         draw_warning_box(ax, "Need at least two numeric parameters for rank plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_study_value_rank.html"))
         plt.close(fig)
         return
 
@@ -147,6 +156,8 @@ def plot_rank(
 
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "params_study_value_rank.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_study_value_rank.html"))
     plt.close(fig)
 
     if create_standalone:
@@ -187,4 +198,7 @@ def plot_rank(
             plt.tight_layout()
             fname = os.path.join(dirs["standalone_ranks"], f"rank_{p1}_{p2}.pdf")
             fig_s.savefig(fname, bbox_inches="tight")
+            if save_plotly and dirs.get("plotly_standalone_ranks"):
+                html_name = os.path.join(dirs["plotly_standalone_ranks"], f"rank_{p1}_{p2}.html")
+                save_plotly_html(fig_s, html_name)
             plt.close(fig_s)

@@ -16,8 +16,9 @@ from matplotlib.patches import Patch
 from datetime import timedelta
 import numpy as np
 import optuna
+import plotly.io as pio
 
-from .analyzer import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box, save_plotly_html
 
 import warnings
 
@@ -28,7 +29,11 @@ warnings.filterwarnings(
 )
 
 
-def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_timeline(
+    study: optuna.Study,
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """Visualize trial durations on a timeline with detailed information."""
     considered_states = {
         optuna.trial.TrialState.COMPLETE,
@@ -41,6 +46,8 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
         draw_warning_box(ax, "No finished trials for timeline plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_timeline.html"))
         plt.close(fig)
         return
 
@@ -145,4 +152,6 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_timeline.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "study_timeline.html"))
     plt.close(fig)

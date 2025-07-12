@@ -14,14 +14,20 @@ import matplotlib.pyplot as plt
 import optuna
 import numpy as np
 import scipy.interpolate
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
-def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_edf(
+    study: optuna.Study,
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """Plot the empirical distribution function of objective values."""
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'")
@@ -36,6 +42,8 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
         )
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_edf.html"))
         plt.close(fig)
         return
 
@@ -54,4 +62,6 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_edf.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "study_edf.html"))
     plt.close(fig)

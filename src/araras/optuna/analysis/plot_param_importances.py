@@ -13,12 +13,23 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import optuna
+import plotly.io as pio
 from optuna.importance import get_param_importances
 
-from .analyzer import PLOT_CFG, save_data_for_latex, get_param_display_name, draw_warning_box
+from .analyzer import (
+    PLOT_CFG,
+    save_data_for_latex,
+    get_param_display_name,
+    draw_warning_box,
+    save_plotly_html,
+)
 
 
-def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_param_importances(
+    study: optuna.Study,
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """
     Generate and save parameter importance analysis.
 
@@ -50,6 +61,8 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
         )
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_importances.html"))
         plt.close(fig)
         return
 
@@ -98,5 +111,8 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     plt.gca().invert_yaxis()  # Highest importance at top
     plt.tight_layout()
     # Save with high resolution
+    fig = plt.gcf()
     plt.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_importances.html"))
     plt.close()  # Close figure to free memory

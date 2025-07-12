@@ -14,6 +14,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
@@ -22,6 +23,7 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
@@ -31,6 +33,7 @@ def plot_trend_analysis(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """
     Create a single comprehensive plot with trend analysis for parameter-loss relationships.
@@ -54,6 +57,8 @@ def plot_trend_analysis(
         draw_warning_box(ax, "No numeric parameters to analyze")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_trends.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_trends.html"))
         plt.close(fig)
         return
 
@@ -298,6 +303,11 @@ def plot_trend_analysis(
             standalone_fig.savefig(
                 os.path.join(dirs["standalone_trends"], f"trend_{col}.pdf"), bbox_inches="tight"
             )
+            if save_plotly and dirs.get("plotly_standalone_trends"):
+                save_plotly_html(
+                    standalone_fig,
+                    os.path.join(dirs["plotly_standalone_trends"], f"trend_{col}.html"),
+                )
             plt.close(standalone_fig)
 
     # Save trend statistics
@@ -325,4 +335,7 @@ def plot_trend_analysis(
     # Save the comprehensive trend plot
     save_path = os.path.join(dirs["figs"], "params_trends.pdf")
     plt.savefig(save_path, bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        fig = plt.gcf()
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_trends.html"))
     plt.close()  # Close figure to free memory

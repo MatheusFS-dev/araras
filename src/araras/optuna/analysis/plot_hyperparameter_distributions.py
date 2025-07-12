@@ -13,6 +13,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.io as pio
 from scipy.stats import gaussian_kde
 
 from .analyzer import (
@@ -23,6 +24,7 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 def plot_hyperparameter_distributions(
@@ -32,6 +34,7 @@ def plot_hyperparameter_distributions(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """
     Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
@@ -279,6 +282,11 @@ def plot_hyperparameter_distributions(
                     os.path.join(dirs["standalone_distributions"], f"numeric_distribution_{col}.pdf"),
                     bbox_inches="tight",
                 )
+                if save_plotly and dirs.get("plotly_standalone_distributions"):
+                    save_plotly_html(
+                        standalone_fig,
+                        os.path.join(dirs["plotly_standalone_distributions"], f"numeric_distribution_{col}.html"),
+                    )
                 plt.close(standalone_fig)
 
         # Hide unused subplots if needed
@@ -300,6 +308,8 @@ def plot_hyperparameter_distributions(
             os.path.join(dirs["figs"], "params_numeric_distributions.pdf"),
             bbox_inches="tight",
         )
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_numeric_distributions.html"))
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -482,6 +492,11 @@ def plot_hyperparameter_distributions(
                     os.path.join(dirs["standalone_distributions"], f"categorical_distribution_{col}.pdf"),
                     bbox_inches="tight",
                 )
+                if save_plotly and dirs.get("plotly_standalone_distributions"):
+                    save_plotly_html(
+                        standalone_fig,
+                        os.path.join(dirs["plotly_standalone_distributions"], f"categorical_distribution_{col}.html"),
+                    )
                 plt.close(standalone_fig)
 
         # Hide unused subplots if needed
@@ -503,6 +518,8 @@ def plot_hyperparameter_distributions(
             os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
             bbox_inches="tight",
         )
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_categorical_distributions.html"))
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -517,6 +534,8 @@ def plot_hyperparameter_distributions(
             os.path.join(dirs["figs"], "params_categorical_distributions.pdf"),
             bbox_inches="tight",
         )
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_categorical_distributions.html"))
         plt.close(fig)
 
     if not numeric_cols and not categorical_cols:
@@ -524,4 +543,6 @@ def plot_hyperparameter_distributions(
         draw_warning_box(ax, "No parameters found for distribution plotting.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_no_distributions.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_no_distributions.html"))
         plt.close(fig)

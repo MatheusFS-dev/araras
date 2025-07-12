@@ -13,11 +13,13 @@ import os
 import matplotlib.pyplot as plt
 import optuna
 import numpy as np
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
     get_param_display_name,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
@@ -25,6 +27,7 @@ def plot_parallel_coordinate(
     study: optuna.Study,
     params: List[str],
     dirs: Dict[str, str],
+    save_plotly: bool = False,
 ) -> None:
     """Create a parallel coordinate plot for trials."""
     if not params:
@@ -32,6 +35,8 @@ def plot_parallel_coordinate(
         draw_warning_box(ax, "No parameters available for parallel coordinate plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_parallel_coordinate.html"))
         plt.close(fig)
         return
 
@@ -42,6 +47,8 @@ def plot_parallel_coordinate(
         draw_warning_box(ax, "No completed trials for parallel coordinate plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_parallel_coordinate.html"))
         plt.close(fig)
         return
 
@@ -107,6 +114,8 @@ def plot_parallel_coordinate(
         ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_parallel_coordinate.html"))
         plt.close(fig)
         return
 
@@ -132,4 +141,6 @@ def plot_parallel_coordinate(
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "study_parallel_coordinate.html"))
     plt.close(fig)

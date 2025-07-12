@@ -13,11 +13,16 @@ import os
 import matplotlib.pyplot as plt
 import optuna
 import pandas as pd
+import plotly.io as pio
 
-from .analyzer import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box, save_plotly_html
 
 
-def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_optimization_history(
+    study: optuna.Study,
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """Plot optimization history of the study."""
     df = study.trials_dataframe(attrs=("number", "value", "state"))
     df = df.query("state == 'COMPLETE'")
@@ -26,6 +31,8 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
         draw_warning_box(ax, "No completed trials for optimization history plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "study_optimization_history.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "study_optimization_history.html"))
         plt.close(fig)
         return
 
@@ -46,4 +53,6 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str]) -> None
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "study_optimization_history.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "study_optimization_history.html"))
     plt.close(fig)

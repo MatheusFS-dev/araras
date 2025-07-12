@@ -13,6 +13,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
@@ -21,6 +22,7 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 def plot_parameter_boxplots(
@@ -31,6 +33,7 @@ def plot_parameter_boxplots(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """
     Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
@@ -213,6 +216,11 @@ def plot_parameter_boxplots(
                 standalone_fig.savefig(
                     os.path.join(dirs["standalone_boxplots"], f"boxplot_{col}.pdf"), bbox_inches="tight"
                 )
+                if save_plotly and dirs.get("plotly_standalone_boxplots"):
+                    save_plotly_html(
+                        standalone_fig,
+                        os.path.join(dirs["plotly_standalone_boxplots"], f"boxplot_{col}.html"),
+                    )
                 plt.close(standalone_fig)
 
         # Hide unused subplots if needed
@@ -233,6 +241,8 @@ def plot_parameter_boxplots(
         # Save the numeric parameters boxplot
         save_path = os.path.join(dirs["figs"], "params_numeric_boxplots.pdf")
         plt.savefig(save_path, bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_numeric_boxplots.html"))
         plt.close(fig)
     else:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
@@ -244,6 +254,8 @@ def plot_parameter_boxplots(
         )
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_numeric_boxplots.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_numeric_boxplots.html"))
         plt.close(fig)
 
 

@@ -13,6 +13,7 @@ import os
 import matplotlib.pyplot as plt
 import optuna
 import numpy as np
+import plotly.io as pio
 from itertools import combinations
 from matplotlib.tri import Triangulation
 
@@ -22,6 +23,7 @@ from .analyzer import (
     get_param_display_name,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 
@@ -30,6 +32,7 @@ def plot_contour(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """Generate contour plots for parameter pairs.
 
@@ -41,6 +44,8 @@ def plot_contour(
         draw_warning_box(ax, "No parameters available for contour plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_contour.html"))
         plt.close(fig)
         return
 
@@ -51,6 +56,8 @@ def plot_contour(
         draw_warning_box(ax, "No completed trials for contour plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_contour.html"))
         plt.close(fig)
         return
 
@@ -60,6 +67,8 @@ def plot_contour(
         draw_warning_box(ax, "Need at least two parameters for contour plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_contour.html"))
         plt.close(fig)
         return
 
@@ -136,6 +145,8 @@ def plot_contour(
 
     plt.tight_layout()
     fig.savefig(os.path.join(dirs["figs"], "params_contour.pdf"), bbox_inches="tight")
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_contour.html"))
     plt.close(fig)
 
     if create_standalone:
@@ -188,4 +199,7 @@ def plot_contour(
             plt.tight_layout()
             filename = f"contour_{p1}_{p2}.pdf"
             fig.savefig(os.path.join(dirs["standalone_contours"], filename), bbox_inches="tight")
+            if save_plotly and dirs.get("plotly_standalone_contours"):
+                html_name = f"contour_{p1}_{p2}.html"
+                save_plotly_html(fig, os.path.join(dirs["plotly_standalone_contours"], html_name))
             plt.close(fig)

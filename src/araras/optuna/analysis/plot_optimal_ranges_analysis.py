@@ -13,6 +13,7 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import plotly.io as pio
 
 from .analyzer import (
     PLOT_CFG,
@@ -21,6 +22,7 @@ from .analyzer import (
     save_data_for_latex,
     calculate_grid,
     draw_warning_box,
+    save_plotly_html,
 )
 
 from araras.utils.misc import format_scientific
@@ -32,6 +34,7 @@ def plot_optimal_ranges_analysis(
     dirs: Dict[str, str],
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
+    save_plotly: bool = False,
 ) -> None:
     """
     Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
@@ -56,6 +59,8 @@ def plot_optimal_ranges_analysis(
         draw_warning_box(ax, "No numeric parameters to analyze")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_ranges.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_ranges.html"))
         plt.close(fig)
         return
 
@@ -451,6 +456,11 @@ def plot_optimal_ranges_analysis(
                     standalone_fig.savefig(
                         os.path.join(dirs["standalone_ranges"], f"ranges_{col}.pdf"), bbox_inches="tight"
                     )
+                    if save_plotly and dirs.get("plotly_standalone_ranges"):
+                        save_plotly_html(
+                            standalone_fig,
+                            os.path.join(dirs["plotly_standalone_ranges"], f"ranges_{col}.html"),
+                        )
                     plt.close(standalone_fig)
 
             except Exception as e:

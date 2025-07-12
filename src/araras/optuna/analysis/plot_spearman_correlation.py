@@ -13,11 +13,22 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.io as pio
 
-from .analyzer import PLOT_CFG, save_data_for_latex, draw_warning_box
+from .analyzer import (
+    PLOT_CFG,
+    save_data_for_latex,
+    draw_warning_box,
+    save_plotly_html,
+)
 
 
-def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
+def plot_spearman_correlation(
+    df: pd.DataFrame,
+    numeric_cols: List[str],
+    dirs: Dict[str, str],
+    save_plotly: bool = False,
+) -> None:
     """
     Generate and save Spearman correlation heatmap for numeric parameters and loss.
 
@@ -38,6 +49,8 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         draw_warning_box(ax, "No numeric parameters for correlation plot.")
         plt.tight_layout()
         fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight")
+        if save_plotly and dirs.get("plotly"):
+            save_plotly_html(fig, os.path.join(dirs["plotly"], "params_overall_correlation.html"))
         plt.close(fig)
         return
 
@@ -101,6 +114,8 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     fig.savefig(
         os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight", pad_inches=0.3
     )
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_overall_correlation.html"))
     plt.close()
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
@@ -186,4 +201,6 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     fig.savefig(
         os.path.join(dirs["figs"], "params_study_value_correlations.pdf"), bbox_inches="tight", pad_inches=0.2
     )
+    if save_plotly and dirs.get("plotly"):
+        save_plotly_html(fig, os.path.join(dirs["plotly"], "params_study_value_correlations.html"))
     plt.close()
