@@ -83,7 +83,7 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
 def get_memory_and_time(
     model: tf.keras.Model,
     batch_size: int = 1,
-    device: str = "GPU:0",
+    device: int = 0,
     warmup_runs: int = 10,
     test_runs: int = 50,
     verbose: bool = True,
@@ -114,7 +114,7 @@ def get_memory_and_time(
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
             Measure with batch_size=1 to get base per-sample latency.
-        device (str): The device to run the model on and their index, e.g. "GPU:0" or "CPU:0".
+        device (int): GPU index to run the model on. Use ``-1`` to run on CPU.
         warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
         test_runs (int): Number of runs to measure average inference time. Defaults to 50.
         verbose (bool): If True, displays a progress bar during test runs.
@@ -133,21 +133,17 @@ def get_memory_and_time(
     def infer(*args):
         return model(list(args), training=False)
 
-    # Determine device type
-    device_type, device_index = device.split(":")
-    device_type = device_type.upper()
-    device_index = device_index or "0"
+    use_gpu = device >= 0
+    device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
 
-    if device_type not in ("GPU", "CPU"):
-        raise RuntimeError(f"Unsupported device type {device_type}, use 'GPU' or 'CPU'")
-
-    if device_type == "GPU":
+    if use_gpu:
         # Verify GPU exists
-        if not tf.config.list_physical_devices("GPU"):
-            raise RuntimeError(f"No GPU found for device {device}")
+        gpus = tf.config.list_physical_devices("GPU")
+        if not gpus or device >= len(gpus):
+            raise RuntimeError(f"No GPU found for index {device}")
 
         # Reset tracked peak to include weights + graph
-        tf.config.experimental.reset_memory_stats(device)
+        tf.config.experimental.reset_memory_stats(device_str)
 
         # Warm-up runs (first includes trace + alloc)
         _ = infer(*dummy_inputs)
@@ -169,7 +165,7 @@ def get_memory_and_time(
             times.append(time.perf_counter() - t0)
         avg_time = sum(times) / len(times)
 
-        peak_mem = tf.config.experimental.get_memory_info(device)["peak"]
+        peak_mem = tf.config.experimental.get_memory_info(device_str)["peak"]
         return peak_mem, avg_time
 
     # CPU path
@@ -182,14 +178,15 @@ def get_memory_and_time(
         baseline = proc.memory_info().rss
 
         # warmup on CPU
-        with tf.device(f"/CPU:{device_index}"):
+        cpu_index = 0
+        with tf.device(f"/CPU:{cpu_index}"):
             _ = infer(*dummy_inputs)
             for _ in range(warmup_runs - 1):
                 _ = infer(*dummy_inputs)
 
         peak_rss = baseline
         times = []
-        with tf.device(f"/CPU:{device_index}"):
+        with tf.device(f"/CPU:{cpu_index}"):
             progress_iter = range(test_runs)
             if verbose:
                 progress_iter = tqdm(
