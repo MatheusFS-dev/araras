@@ -18,6 +18,8 @@ from .analyzer import (
     PLOT_CFG,
     get_param_display_name,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
@@ -25,13 +27,20 @@ def plot_parallel_coordinate(
     study: optuna.Study,
     params: List[str],
     dirs: Dict[str, str],
+    create_plotly: bool = False,
 ) -> None:
-    """Create a parallel coordinate plot for trials."""
+    """Create a parallel coordinate plot for trials.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save an interactive HTML version of the plot.
+    """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters available for parallel coordinate plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_parallel_coordinate", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -41,7 +50,7 @@ def plot_parallel_coordinate(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for parallel coordinate plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_parallel_coordinate", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -106,7 +115,7 @@ def plot_parallel_coordinate(
         draw_warning_box(ax, f"Could not generate plot: {e}")
         ax.set_title("Parallel Coordinate Plot", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_parallel_coordinate", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -131,5 +140,14 @@ def plot_parallel_coordinate(
 
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "study_parallel_coordinate.pdf"), bbox_inches="tight")
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_parallel_coordinate(study, params=params)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "study_parallel_coordinate", "figs", create_plotly, pfig)
     plt.close(fig)

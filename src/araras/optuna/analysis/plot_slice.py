@@ -21,6 +21,8 @@ from .analyzer import (
     format_title,
     calculate_grid,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
@@ -29,13 +31,20 @@ def plot_slice(
     params: List[str],
     dirs: Dict[str, str],
     create_standalone: bool = False,
+    create_plotly: bool = False,
 ) -> None:
-    """Create slice plots for each parameter."""
+    """Create slice plots for each parameter.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save interactive HTML versions of the plots.
+    """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No parameters available for slice plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_slice", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -45,7 +54,7 @@ def plot_slice(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for slice plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_slice", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -63,7 +72,7 @@ def plot_slice(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No numeric parameters available for slice plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_slice", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -157,7 +166,16 @@ def plot_slice(
             ax_s.tick_params(axis="x", labelsize=PLOT_CFG.standalone_x_tick_fs)
             ax_s.tick_params(axis="y", labelsize=PLOT_CFG.standalone_y_tick_fs)
             plt.tight_layout()
-            fig_s.savefig(os.path.join(dirs["standalone_slices"], f"slice_{p}.pdf"), bbox_inches="tight")
+            pfig_s = None
+            if create_plotly:
+                import optuna.visualization as ov
+
+                try:
+                    pfig_s = ov.plot_slice(study, params=[p])
+                except Exception:
+                    pfig_s = None
+
+            save_plot(fig_s, dirs, f"slice_{p}", "standalone_slices", create_plotly, pfig_s)
             plt.close(fig_s)
 
     for idx in range(n_plots, n_rows * n_cols):
@@ -166,5 +184,14 @@ def plot_slice(
         axes[row, col].set_visible(False)
 
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "params_slice.pdf"), bbox_inches="tight")
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_slice(study, params=numeric_params)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "params_slice", "figs", create_plotly, pfig)
     plt.close(fig)

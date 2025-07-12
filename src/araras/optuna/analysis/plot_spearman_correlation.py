@@ -14,10 +14,21 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 
-from .analyzer import PLOT_CFG, save_data_for_latex, draw_warning_box
+from .analyzer import (
+    PLOT_CFG,
+    save_data_for_latex,
+    draw_warning_box,
+    save_plot,
+    save_plotly_html,
+)
 
 
-def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str]) -> None:
+def plot_spearman_correlation(
+    df: pd.DataFrame,
+    numeric_cols: List[str],
+    dirs: Dict[str, str],
+    create_plotly: bool = False,
+) -> None:
     """
     Generate and save Spearman correlation heatmap for numeric parameters and loss.
 
@@ -29,6 +40,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         df (pd.DataFrame): Dataset containing numeric parameters and loss values
         numeric_cols (List[str]): List of numeric parameter column names
         dirs (Dict[str, str]): Directory paths for saving outputs
+        create_plotly (bool): Whether to save an interactive HTML version
 
     Returns:
         None: Saves correlation heatmap as pdf file
@@ -37,7 +49,7 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No numeric parameters for correlation plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "params_overall_correlation", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -98,9 +110,20 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.subplots_adjust(left=0.15, bottom=0.2, right=0.85, top=0.9)
 
     # Save with bbox_inches='tight' to capture all elements
-    fig.savefig(
-        os.path.join(dirs["figs"], "params_overall_correlation.pdf"), bbox_inches="tight", pad_inches=0.3
-    )
+    pfig_heatmap = None
+    if create_plotly:
+        import plotly.express as px
+
+        pfig_heatmap = px.imshow(
+            corr,
+            x=display_cols,
+            y=display_cols,
+            zmin=-1,
+            zmax=1,
+            color_continuous_scale="RdBu",
+        )
+
+    save_plot(fig, dirs, "params_overall_correlation", "figs", create_plotly, pfig_heatmap)
     plt.close()
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
@@ -183,7 +206,19 @@ def plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: D
     plt.subplots_adjust(left=left_margin, bottom=0.12, right=0.95, top=0.9)
 
     # Save parameter-loss correlation bar chart with better bounding box handling
-    fig.savefig(
-        os.path.join(dirs["figs"], "params_study_value_correlations.pdf"), bbox_inches="tight", pad_inches=0.2
-    )
+    pfig_bar = None
+    if create_plotly:
+        import plotly.express as px
+
+        pfig_bar = px.bar(
+            x=param_loss_corr.values,
+            y=param_loss_corr.index,
+            orientation="h",
+            range_x=[-x_limit, x_limit],
+            color=param_loss_corr.values,
+            color_continuous_scale="RdBu",
+        )
+        pfig_bar.update_layout(yaxis=dict(categoryorder="total ascending"))
+
+    save_plot(fig, dirs, "params_study_value_correlations", "figs", create_plotly, pfig_bar)
     plt.close()

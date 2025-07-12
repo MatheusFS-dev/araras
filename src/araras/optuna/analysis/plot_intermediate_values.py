@@ -17,17 +17,27 @@ import numpy as np
 from .analyzer import (
     PLOT_CFG,
     draw_warning_box,
+    save_plot,
+    save_plotly_html,
 )
 
 
-def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
-    """Plot intermediate values reported during trials."""
+def plot_intermediate_values(
+    study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False
+) -> None:
+    """Plot intermediate values reported during trials.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save an interactive HTML version of the plot.
+    """
     trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not trials:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for intermediate values plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_intermediate_values", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -54,5 +64,14 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str]) -> None:
     ax.set_title("Intermediate Values", pad=PLOT_CFG.title_pad, fontsize=PLOT_CFG.standalone_title_fs)
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
-    fig.savefig(os.path.join(dirs["figs"], "study_intermediate_values.pdf"), bbox_inches="tight")
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_intermediate_values(study)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "study_intermediate_values", "figs", create_plotly, pfig)
     plt.close(fig)

@@ -192,7 +192,10 @@ def draw_warning_box(ax: plt.Axes, message: str) -> None:
 
 
 def create_directories(
-    table_dir: str, create_standalone: bool = False, save_data: bool = True
+    table_dir: str,
+    create_standalone: bool = False,
+    save_data: bool = True,
+    create_plotly: bool = False,
 ) -> Dict[str, str]:
     """Create organized subdirectories for storing analysis outputs."""
     dirs = {
@@ -240,6 +243,35 @@ def create_directories(
             }
         )
 
+    if create_plotly:
+        dirs.update({"plotly": os.path.join(table_dir, "plotly")})
+        if create_standalone:
+            dirs.update(
+                {
+                    "plotly_standalone_distributions": os.path.join(
+                        table_dir, "plotly", "standalone", "distributions"
+                    ),
+                    "plotly_standalone_boxplots": os.path.join(
+                        table_dir, "plotly", "standalone", "boxplots"
+                    ),
+                    "plotly_standalone_trends": os.path.join(
+                        table_dir, "plotly", "standalone", "trends"
+                    ),
+                    "plotly_standalone_ranges": os.path.join(
+                        table_dir, "plotly", "standalone", "ranges"
+                    ),
+                    "plotly_standalone_contours": os.path.join(
+                        table_dir, "plotly", "standalone", "contours"
+                    ),
+                    "plotly_standalone_slices": os.path.join(
+                        table_dir, "plotly", "standalone", "slices"
+                    ),
+                    "plotly_standalone_ranks": os.path.join(
+                        table_dir, "plotly", "standalone", "ranks"
+                    ),
+                }
+            )
+
     for dir_path in dirs.values():
         if dir_path is not None:
             os.makedirs(dir_path, exist_ok=True)
@@ -254,6 +286,36 @@ def save_data_for_latex(data_dict: Dict[str, Any], filename: str, data_dir: str)
     filepath = os.path.join(data_dir, f"{filename}.csv")
     df = pd.DataFrame(data_dict)
     df.to_csv(filepath, index=False)
+
+
+def save_plotly_html(fig: Any, filepath: str) -> None:
+    """Save a Plotly figure to an HTML file."""
+    try:
+        import plotly.io as pio
+        pio.write_html(fig, filepath, include_plotlyjs="cdn")
+    except Exception as e:  # pragma: no cover - runtime warning only
+        logger_error.error(
+            f"{RED}Error saving plotly figure {filepath}: {e}{RESET}"
+        )
+
+
+def save_plot(
+    fig: plt.Figure,
+    dirs: Dict[str, str],
+    base_name: str,
+    subdir_key: str,
+    create_plotly: bool,
+    plotly_fig: Any = None,
+) -> None:
+    """Save Matplotlib figure and optionally a Plotly HTML version."""
+    pdf_path = os.path.join(dirs[subdir_key], f"{base_name}.pdf")
+    fig.savefig(pdf_path, bbox_inches="tight")
+    if create_plotly and plotly_fig is not None:
+        plotly_key = "plotly" if subdir_key == "figs" else f"plotly_{subdir_key}"
+        html_dir = dirs.get(plotly_key)
+        if html_dir:
+            html_path = os.path.join(html_dir, f"{base_name}.html")
+            save_plotly_html(plotly_fig, html_path)
 
 
 def get_param_display_name(param_name: str, param_name_mapping: Dict[str, str] = None) -> str:
@@ -417,6 +479,7 @@ def analyze_study(
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
     save_data: bool = False,
+    create_plotly: bool = False,
     plots: Optional[List[str]] = None,
 ) -> None:
     """Comprehensive analysis of Optuna hyperparameter optimization study results.
@@ -429,6 +492,7 @@ def analyze_study(
             Example: {'params_learning_rate': 'Learning Rate'}
         create_standalone: If True, generates standalone images for each plot type.
         save_data: If True, saves data for LaTeX plotting into CSV files.
+        create_plotly: If True, also saves interactive Plotly HTML versions of the figures.
         plots: List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
@@ -470,7 +534,7 @@ def analyze_study(
             logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
             plots_to_generate = plots_to_generate & all_plots
 
-    dirs = create_directories(table_dir, create_standalone, save_data)
+    dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
 
     df = prepare_dataframe(study)
     if df.empty:
@@ -516,15 +580,16 @@ def analyze_study(
             dirs,
             param_name_mapping,
             create_standalone,
+            create_plotly,
         )
 
     if "importances" in plots_to_generate:
         print("Generating parameter importances...")
-        _safe_plot("importances", plot_param_importances, study, dirs)
+        _safe_plot("importances", plot_param_importances, study, dirs, create_plotly)
 
     if "correlations" in plots_to_generate:
         print("Generating Spearman correlations...")
-        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs)
+        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly)
 
     if "boxplots" in plots_to_generate:
         print("Generating boxplots for parameter distributions...")
@@ -538,6 +603,7 @@ def analyze_study(
             dirs,
             param_name_mapping,
             create_standalone,
+            create_plotly,
         )
 
     if "trends" in plots_to_generate:
@@ -550,6 +616,7 @@ def analyze_study(
             dirs,
             param_name_mapping,
             create_standalone,
+            create_plotly,
         )
 
     if "ranges" in plots_to_generate:
@@ -563,19 +630,20 @@ def analyze_study(
             dirs,
             param_name_mapping,
             create_standalone,
+            create_plotly,
         )
 
     if "contours" in plots_to_generate:
         print("Generating contour plots...")
-        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone)
+        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone, create_plotly)
 
     if "edf" in plots_to_generate:
         print("Generating EDF of study values...")
-        _safe_plot("edf", plot_edf, study, dirs)
+        _safe_plot("edf", plot_edf, study, dirs, create_plotly)
 
     if "intermediate" in plots_to_generate:
         print("Generating intermediate values plots...")
-        _safe_plot("intermediate", plot_intermediate_values, study, dirs)
+        _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly)
 
     if "parallel_coordinate" in plots_to_generate:
         print("Generating parallel coordinate plots...")
@@ -585,6 +653,7 @@ def analyze_study(
             study,
             numeric_cols + categorical_cols,
             dirs,
+            create_plotly,
         )
 
     if "slice" in plots_to_generate:
@@ -596,19 +665,20 @@ def analyze_study(
             numeric_cols + categorical_cols,
             dirs,
             create_standalone,
+            create_plotly,
         )
 
     if "history" in plots_to_generate:
         print("Generating optimization history plot...")
-        _safe_plot("history", plot_optimization_history, study, dirs)
+        _safe_plot("history", plot_optimization_history, study, dirs, create_plotly)
 
     if "timeline" in plots_to_generate:
         print("Generating timeline plot...")
-        _safe_plot("timeline", plot_timeline, study, dirs)
+        _safe_plot("timeline", plot_timeline, study, dirs, create_plotly)
 
     if "terminator" in plots_to_generate:
         print("Generating terminator improvement plot...")
-        _safe_plot("terminator", plot_terminator_improvement, study, dirs)
+        _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly)
 
     #! Rank plots are deprecated, they are causing crashes and not helping much
     #! So they are not generated by default anymore
@@ -621,6 +691,7 @@ def analyze_study(
             numeric_cols + categorical_cols,
             dirs,
             create_standalone,
+            create_plotly,
         )
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
@@ -644,6 +715,17 @@ def analyze_study(
         print(f"  * Contours: {dirs['standalone_contours']}")
         print(f"  * Slices: {dirs['standalone_slices']}")
         # print(f"  * Ranks: {dirs['standalone_ranks']}")
+
+    if create_plotly:
+        print("- Plotly HTML files:")
+        print(f"  * Combined: {dirs['plotly']}")
+        if create_standalone:
+            print(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
+            print(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
+            print(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
+            print(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
+            print(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
+            print(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
 
     if param_name_mapping:
         print(f"\nParameter name mappings applied:")

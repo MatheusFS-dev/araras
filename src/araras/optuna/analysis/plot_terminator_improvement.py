@@ -30,7 +30,7 @@ from optuna.terminator.improvement.evaluator import (
     DEFAULT_MIN_N_TRIALS,
 )
 
-from .analyzer import PLOT_CFG, draw_warning_box
+from .analyzer import PLOT_CFG, draw_warning_box, save_plot, save_plotly_html
 
 
 PADDING_RATIO_Y = 0.05
@@ -120,8 +120,15 @@ def plot_terminator_improvement(
     improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     error_evaluator: Optional[BaseErrorEvaluator] = None,
     min_n_trials: int = DEFAULT_MIN_N_TRIALS,
+    create_plotly: bool = False,
 ) -> None:
-    """Plot the potentials for future objective improvement using Matplotlib."""
+    """Plot the potentials for future objective improvement using Matplotlib.
+
+    Parameters
+    ----------
+    create_plotly : bool
+        Whether to save an interactive HTML version of the plot.
+    """
 
     info = _get_improvement_info(
         study,
@@ -134,7 +141,7 @@ def plot_terminator_improvement(
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
         draw_warning_box(ax, "No completed trials for terminator improvement plot.")
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "study_terminator_improvement.pdf"), bbox_inches="tight")
+        save_plot(fig, dirs, "study_terminator_improvement", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -196,5 +203,24 @@ def plot_terminator_improvement(
     ax.grid(True, alpha=0.3)
     plt.tight_layout()
 
-    fig.savefig(os.path.join(dirs["figs"], "terminator_improvement.pdf"), bbox_inches="tight")
+    pfig = None
+    if create_plotly:
+        import plotly.graph_objects as go
+
+        pfig = go.Figure()
+        pfig.add_trace(
+            go.Scatter(x=info.trial_numbers, y=info.improvements, name="Improvement")
+        )
+        if plot_error and info.errors is not None:
+            pfig.add_trace(
+                go.Scatter(x=info.trial_numbers, y=info.errors, name="Error")
+            )
+        pfig.update_layout(
+            xaxis_title="Trial",
+            yaxis_title="Improvement",
+            title="Improvement vs Trials Plot",
+            template="plotly_white",
+        )
+
+    save_plot(fig, dirs, "terminator_improvement", "figs", create_plotly, pfig)
     plt.close(fig)

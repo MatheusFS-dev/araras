@@ -15,10 +15,19 @@ import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
-from .analyzer import PLOT_CFG, save_data_for_latex, get_param_display_name, draw_warning_box
+from .analyzer import (
+    PLOT_CFG,
+    save_data_for_latex,
+    get_param_display_name,
+    draw_warning_box,
+    save_plot,
+    save_plotly_html,
+)
 
 
-def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
+def plot_param_importances(
+    study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False
+) -> None:
     """
     Generate and save parameter importance analysis.
 
@@ -29,6 +38,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     Args:
         study (optuna.Study): Optuna study object containing optimization history
         dirs (Dict[str, str]): Directory paths for saving outputs
+        create_plotly (bool): Whether to save an interactive HTML version
 
     Returns:
         None: Saves importance table as CSV and bar chart as pdf
@@ -49,7 +59,7 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
             fontsize=PLOT_CFG.standalone_title_fs,
         )
         plt.tight_layout()
-        fig.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
+        save_plot(fig, dirs, "params_importances", "figs", create_plotly)
         plt.close(fig)
         return
 
@@ -98,5 +108,15 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str]) -> None:
     plt.gca().invert_yaxis()  # Highest importance at top
     plt.tight_layout()
     # Save with high resolution
-    plt.savefig(os.path.join(dirs["figs"], "params_importances.pdf"))
+    fig = plt.gcf()
+    pfig = None
+    if create_plotly:
+        import optuna.visualization as ov
+
+        try:
+            pfig = ov.plot_param_importances(study)
+        except Exception:
+            pfig = None
+
+    save_plot(fig, dirs, "params_importances", "figs", create_plotly, pfig)
     plt.close()  # Close figure to free memory
