@@ -26,81 +26,13 @@ This is a python module that provides a set of tools for working with machine le
 
 - [Table of Contents](#table-of-contents)
 - [Features](#features)
+- [📚 API Reference](#-api-reference)
 - [⚙️ Installation Instructions](#️-installation-instructions)
   - [📌 Prerequisites](#-prerequisites)
   - [🪜 Steps](#-steps)
 - [🤝 Contributing](#-contributing)
 - [📜 License](#-license)
 - [🤝 Collaborators](#-collaborators)
-
-## Features
-
-- **Neural Architecture Search**: Leverage Optuna for efficient hyperparameter optimization.
-- Custom Keras callbacks (e.g., NaN loss pruner for Optuna trials)
-- **Keras/TensorFlow Utilities**: Simplify model building with custom builders and helpers.
-- **Custom Callbacks**: Includes features like NaN loss pruning for Optuna trials.
-- **Hyperparameter Management**: Fine-tune activations, regularizers, optimizers, and scalers.
-- **Model Complexity Regularization**: Penalize loss based on FLOPs or parameter count.
-- **System Resource Inspection**: Monitor GPU and system resources effortlessly.
-- **Experiment Tracking**: Manage directories and files for seamless experiment organization.
-- **Kernel Monitoring**: Receive email alerts for crashes or terminations.
-- **Email Notifications**: Get notified for successes, warnings, or custom events.
-- **Optuna Analysis Tools**: Visualize and analyze Optuna studies with ease.
-- **Logging Utilities**: Track exceptions and resource usage effectively.
-- **Modular Design**: Build extensible and customizable machine learning workflows.
-
-## ⚙️ Installation Instructions
-
-To set up the development environment, follow these steps:
-
-### 📌 Prerequisites
-
-- Optuna
-- Tensorflow
-- Keras
-- pandas
-- Git
-
-### 🪜 Steps
-
-1. **Clone the repository:**
-
-   ```bash
-   git clone https://github.com/MatheusFS-dev/araras.git
-   ```
-
-2. **Import the modules as you need**
-
-## 🤝 Contributing
-
-Contributions are what make the open-source community amazing. To contribute:
-
-1. Fork the project.
-2. Create a feature branch (`git checkout -b feature/new-feature`).
-3. Commit your changes (`git commit -m 'Add some feature'`).
-4. Push to the branch (`git push origin feature/new-feature`).
-5. Open a Pull Request.
-
-## 📜 License
-
-This project is licensed under the **[General Public License](LICENSE)**.
-
-## 🤝 Collaborators
-
-We thank the following people who contributed to this project:
-
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/MatheusFS-dev" title="Matheus Ferreira">
-        <img src="https://avatars.githubusercontent.com/u/99222557" width="100px;" alt="Foto do Matheus Ferreira no GitHub"/><br>
-        <sub>
-          <b>Matheus Ferreira</b>
-        </sub>
-      </a>
-    </td>
-  </tr>
-</table>
 
 ## 📚 API Reference
 
@@ -368,3 +300,58 @@ Convert a Jupyter notebook into a Python script file.
 
 #### `SimpleTerminalLauncher(supress_tf_warnings: bool = False)`
 Launch commands in a new terminal window and capture the PID.
+
+
+## ⚙️ Installation Instructions
+
+To set up the development environment, follow these steps:
+
+### 📌 Prerequisites
+
+- Optuna
+- Tensorflow
+- Keras
+- pandas
+- Git
+
+### 🪜 Steps
+
+1. **Clone the repository:**
+
+   ```bash
+   git clone https://github.com/MatheusFS-dev/araras.git
+   ```
+
+2. **Import the modules as you need**
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community amazing. To contribute:
+
+1. Fork the project.
+2. Create a feature branch (`git checkout -b feature/new-feature`).
+3. Commit your changes (`git commit -m 'Add some feature'`).
+4. Push to the branch (`git push origin feature/new-feature`).
+5. Open a Pull Request.
+
+## 📜 License
+
+This project is licensed under the **[General Public License](LICENSE)**.
+
+## 🤝 Collaborators
+
+We thank the following people who contributed to this project:
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/MatheusFS-dev" title="Matheus Ferreira">
+        <img src="https://avatars.githubusercontent.com/u/99222557" width="100px;" alt="Foto do Matheus Ferreira no GitHub"/><br>
+        <sub>
+          <b>Matheus Ferreira</b>
+        </sub>
+      </a>
+    </td>
+  </tr>
+</table>
+
