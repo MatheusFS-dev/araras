@@ -219,7 +219,7 @@ Rename trial files by ranking.
 #### `save_trial_params_to_file(filepath: str, params: Dict[str, float], **kwargs: str) -> None`
 Write parameter values and metadata to ``filepath``.
 
-#### `get_top_trials(study: optuna.Study, top_k: int, rank_key: str = "value", rank_descending: bool = True) -> List[optuna.Trial]`
+#### `get_top_trials(study: optuna.Study, top_k: int, rank_key: str = "value", order: str = "descending") -> List[optuna.Trial]`
 Return the best ``top_k`` trials ordered by ``rank_key``.
 
 #### `save_top_k_trials(top_trials: List[optuna.Trial], args_dir: str, study: optuna.Study, extra_attrs: List[str] | None = None) -> None`
