@@ -9,17 +9,18 @@ Example:
     >>> from araras.optuna.analysis.analyze import analyze_study
     >>> analyze_study("path/to/study")
 """
+
 from araras.commons import *
 
 import os
 import re
 import math
-from contextlib import nullcontext
 import optuna
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
+
 
 @dataclass
 class PlotConfig:
@@ -69,9 +70,7 @@ class PlotConfig:
     importance_ylabel: str = "Importance"
     importance_title: str = "Hyperparameter Importances"
     spearman_heatmap_title: str = "Spearman Correlation"
-    param_corr_title: str = (
-        "Parameter-Study Value Correlations"
-    )
+    param_corr_title: str = "Parameter-Study Value Correlations"
     param_corr_xlabel: str = "Spearman Correlation with Study Value"
     param_corr_ylabel: str = "Parameters"
     trend_suptitle: str = "Parameter-Study Value Trend Analysis"
@@ -151,7 +150,7 @@ def calculate_grid(
         return 0, 0
 
     dpi = plt.rcParams.get("figure.dpi", 100)
-    max_px = (2 ** 16) - 1
+    max_px = (2**16) - 1
 
     max_cols_by_width = max_px // int(subplot_width * dpi)
     max_rows_by_height = max_px // int(subplot_height * dpi)
@@ -187,72 +186,13 @@ def draw_warning_box(ax: plt.Axes, message: str) -> None:
     ax.set_yticks([])
 
 
-# ——— Context manager to automatically export figures as Plotly HTML files ——— #
-class PlotlySaver:
-    """Intercept Figure.savefig calls to also generate Plotly HTML."""
-
-    def __init__(self, base_dir: str):
-        self.base_dir = os.path.abspath(base_dir)
-        from matplotlib.figure import Figure
-
-        self._Figure = Figure
-        self._orig_savefig = Figure.savefig
-        self._counter = 0
-
-    def __enter__(self):
-        plotly_saver = self
-
-        def wrapper(fig, fname, *args, **kwargs):
-            # Save the figure normally
-            result = plotly_saver._orig_savefig(fig, fname, *args, **kwargs)
-
-            try:
-                # Determine html filename
-                if isinstance(fname, (str, os.PathLike)):
-                    base = os.path.splitext(os.path.abspath(fname))[0]
-                    rel = os.path.relpath(base + ".html", plotly_saver.base_dir)
-                else:
-                    # file-like or other targets, use incremental counter
-                    plotly_saver._counter += 1
-                    rel = f"figure_{plotly_saver._counter}.html"
-
-                html_path = os.path.join(plotly_saver.base_dir, "plotly", rel)
-                os.makedirs(os.path.dirname(html_path), exist_ok=True)
-
-                # Convert to Plotly and write html
-                import plotly.io as pio
-                import plotly.tools as tls
-
-                pio.write_html(
-                    tls.mpl_to_plotly(fig),
-                    html_path,
-                    auto_open=False,
-                )
-            except Exception as e:
-                try:
-                    logger.warning(f"Failed to save Plotly HTML {html_path}: {e}")
-                except NameError:
-                    pass
-
-            return result
-
-        self._Figure.savefig = wrapper
-        return self
-
-    def __exit__(self, exc_type, exc, tb):
-        self._Figure.savefig = self._orig_savefig
-
-
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
 # ———————————————————————————————————————————————————————————————————————————— #
 
 
 def create_directories(
-    table_dir: str,
-    create_standalone: bool = False,
-    save_data: bool = True,
-    save_plotly: bool = False,
+    table_dir: str, create_standalone: bool = False, save_data: bool = True
 ) -> Dict[str, str]:
     """Create organized subdirectories for storing analysis outputs."""
     dirs = {
@@ -299,26 +239,6 @@ def create_directories(
                 "standalone_ranks": os.path.join(table_dir, "figures", "standalone", "ranks"),
             }
         )
-
-    if save_plotly:
-        plotly_base = os.path.join(table_dir, "plotly")
-        dirs.update(
-            {
-                "plotly_figs": os.path.join(plotly_base, "figures"),
-            }
-        )
-        if create_standalone:
-            dirs.update(
-                {
-                    "plotly_standalone_distributions": os.path.join(plotly_base, "figures", "standalone", "distributions"),
-                    "plotly_standalone_boxplots": os.path.join(plotly_base, "figures", "standalone", "boxplots"),
-                    "plotly_standalone_trends": os.path.join(plotly_base, "figures", "standalone", "trends"),
-                    "plotly_standalone_ranges": os.path.join(plotly_base, "figures", "standalone", "ranges"),
-                    "plotly_standalone_contours": os.path.join(plotly_base, "figures", "standalone", "contours"),
-                    "plotly_standalone_slices": os.path.join(plotly_base, "figures", "standalone", "slices"),
-                    "plotly_standalone_ranks": os.path.join(plotly_base, "figures", "standalone", "ranks"),
-                }
-            )
 
     for dir_path in dirs.values():
         if dir_path is not None:
@@ -451,6 +371,7 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
     except Exception as e:  # pragma: no cover - errors are user-facing
         logger_error.error(f"{RED}Error generating {plot_name} plot: {e}{RESET}")
 
+
 def print_study_columns(
     study: optuna.Study,
     exclude: Optional[List[str]] = None,
@@ -496,7 +417,6 @@ def analyze_study(
     param_name_mapping: Dict[str, str] = None,
     create_standalone: bool = False,
     save_data: bool = False,
-    save_plotly_html: bool = False,
     plots: Optional[List[str]] = None,
 ) -> None:
     """Comprehensive analysis of Optuna hyperparameter optimization study results.
@@ -509,7 +429,6 @@ def analyze_study(
             Example: {'params_learning_rate': 'Learning Rate'}
         create_standalone: If True, generates standalone images for each plot type.
         save_data: If True, saves data for LaTeX plotting into CSV files.
-        save_plotly_html: If True, also save Plotly HTML versions of the figures.
         plots: List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
@@ -551,194 +470,189 @@ def analyze_study(
             logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
             plots_to_generate = plots_to_generate & all_plots
 
-    dirs = create_directories(table_dir, create_standalone, save_data, save_plotly_html)
+    dirs = create_directories(table_dir, create_standalone, save_data)
 
-    plotly_ctx = PlotlySaver(table_dir) if save_plotly_html else nullcontext()
+    df = prepare_dataframe(study)
+    if df.empty:
+        logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
+        return
 
-    with plotly_ctx:
+    numeric_cols, categorical_cols = classify_columns(df)
+    best, worst = get_trial_subsets(df, top_frac)
 
-        df = prepare_dataframe(study)
-        if df.empty:
-            logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
-            return
+    print_study_columns(
+        study,
+        exclude=[
+            "loss",
+            "value",
+            "number",
+            "datetime_start",
+            "datetime_complete",
+            "duration",
+            "system_attrs_completed_rung_0",
+            "system_attrs_completed_rung_1",
+            "system_attrs_completed_rung_2",
+            "state",
+        ]
+        + [col for col in df.columns if col.startswith("user_")],
+        param_name_mapping=param_name_mapping,
+    )
 
-        numeric_cols, categorical_cols = classify_columns(df)
-        best, worst = get_trial_subsets(df, top_frac)
+    if plots is None:
+        # Deactivate parallel coordinate and rank plots by default
+        plots_to_generate -= {"parallel_coordinate", "rank"}
 
-        print_study_columns(
+    print("\nGenerating summary tables...")
+    save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
+
+    if "distributions" in plots_to_generate:
+        print("Generating hyperparameter distribution plots...")
+        _safe_plot(
+            "distributions",
+            plot_hyperparameter_distributions,
+            df,
+            numeric_cols,
+            categorical_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
+
+    if "importances" in plots_to_generate:
+        print("Generating parameter importances...")
+        _safe_plot("importances", plot_param_importances, study, dirs)
+
+    if "correlations" in plots_to_generate:
+        print("Generating Spearman correlations...")
+        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs)
+
+    if "boxplots" in plots_to_generate:
+        print("Generating boxplots for parameter distributions...")
+        _safe_plot(
+            "boxplots",
+            plot_parameter_boxplots,
+            df,
+            best,
+            worst,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
+
+    if "trends" in plots_to_generate:
+        print("Generating trend analysis...")
+        _safe_plot(
+            "trends",
+            plot_trend_analysis,
+            df,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
+
+    if "ranges" in plots_to_generate:
+        print("Generating optimal ranges analysis...")
+        _safe_plot(
+            "ranges",
+            plot_optimal_ranges_analysis,
+            df,
+            best,
+            numeric_cols,
+            dirs,
+            param_name_mapping,
+            create_standalone,
+        )
+
+    if "contours" in plots_to_generate:
+        print("Generating contour plots...")
+        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone)
+
+    if "edf" in plots_to_generate:
+        print("Generating EDF of study values...")
+        _safe_plot("edf", plot_edf, study, dirs)
+
+    if "intermediate" in plots_to_generate:
+        print("Generating intermediate values plots...")
+        _safe_plot("intermediate", plot_intermediate_values, study, dirs)
+
+    if "parallel_coordinate" in plots_to_generate:
+        print("Generating parallel coordinate plots...")
+        _safe_plot(
+            "parallel_coordinate",
+            plot_parallel_coordinate,
             study,
-            exclude=[
-                "loss",
-                "value",
-                "number",
-                "datetime_start",
-                "datetime_complete",
-                "duration",
-                "system_attrs_completed_rung_0",
-                "system_attrs_completed_rung_1",
-                "system_attrs_completed_rung_2",
-                "state",
-            ]
-            + [col for col in df.columns if col.startswith("user_")],
-            param_name_mapping=param_name_mapping,
-        )
-    
-        if plots is None:
-            # Deactivate parallel coordinate and rank plots by default
-            plots_to_generate -= {"parallel_coordinate", "rank"}
-    
-
-        print("\nGenerating summary tables...")
-        save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
-
-        if "distributions" in plots_to_generate:
-            print("Generating hyperparameter distribution plots...")
-            _safe_plot(
-                "distributions",
-                plot_hyperparameter_distributions,
-                df,
-                numeric_cols,
-                categorical_cols,
-                dirs,
-                param_name_mapping,
-                create_standalone,
-            )
-
-        if "importances" in plots_to_generate:
-            print("Generating parameter importances...")
-            _safe_plot("importances", plot_param_importances, study, dirs)
-
-        if "correlations" in plots_to_generate:
-            print("Generating Spearman correlations...")
-            _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs)
-
-        if "boxplots" in plots_to_generate:
-            print("Generating boxplots for parameter distributions...")
-            _safe_plot(
-                "boxplots",
-                plot_parameter_boxplots,
-                df,
-                best,
-                worst,
-                numeric_cols,
-                dirs,
-                param_name_mapping,
-                create_standalone,
-            )
-
-        if "trends" in plots_to_generate:
-            print("Generating trend analysis...")
-            _safe_plot(
-                "trends",
-                plot_trend_analysis,
-                df,
-                numeric_cols,
-                dirs,
-                param_name_mapping,
-                create_standalone,
-            )
-
-        if "ranges" in plots_to_generate:
-            print("Generating optimal ranges analysis...")
-            _safe_plot(
-                "ranges",
-                plot_optimal_ranges_analysis,
-                df,
-                best,
-                numeric_cols,
-                dirs,
-                param_name_mapping,
-                create_standalone,
-            )
-
-        if "contours" in plots_to_generate:
-            print("Generating contour plots...")
-            _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone)
-
-        if "edf" in plots_to_generate:
-            print("Generating EDF of study values...")
-            _safe_plot("edf", plot_edf, study, dirs)
-
-        if "intermediate" in plots_to_generate:
-            print("Generating intermediate values plots...")
-            _safe_plot("intermediate", plot_intermediate_values, study, dirs)
-
-        if "parallel_coordinate" in plots_to_generate:
-            print("Generating parallel coordinate plots...")
-            _safe_plot(
-                "parallel_coordinate",
-                plot_parallel_coordinate,
-                study,
-                numeric_cols + categorical_cols,
-                dirs,
-            )
-
-        if "slice" in plots_to_generate:
-            print("Generating slice plots...")
-            _safe_plot(
-                "slice",
-                plot_slice,
-                study,
-                numeric_cols + categorical_cols,
-                dirs,
-                create_standalone,
-            )
-
-        if "history" in plots_to_generate:
-            print("Generating optimization history plot...")
-            _safe_plot("history", plot_optimization_history, study, dirs)
-
-        if "timeline" in plots_to_generate:
-            print("Generating timeline plot...")
-            _safe_plot("timeline", plot_timeline, study, dirs)
-
-        if "terminator" in plots_to_generate:
-            print("Generating terminator improvement plot...")
-            _safe_plot("terminator", plot_terminator_improvement, study, dirs)
-
-        #! Rank plots are deprecated, they are causing crashes and not helping much
-        #! So they are not generated by default anymore
-        if "rank" in plots_to_generate:
-            print("Generating rank plots...")
-            _safe_plot(
-                "rank",
-                plot_rank,
-                study,
-                numeric_cols + categorical_cols,
-                dirs,
-                create_standalone,
-            )
-
-        print(f"\nAnalysis complete! Results saved to: {table_dir}")
-        print(f"- Figures: {dirs['figs']}")
-        if save_data:
-            print(f"- Data for LaTeX: {dirs['data']}")
-            print("  * Distributions:", dirs["data_distributions"])
-            print("  * Boxplots:", dirs["data_boxplots"])
-            print("  * Trends:", dirs["data_trends"])
-            print("  * Ranges:", dirs["data_ranges"])
-            print("  * Importances:", dirs["data_importances"])
-            print("  * Correlations:", dirs["data_correlations"])
-        print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
-
-        if create_standalone:
-            print("- Standalone images:")
-            print(f"  * Distributions: {dirs['standalone_distributions']}")
-            print(f"  * Boxplots: {dirs['standalone_boxplots']}")
-            print(f"  * Trends: {dirs['standalone_trends']}")
-            print(f"  * Ranges: {dirs['standalone_ranges']}")
-            print(f"  * Contours: {dirs['standalone_contours']}")
-            print(f"  * Slices: {dirs['standalone_slices']}")
-            # print(f"  * Ranks: {dirs['standalone_ranks']}")
-
-        if param_name_mapping:
-            print(f"\nParameter name mappings applied:")
-            for orig, display in param_name_mapping.items():
-                print(f"  {orig} -> {display}")
-
-        print(
-            f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
+            numeric_cols + categorical_cols,
+            dirs,
         )
 
-        if plots is not None:
-            print(f"Generated plots: {sorted(plots_to_generate)}")
+    if "slice" in plots_to_generate:
+        print("Generating slice plots...")
+        _safe_plot(
+            "slice",
+            plot_slice,
+            study,
+            numeric_cols + categorical_cols,
+            dirs,
+            create_standalone,
+        )
+
+    if "history" in plots_to_generate:
+        print("Generating optimization history plot...")
+        _safe_plot("history", plot_optimization_history, study, dirs)
+
+    if "timeline" in plots_to_generate:
+        print("Generating timeline plot...")
+        _safe_plot("timeline", plot_timeline, study, dirs)
+
+    if "terminator" in plots_to_generate:
+        print("Generating terminator improvement plot...")
+        _safe_plot("terminator", plot_terminator_improvement, study, dirs)
+
+    #! Rank plots are deprecated, they are causing crashes and not helping much
+    #! So they are not generated by default anymore
+    if "rank" in plots_to_generate:
+        print("Generating rank plots...")
+        _safe_plot(
+            "rank",
+            plot_rank,
+            study,
+            numeric_cols + categorical_cols,
+            dirs,
+            create_standalone,
+        )
+
+    print(f"\nAnalysis complete! Results saved to: {table_dir}")
+    print(f"- Figures: {dirs['figs']}")
+    if save_data:
+        print(f"- Data for LaTeX: {dirs['data']}")
+        print("  * Distributions:", dirs["data_distributions"])
+        print("  * Boxplots:", dirs["data_boxplots"])
+        print("  * Trends:", dirs["data_trends"])
+        print("  * Ranges:", dirs["data_ranges"])
+        print("  * Importances:", dirs["data_importances"])
+        print("  * Correlations:", dirs["data_correlations"])
+    print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
+
+    if create_standalone:
+        print("- Standalone images:")
+        print(f"  * Distributions: {dirs['standalone_distributions']}")
+        print(f"  * Boxplots: {dirs['standalone_boxplots']}")
+        print(f"  * Trends: {dirs['standalone_trends']}")
+        print(f"  * Ranges: {dirs['standalone_ranges']}")
+        print(f"  * Contours: {dirs['standalone_contours']}")
+        print(f"  * Slices: {dirs['standalone_slices']}")
+        # print(f"  * Ranks: {dirs['standalone_ranks']}")
+
+    if param_name_mapping:
+        print(f"\nParameter name mappings applied:")
+        for orig, display in param_name_mapping.items():
+            print(f"  {orig} -> {display}")
+
+    print(
+        f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
+    )
+
+    if plots is not None:
+        print(f"Generated plots: {sorted(plots_to_generate)}")

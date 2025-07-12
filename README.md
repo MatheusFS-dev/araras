@@ -186,7 +186,7 @@ Execute ``file_path`` under a restart manager that emails on crashes and optiona
 #### `class PlotConfig`
 Dataclass storing matplotlib sizing and font parameters used by the plotting utilities.
 
-#### `analyze_study(study: optuna.Study, table_dir: str, top_frac: float = 0.2, param_name_mapping: Dict[str, str] | None = None, create_standalone: bool = False, save_data: bool = False, save_plotly_html: bool = False, plots: List[str] | None = None) -> None`
+#### `analyze_study(study: optuna.Study, table_dir: str, top_frac: float = 0.2, param_name_mapping: Dict[str, str] | None = None, create_standalone: bool = False, save_data: bool = False, plots: List[str] | None = None) -> None`
 Perform a full analysis of an Optuna study and save figures and tables to ``table_dir``.
 
 ### `optuna.keras.stats`
