@@ -19,7 +19,7 @@ from tqdm import tqdm
 def get_model_usage_stats(
     saved_model: str | tf.keras.Model,
     n_trials: int = 10000,
-    device: int = -1,
+    device: int = 0,
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
