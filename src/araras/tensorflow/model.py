@@ -13,7 +13,7 @@ from araras.commons import *
 import time
 import pynvml
 import tensorflow as tf
-from tqdm import tqdm
+from rich.progress import track
 
 
 def get_model_usage_stats(
@@ -141,9 +141,11 @@ def get_model_usage_stats(
 
         progress_iter = range(n_trials)
         if verbose:
-            progress_iter = tqdm(
+            progress_iter = track(
                 progress_iter,
-                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+                description="Measuring usage",
+                total=n_trials,
+                style="white",
             )
         for _ in progress_iter:
 
