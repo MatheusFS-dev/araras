@@ -12,6 +12,25 @@ Example:
 
 from araras.commons import *
 
+try:  # pragma: no cover - optional rich import
+    from rich.console import Console
+except Exception:  # pragma: no cover - fallback if rich is unavailable
+    class Console:  # minimal fallback Console
+        class _DummyStatus:
+            def __init__(self, message: str):
+                self.message = message
+            def __enter__(self):
+                print(self.message)
+                return self
+            def __exit__(self, exc_type, exc, tb):
+                pass
+
+        def status(self, message: str):
+            return self._DummyStatus(message)
+
+        def log(self, message: str):
+            print(message)
+
 import os
 import re
 import math
@@ -503,238 +522,239 @@ def analyze_study(
                 - 'rank' (Can cause crashes and not very useful)
             If None, generates all plots.
     """
-    print("\n\nAnalyzing study...")
-
-    # Define all available plot types
-    all_plots = {
-        "distributions",
-        "importances",
-        "correlations",
-        "boxplots",
-        "trends",
-        "ranges",
-        "contours",
-        "edf",
-        "intermediate",
-        "parallel_coordinate",
-        "rank",
-        "slice",
-        "history",
-        "timeline",
-        "terminator",
-    }
-
-    # Set plots to generate (default: all plots)
-    if plots is None:
-        plots_to_generate = all_plots
-    else:
-        plots_to_generate = set(plots)
-        invalid_plots = plots_to_generate - all_plots
-        if invalid_plots:
-            logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
-            plots_to_generate = plots_to_generate & all_plots
-
-    dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
-
-    df = prepare_dataframe(study)
-    if df.empty:
-        logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
-        return
-
-    numeric_cols, categorical_cols = classify_columns(df)
-    best, worst = get_trial_subsets(df, top_frac)
-
-    print_study_columns(
-        study,
-        exclude=[
-            "loss",
-            "value",
-            "number",
-            "datetime_start",
-            "datetime_complete",
-            "duration",
-            "system_attrs_completed_rung_0",
-            "system_attrs_completed_rung_1",
-            "system_attrs_completed_rung_2",
-            "state",
-        ]
-        + [col for col in df.columns if col.startswith("user_")],
-        param_name_mapping=param_name_mapping,
-    )
-
-    if plots is None:
-        # Deactivate parallel coordinate and rank plots by default
-        plots_to_generate -= {"parallel_coordinate", "rank"}
-
-    print("\nGenerating summary tables...")
-    save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
-
-    if "distributions" in plots_to_generate:
-        print("Generating hyperparameter distribution plots...")
-        _safe_plot(
+    console = Console()
+    with console.status("[bold green]Analyzing study..."):
+    
+        # Define all available plot types
+        all_plots = {
             "distributions",
-            plot_hyperparameter_distributions,
-            df,
-            numeric_cols,
-            categorical_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "importances" in plots_to_generate:
-        print("Generating parameter importances...")
-        _safe_plot("importances", plot_param_importances, study, dirs, create_plotly)
-
-    if "correlations" in plots_to_generate:
-        print("Generating Spearman correlations...")
-        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly)
-
-    if "boxplots" in plots_to_generate:
-        print("Generating boxplots for parameter distributions...")
-        _safe_plot(
+            "importances",
+            "correlations",
             "boxplots",
-            plot_parameter_boxplots,
-            df,
-            best,
-            worst,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "trends" in plots_to_generate:
-        print("Generating trend analysis...")
-        _safe_plot(
             "trends",
-            plot_trend_analysis,
-            df,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "ranges" in plots_to_generate:
-        print("Generating optimal ranges analysis...")
-        _safe_plot(
             "ranges",
-            plot_optimal_ranges_analysis,
-            df,
-            best,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "contours" in plots_to_generate:
-        print("Generating contour plots...")
-        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone, create_plotly)
-
-    if "edf" in plots_to_generate:
-        print("Generating EDF of study values...")
-        _safe_plot("edf", plot_edf, study, dirs, create_plotly)
-
-    if "intermediate" in plots_to_generate:
-        print("Generating intermediate values plots...")
-        _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly)
-
-    if "parallel_coordinate" in plots_to_generate:
-        print("Generating parallel coordinate plots...")
-        _safe_plot(
+            "contours",
+            "edf",
+            "intermediate",
             "parallel_coordinate",
-            plot_parallel_coordinate,
-            study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_plotly,
-        )
-
-    if "slice" in plots_to_generate:
-        print("Generating slice plots...")
-        _safe_plot(
-            "slice",
-            plot_slice,
-            study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "history" in plots_to_generate:
-        print("Generating optimization history plot...")
-        _safe_plot("history", plot_optimization_history, study, dirs, create_plotly)
-
-    if "timeline" in plots_to_generate:
-        print("Generating timeline plot...")
-        _safe_plot("timeline", plot_timeline, study, dirs, create_plotly)
-
-    if "terminator" in plots_to_generate:
-        print("Generating terminator improvement plot...")
-        _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly)
-
-    #! Rank plots are deprecated, they are causing crashes and not helping much
-    #! So they are not generated by default anymore
-    if "rank" in plots_to_generate:
-        print("Generating rank plots...")
-        _safe_plot(
             "rank",
-            plot_rank,
+            "slice",
+            "history",
+            "timeline",
+            "terminator",
+        }
+    
+        # Set plots to generate (default: all plots)
+        if plots is None:
+            plots_to_generate = all_plots
+        else:
+            plots_to_generate = set(plots)
+            invalid_plots = plots_to_generate - all_plots
+            if invalid_plots:
+                logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
+                plots_to_generate = plots_to_generate & all_plots
+    
+        dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
+    
+        df = prepare_dataframe(study)
+        if df.empty:
+            logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
+            return
+    
+        numeric_cols, categorical_cols = classify_columns(df)
+        best, worst = get_trial_subsets(df, top_frac)
+    
+        print_study_columns(
             study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_standalone,
-            create_plotly,
+            exclude=[
+                "loss",
+                "value",
+                "number",
+                "datetime_start",
+                "datetime_complete",
+                "duration",
+                "system_attrs_completed_rung_0",
+                "system_attrs_completed_rung_1",
+                "system_attrs_completed_rung_2",
+                "state",
+            ]
+            + [col for col in df.columns if col.startswith("user_")],
+            param_name_mapping=param_name_mapping,
         )
-
-    print(f"\nAnalysis complete! Results saved to: {table_dir}")
-    print(f"- Figures: {dirs['figs']}")
-    if save_data:
-        print(f"- Data for LaTeX: {dirs['data']}")
-        print("  * Distributions:", dirs["data_distributions"])
-        print("  * Boxplots:", dirs["data_boxplots"])
-        print("  * Trends:", dirs["data_trends"])
-        print("  * Ranges:", dirs["data_ranges"])
-        print("  * Importances:", dirs["data_importances"])
-        print("  * Correlations:", dirs["data_correlations"])
-    print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
-
-    if create_standalone:
-        print("- Standalone images:")
-        print(f"  * Distributions: {dirs['standalone_distributions']}")
-        print(f"  * Boxplots: {dirs['standalone_boxplots']}")
-        print(f"  * Trends: {dirs['standalone_trends']}")
-        print(f"  * Ranges: {dirs['standalone_ranges']}")
-        print(f"  * Contours: {dirs['standalone_contours']}")
-        print(f"  * Slices: {dirs['standalone_slices']}")
-        # print(f"  * Ranks: {dirs['standalone_ranks']}")
-
-    if create_plotly:
-        print("- Plotly HTML files:")
-        print(f"  * Combined: {dirs['plotly']}")
+    
+        if plots is None:
+            # Deactivate parallel coordinate and rank plots by default
+            plots_to_generate -= {"parallel_coordinate", "rank"}
+    
+        console.log("\nGenerating summary tables...")
+        save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
+    
+        if "distributions" in plots_to_generate:
+            console.log("Generating hyperparameter distribution plots...")
+            _safe_plot(
+                "distributions",
+                plot_hyperparameter_distributions,
+                df,
+                numeric_cols,
+                categorical_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            )
+    
+        if "importances" in plots_to_generate:
+            console.log("Generating parameter importances...")
+            _safe_plot("importances", plot_param_importances, study, dirs, create_plotly)
+    
+        if "correlations" in plots_to_generate:
+            console.log("Generating Spearman correlations...")
+            _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly)
+    
+        if "boxplots" in plots_to_generate:
+            console.log("Generating boxplots for parameter distributions...")
+            _safe_plot(
+                "boxplots",
+                plot_parameter_boxplots,
+                df,
+                best,
+                worst,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            )
+    
+        if "trends" in plots_to_generate:
+            console.log("Generating trend analysis...")
+            _safe_plot(
+                "trends",
+                plot_trend_analysis,
+                df,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            )
+    
+        if "ranges" in plots_to_generate:
+            console.log("Generating optimal ranges analysis...")
+            _safe_plot(
+                "ranges",
+                plot_optimal_ranges_analysis,
+                df,
+                best,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            )
+    
+        if "contours" in plots_to_generate:
+            console.log("Generating contour plots...")
+            _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone, create_plotly)
+    
+        if "edf" in plots_to_generate:
+            console.log("Generating EDF of study values...")
+            _safe_plot("edf", plot_edf, study, dirs, create_plotly)
+    
+        if "intermediate" in plots_to_generate:
+            console.log("Generating intermediate values plots...")
+            _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly)
+    
+        if "parallel_coordinate" in plots_to_generate:
+            console.log("Generating parallel coordinate plots...")
+            _safe_plot(
+                "parallel_coordinate",
+                plot_parallel_coordinate,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_plotly,
+            )
+    
+        if "slice" in plots_to_generate:
+            console.log("Generating slice plots...")
+            _safe_plot(
+                "slice",
+                plot_slice,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_standalone,
+                create_plotly,
+            )
+    
+        if "history" in plots_to_generate:
+            console.log("Generating optimization history plot...")
+            _safe_plot("history", plot_optimization_history, study, dirs, create_plotly)
+    
+        if "timeline" in plots_to_generate:
+            console.log("Generating timeline plot...")
+            _safe_plot("timeline", plot_timeline, study, dirs, create_plotly)
+    
+        if "terminator" in plots_to_generate:
+            console.log("Generating terminator improvement plot...")
+            _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly)
+    
+        #! Rank plots are deprecated, they are causing crashes and not helping much
+        #! So they are not generated by default anymore
+        if "rank" in plots_to_generate:
+            console.log("Generating rank plots...")
+            _safe_plot(
+                "rank",
+                plot_rank,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_standalone,
+                create_plotly,
+            )
+    
+        console.log(f"\nAnalysis complete! Results saved to: {table_dir}")
+        console.log(f"- Figures: {dirs['figs']}")
+        if save_data:
+            console.log(f"- Data for LaTeX: {dirs['data']}")
+            console.log("  * Distributions:", dirs["data_distributions"])
+            console.log("  * Boxplots:", dirs["data_boxplots"])
+            console.log("  * Trends:", dirs["data_trends"])
+            console.log("  * Ranges:", dirs["data_ranges"])
+            console.log("  * Importances:", dirs["data_importances"])
+            console.log("  * Correlations:", dirs["data_correlations"])
+        console.log(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
+    
         if create_standalone:
-            print(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
-            print(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
-            print(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
-            print(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
-            print(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
-            print(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
-
-    if param_name_mapping:
-        print(f"\nParameter name mappings applied:")
-        for orig, display in param_name_mapping.items():
-            print(f"  {orig} -> {display}")
-
-    print(
-        f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
-    )
-
-    if plots is not None:
-        print(f"Generated plots: {sorted(plots_to_generate)}")
+            console.log("- Standalone images:")
+            console.log(f"  * Distributions: {dirs['standalone_distributions']}")
+            console.log(f"  * Boxplots: {dirs['standalone_boxplots']}")
+            console.log(f"  * Trends: {dirs['standalone_trends']}")
+            console.log(f"  * Ranges: {dirs['standalone_ranges']}")
+            console.log(f"  * Contours: {dirs['standalone_contours']}")
+            console.log(f"  * Slices: {dirs['standalone_slices']}")
+            # console.log(f"  * Ranks: {dirs['standalone_ranks']}")
+    
+        if create_plotly:
+            console.log("- Plotly HTML files:")
+            console.log(f"  * Combined: {dirs['plotly']}")
+            if create_standalone:
+                console.log(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
+                console.log(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
+                console.log(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
+                console.log(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
+                console.log(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
+                console.log(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
+    
+        if param_name_mapping:
+            console.log(f"\nParameter name mappings applied:")
+            for orig, display in param_name_mapping.items():
+                console.log(f"  {orig} -> {display}")
+    
+        console.log(
+            f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
+        )
+    
+        if plots is not None:
+            console.log(f"Generated plots: {sorted(plots_to_generate)}")
