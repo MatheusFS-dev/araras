@@ -13,7 +13,7 @@ Example:
 import logging
 import warnings
 import traceback
-from typing import * # Wildcard import for adding type hints
+from typing import *  # Wildcard import for adding type hints
 
 # ————————————————————————————————— Constants ———————————————————————————————— #
 # ANSI escape codes
@@ -70,30 +70,23 @@ def make_logger(
 
 
 # 1) Simple Araras logger
-logger = make_logger(
-    "araras",
-    fmt="[ARARAS %(levelname)s] %(message)s"
-)
+logger = make_logger("araras", fmt="[ARARAS %(levelname)s] %(message)s")
 
 # 2) Error-style logger with file/line info
-logger_error = make_logger(
-    "araras_error",
-    fmt="[%(pathname)s:%(lineno)d %(levelname)s] %(message)s"
-)
+logger_error = make_logger("araras_error", fmt="[%(pathname)s:%(lineno)d %(levelname)s] %(message)s")
 
 # 3) Timestamp logger
-logger_time = make_logger(
-    "araras_time",
-    fmt="[%(asctime)s] %(levelname)s] %(message)s",
-    datefmt="%H:%M:%S"
-)
+logger_time = make_logger("araras_time", fmt="[%(asctime)s] %(levelname)s] %(message)s", datefmt="%H:%M:%S")
 
 # —————————————————————————————————— Errors —————————————————————————————————— #
 from rich.traceback import install
 
-install(show_locals=True)
+install(
+    # show_locals=True,
+)
 
 # —————————————————————————————————— Checks —————————————————————————————————— #
+#? Replaced `pretty_errors` with `rich.traceback` for better error formatting
 # try:
 #     import pretty_errors
 # except ImportError:
@@ -102,6 +95,7 @@ install(show_locals=True)
 #     )
 
 from matplotlib import font_manager
+
 if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist):
     logger.warning(
         f"{YELLOW}Times New Roman font not found. Install it by running {ORANGE}'sudo apt install msttcorefonts -qq && rm ~/.cache/matplotlib -rf'{YELLOW}."
@@ -109,4 +103,5 @@ if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist
 
 # ————————————————————————————— Supress warnings ————————————————————————————— #
 from araras.optuna.utils import supress_optuna_warnings
+
 supress_optuna_warnings()
