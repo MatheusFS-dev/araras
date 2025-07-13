@@ -13,7 +13,7 @@ Example:
 import logging
 import warnings
 import traceback
-from typing import * # Wildcard import for adding type hints
+from typing import *  # Wildcard import for adding type hints
 
 # ————————————————————————————————— Constants ———————————————————————————————— #
 # ANSI escape codes
@@ -87,6 +87,44 @@ logger_time = make_logger(
     fmt="[%(asctime)s] %(levelname)s] %(message)s",
     datefmt="%H:%M:%S"
 )
+
+# progress bar helper
+
+def white_track(iterable, description: str = "", total: int | None = None):
+    """Wrap iterable with a white Rich progress bar."""
+    try:
+        from rich.progress import (
+            Progress,
+            TextColumn,
+            BarColumn,
+            TaskProgressColumn,
+            TimeRemainingColumn,
+        )
+    except Exception:
+        for item in iterable:
+            yield item
+        return
+
+    progress = Progress(
+        TextColumn("[white]{task.description}"),
+        BarColumn(
+            bar_width=None,
+            style="white",
+            complete_style="white",
+            finished_style="white",
+            pulse_style="white",
+        ),
+        TaskProgressColumn(style="white"),
+        TextColumn("[white]{task.completed}/{task.total}"),
+        TimeRemainingColumn(style="white", compact=True),
+        transient=True,
+    )
+    with progress:
+        yield from progress.track(
+            iterable,
+            description=description,
+            total=total,
+        )
 
 # —————————————————————————————————— Checks —————————————————————————————————— #
 try:

@@ -21,7 +21,7 @@ import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
-from tqdm import tqdm
+from araras.commons import white_track
 
 from araras.plot.configs import config_plt
 
@@ -186,9 +186,10 @@ def model_param_distribution(
 
     progress_iter = range(n_trials)
     if n_trials:
-        progress_iter = tqdm(
+        progress_iter = white_track(
             progress_iter,
-            bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+            description="Sampling models",
+            total=n_trials,
         )
     for _ in progress_iter:
         trial = study.ask()

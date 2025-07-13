@@ -15,7 +15,7 @@ from araras.commons import *
 import time
 import tensorflow as tf
 import psutil
-from tqdm import tqdm
+from araras.commons import white_track
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
@@ -154,9 +154,10 @@ def get_memory_and_time(
         times = []
         progress_iter = range(test_runs)
         if verbose:
-            progress_iter = tqdm(
+            progress_iter = white_track(
                 progress_iter,
-                bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+                description="Measuring GPU",
+                total=test_runs,
             )
         for _ in progress_iter:
             t0 = time.perf_counter()
@@ -189,9 +190,10 @@ def get_memory_and_time(
         with tf.device(f"/CPU:{cpu_index}"):
             progress_iter = range(test_runs)
             if verbose:
-                progress_iter = tqdm(
+                progress_iter = white_track(
                     progress_iter,
-                    bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt}",
+                    description="Measuring CPU",
+                    total=test_runs,
                 )
             for _ in progress_iter:
                 t0 = time.perf_counter()
