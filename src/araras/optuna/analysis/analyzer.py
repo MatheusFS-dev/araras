@@ -12,25 +12,6 @@ Example:
 
 from araras.commons import *
 
-try:  # pragma: no cover - optional rich import
-    from rich.console import Console
-except Exception:  # pragma: no cover - fallback if rich is unavailable
-    class Console:  # minimal fallback Console
-        class _DummyStatus:
-            def __init__(self, message: str):
-                self.message = message
-            def __enter__(self):
-                print(self.message)
-                return self
-            def __exit__(self, exc_type, exc, tb):
-                pass
-
-        def status(self, message: str):
-            return self._DummyStatus(message)
-
-        def log(self, message: str):
-            print(message)
-
 import os
 import re
 import math
@@ -39,6 +20,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
+from rich.console import Console
 
 
 @dataclass
@@ -523,7 +505,7 @@ def analyze_study(
             If None, generates all plots.
     """
     console = Console()
-    with console.status("[bold green]Analyzing study..."):
+    with console.status("[bold green]Analyzing study...", spinner="pong"):
     
         # Define all available plot types
         all_plots = {
@@ -586,7 +568,8 @@ def analyze_study(
             # Deactivate parallel coordinate and rank plots by default
             plots_to_generate -= {"parallel_coordinate", "rank"}
     
-        console.log("\nGenerating summary tables...")
+        print("\n")
+        console.log("Generating summary tables...")
         save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
     
         if "distributions" in plots_to_generate:
@@ -714,45 +697,45 @@ def analyze_study(
                 create_plotly,
             )
     
-        console.log(f"\nAnalysis complete! Results saved to: {table_dir}")
-        console.log(f"- Figures: {dirs['figs']}")
+        print(f"\nAnalysis complete! Results saved to: {table_dir}")
+        print(f"- Figures: {dirs['figs']}")
         if save_data:
-            console.log(f"- Data for LaTeX: {dirs['data']}")
-            console.log("  * Distributions:", dirs["data_distributions"])
-            console.log("  * Boxplots:", dirs["data_boxplots"])
-            console.log("  * Trends:", dirs["data_trends"])
-            console.log("  * Ranges:", dirs["data_ranges"])
-            console.log("  * Importances:", dirs["data_importances"])
-            console.log("  * Correlations:", dirs["data_correlations"])
-        console.log(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
+            print(f"- Data for LaTeX: {dirs['data']}")
+            print("  * Distributions:", dirs["data_distributions"])
+            print("  * Boxplots:", dirs["data_boxplots"])
+            print("  * Trends:", dirs["data_trends"])
+            print("  * Ranges:", dirs["data_ranges"])
+            print("  * Importances:", dirs["data_importances"])
+            print("  * Correlations:", dirs["data_correlations"])
+        print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
     
         if create_standalone:
-            console.log("- Standalone images:")
-            console.log(f"  * Distributions: {dirs['standalone_distributions']}")
-            console.log(f"  * Boxplots: {dirs['standalone_boxplots']}")
-            console.log(f"  * Trends: {dirs['standalone_trends']}")
-            console.log(f"  * Ranges: {dirs['standalone_ranges']}")
-            console.log(f"  * Contours: {dirs['standalone_contours']}")
-            console.log(f"  * Slices: {dirs['standalone_slices']}")
-            # console.log(f"  * Ranks: {dirs['standalone_ranks']}")
+            print("- Standalone images:")
+            print(f"  * Distributions: {dirs['standalone_distributions']}")
+            print(f"  * Boxplots: {dirs['standalone_boxplots']}")
+            print(f"  * Trends: {dirs['standalone_trends']}")
+            print(f"  * Ranges: {dirs['standalone_ranges']}")
+            print(f"  * Contours: {dirs['standalone_contours']}")
+            print(f"  * Slices: {dirs['standalone_slices']}")
+            print(f"  * Ranks: {dirs['standalone_ranks']}")
     
         if create_plotly:
-            console.log("- Plotly HTML files:")
-            console.log(f"  * Combined: {dirs['plotly']}")
+            print("- Plotly HTML files:")
+            print(f"  * Combined: {dirs['plotly']}")
             if create_standalone:
-                console.log(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
-                console.log(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
-                console.log(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
-                console.log(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
-                console.log(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
-                console.log(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
-    
+                print(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
+                print(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
+                print(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
+                print(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
+                print(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
+                print(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
+
         if param_name_mapping:
-            console.log(f"\nParameter name mappings applied:")
+            print(f"\nParameter name mappings applied:")
             for orig, display in param_name_mapping.items():
-                console.log(f"  {orig} -> {display}")
-    
-        console.log(
+                print(f"  {orig} -> {display}")
+
+        print(
             f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
         )
     
