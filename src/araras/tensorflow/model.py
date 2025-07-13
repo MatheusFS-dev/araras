@@ -8,12 +8,13 @@ Example:
     >>> from araras.tensorflow.utils.model import get_model_usage_stats
     >>> get_model_usage_stats(...)
 """
+
 from araras.commons import *
 
 import time
 import pynvml
 import tensorflow as tf
-from rich.progress import track
+from araras.utils import white_track
 
 
 def get_model_usage_stats(
@@ -137,15 +138,16 @@ def get_model_usage_stats(
                 pynvml.nvmlInit()
                 handle = pynvml.nvmlDeviceGetHandleByIndex(device)
             except Exception as e:
-                raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
+                raise RuntimeError(
+                    "Unable to initialize NVML for GPU power monitoring: " + str(e)
+                )
 
         progress_iter = range(n_trials)
         if verbose:
-            progress_iter = track(
+            progress_iter = white_track(
                 progress_iter,
                 description="Measuring usage",
                 total=n_trials,
-                style="white",
             )
         for _ in progress_iter:
 
@@ -175,13 +177,14 @@ def get_model_usage_stats(
 
             times.append(elapsed)
 
-
         if device >= 0:
             pynvml.nvmlShutdown()
 
         per_run_time = sum(times) / len(times)
         avg_power = sum(powers) / len(powers) if powers else 0
-        avg_energy = sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0
+        avg_energy = (
+            sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0
+        )
 
         if avg_power >= 0:
             return per_run_time, avg_power, avg_energy
@@ -191,6 +194,8 @@ def get_model_usage_stats(
             logger_error.error(
                 f"{RED}Average power measurement failed after {MAX_RETRIES} attempts, returning 0.{RESET}"
             )
-        
+
             return per_run_time, 0.0, 0.0
-        logger.warning(f"{YELLOW}Negative average power measured, retrying measurement...{RESET}")
+        logger.warning(
+            f"{YELLOW}Negative average power measured, retrying measurement...{RESET}"
+        )
