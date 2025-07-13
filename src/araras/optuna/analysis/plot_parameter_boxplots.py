@@ -112,7 +112,7 @@ def plot_parameter_boxplots(
 
     # Main function logic
     if numeric_cols:
-        print(f"    Creating numeric boxplots ({len(numeric_cols)} parameters)...")
+        # print(f"    Creating numeric boxplots ({len(numeric_cols)} parameters)...")
 
         # Calculate grid dimensions and adjust columns if needed
         max_cols = PLOT_CFG.max_cols

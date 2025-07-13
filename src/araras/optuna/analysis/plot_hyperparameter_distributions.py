@@ -56,7 +56,7 @@ def plot_hyperparameter_distributions(
 
     # ———————————————————————— Numeric Parameters Figure ——————————————————————— #
     if numeric_cols:
-        print(f"    Creating numeric distribution plots ({len(numeric_cols)} parameters)...")
+        # print(f"    Creating numeric distribution plots ({len(numeric_cols)} parameters)...")
 
         # Calculate grid dimensions and adjust columns if needed
         max_cols = PLOT_CFG.max_cols
@@ -329,7 +329,7 @@ def plot_hyperparameter_distributions(
 
     # ——————————————————————— Categorical Parameters Figure ————————————————————— #
     if categorical_cols:
-        print(f"    Creating categorical distribution plots ({len(categorical_cols)} parameters)...")
+        # print(f"    Creating categorical distribution plots ({len(categorical_cols)} parameters)...")
 
         # Calculate grid dimensions and adjust columns if needed
         max_cols = PLOT_CFG.max_cols
