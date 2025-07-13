@@ -568,7 +568,6 @@ def analyze_study(
             # Deactivate parallel coordinate and rank plots by default
             plots_to_generate -= {"parallel_coordinate", "rank"}
     
-        print("\n")
         console.log("Generating summary tables...")
         save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
     
