@@ -1,42 +1,10 @@
 # API Documentation
 
-## commons
-
-### make_logger
-```python
-make_logger(name: str, fmt: str, datefmt: str | None, level: int)  [source]
-```
-Create a logger with its own StreamHandler and ColorFormatter.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| name | `str` |  |
-| fmt | `str` |  |
-| datefmt | `str | None` |  |
-| level | `int` |  |
-
-**Returns**
-
-`logging.Logger` – 
-
-
-**Raises**
-
-- None
-
-**Examples**
-
-```python
-result = make_logger(...)
-```
-
 ## email.utils
 
 ### get_credentials
 ```python
-get_credentials(file_path: str)  [source]
+get_credentials(file_path: str)  
 ```
 Reads the sender's email and password from a JSON file.
 
@@ -63,7 +31,7 @@ result = get_credentials(...)
 
 ### get_recipient_emails
 ```python
-get_recipient_emails(file_path: str)  [source]
+get_recipient_emails(file_path: str)  
 ```
 Reads a list of recipient email addresses from a JSON file.
 
@@ -90,7 +58,7 @@ result = get_recipient_emails(...)
 
 ### send_email
 ```python
-send_email(subject: str, body: str, recipients_file: str, credentials_file: str, text_type: str, smtp_server: str, smtp_port: int)  [source]
+send_email(subject: str, body: str, recipients_file: str, credentials_file: str, text_type: str, smtp_server: str, smtp_port: int)  
 ```
 Sends an email notification with the specified subject and body content to multiple recipients.
 > [!CAUTION]
@@ -127,7 +95,7 @@ result = send_email(...)
 
 ### get_model_trainable_params
 ```python
-get_model_trainable_params(model: keras.Model)  [source]
+get_model_trainable_params(model: keras.Model)  
 ```
 Get number of trainable parameters in the model.
 
@@ -154,7 +122,7 @@ result = get_model_trainable_params(...)
 
 ### get_precision_bytes
 ```python
-get_precision_bytes(model: keras.Model)  [source]
+get_precision_bytes(model: keras.Model)  
 ```
 Determine bytes per parameter based on model's actual dtype.
 
@@ -181,7 +149,7 @@ result = get_precision_bytes(...)
 
 ### get_optimizer_state_factor
 ```python
-get_optimizer_state_factor(model: keras.Model)  [source]
+get_optimizer_state_factor(model: keras.Model)  
 ```
 Determine optimizer state factor from compiled model.
 
@@ -208,7 +176,7 @@ result = get_optimizer_state_factor(...)
 
 ### calculate_activation_memory
 ```python
-calculate_activation_memory(model: keras.Model, bytes_per_param: int)  [source]
+calculate_activation_memory(model: keras.Model, bytes_per_param: int)  
 ```
 Calculate activation memory needed during forward/backward pass.
 
@@ -236,7 +204,7 @@ result = calculate_activation_memory(...)
 
 ### get_framework_overhead
 ```python
-get_framework_overhead()  [source]
+get_framework_overhead()  
 ```
 Calculate framework overhead based on available GPU memory.
 
@@ -262,7 +230,7 @@ result = get_framework_overhead(...)
 
 ### estimate_training_memory
 ```python
-estimate_training_memory(model: keras.Model, batch_size: int)  [source]
+estimate_training_memory(model: keras.Model, batch_size: int)  
 ```
 Estimate total VRAM needed for training a Keras model in bytes.
 
@@ -290,7 +258,7 @@ result = estimate_training_memory(...)
 
 ### model_param_distribution
 ```python
-model_param_distribution(build_model_fn: Callable[[optuna.Trial], tf.keras.Model], bits_per_param: int, batch_size: int, n_trials: int)  [source]
+model_param_distribution(build_model_fn: Callable[[optuna.Trial], tf.keras.Model], bits_per_param: int, batch_size: int, n_trials: int)  
 ```
 Sample random models and plot parameter and size histograms.
 
@@ -323,7 +291,7 @@ result = model_param_distribution(...)
 
 ### get_flops
 ```python
-get_flops(model: tf.keras.Model, batch_size: int)  [source]
+get_flops(model: tf.keras.Model, batch_size: int)  
 ```
 Calculates the total number of floating-point operations (FLOPs) needed
 
@@ -351,7 +319,7 @@ result = get_flops(...)
 
 ### get_macs
 ```python
-get_macs(model: tf.keras.Model, batch_size: int)  [source]
+get_macs(model: tf.keras.Model, batch_size: int)  
 ```
 Estimates the number of Multiply-Accumulate operations (MACs) required
 
@@ -379,7 +347,7 @@ result = get_macs(...)
 
 ### get_memory_and_time
 ```python
-get_memory_and_time(model: tf.keras.Model, batch_size: int, device: int, warmup_runs: int, test_runs: int, verbose: bool)  [source]
+get_memory_and_time(model: tf.keras.Model, batch_size: int, device: int, warmup_runs: int, test_runs: int, verbose: bool)  
 ```
 Measures the peak memory usage and average inference time of a Keras model
 
@@ -413,7 +381,7 @@ result = get_memory_and_time(...)
 
 ### build_cnn1d
 ```python
-build_cnn1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], kernel_size_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: int, dilation_rate: int, groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  [source]
+build_cnn1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], kernel_size_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: int, dilation_rate: int, groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  
 ```
 Builds a 1D convolutional layer with optional hyperparameter tuning and regularization.
 
@@ -463,7 +431,7 @@ result = build_cnn1d(...)
 
 ### build_dense_as_conv1d
 ```python
-build_dense_as_conv1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_dense_as_conv1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Simulate a Dense layer using a Conv1D with kernel_size=1.
 
@@ -499,7 +467,7 @@ result = build_dense_as_conv1d(...)
 
 ### build_cnn2d
 ```python
-build_cnn2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: tuple[int, int], dilation_rate: tuple[int, int], groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  [source]
+build_cnn2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: tuple[int, int], dilation_rate: tuple[int, int], groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  
 ```
 Builds a 2D convolutional layer with optional hyperparameter tuning and regularization.
 
@@ -554,7 +522,7 @@ result = build_cnn2d(...)
 
 ### build_dense_as_conv2d
 ```python
-build_dense_as_conv2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_dense_as_conv2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Simulate a Dense layer using a Conv2D with kernel_size=(1, 1).
 
@@ -590,7 +558,7 @@ result = build_dense_as_conv2d(...)
 
 ### build_cnn3d
 ```python
-build_cnn3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, Tuple[int, int]], kernel_size_range: Union[Tuple[int, int, int], Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: Tuple[int, int, int], dilation_rate: Tuple[int, int, int], groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  [source]
+build_cnn3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, Tuple[int, int]], kernel_size_range: Union[Tuple[int, int, int], Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]], filters_step: int, kernel_size_step: int, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, strides: Tuple[int, int, int], dilation_rate: Tuple[int, int, int], groups: int, use_bias: bool, padding: str, data_format: str, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, name_prefix: str)  
 ```
 Builds a 3D convolutional layer with optional hyperparameter tuning and regularization.
 
@@ -650,7 +618,7 @@ result = build_cnn3d(...)
 
 ### build_dense_as_conv3d
 ```python
-build_dense_as_conv3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_dense_as_conv3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: int, filters_step: int, padding: str, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Simulate a Dense layer using a Conv3D with kernel_size=(1, 1, 1).
 
@@ -688,7 +656,7 @@ result = build_dense_as_conv3d(...)
 
 ### build_dnn
 ```python
-build_dnn(trial: Any, kparams: KParams, x: layers.Layer, units_range: Union[int, tuple[int, int]], dropout_rate_range: Union[float, tuple[float, float]], units_step: int, dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_dnn(trial: Any, kparams: KParams, x: layers.Layer, units_range: Union[int, tuple[int, int]], dropout_rate_range: Union[float, tuple[float, float]], units_step: int, dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Builds a single dense neural network (DNN) block with optional regularization, batch normalization, and dropout.
 
@@ -735,7 +703,7 @@ result = build_dnn(...)
 
 ### print_warning_jit
 ```python
-print_warning_jit()  [source]
+print_warning_jit()  
 ```
 Print a warning about JIT compilation.
 
@@ -761,7 +729,7 @@ result = print_warning_jit(...)
 
 ### build_grid_adjacency
 ```python
-build_grid_adjacency(rows: int, cols: int)  [source]
+build_grid_adjacency(rows: int, cols: int)  
 ```
 Build a grid adjacency matrix with GCN normalization.
 
@@ -789,7 +757,7 @@ result = build_grid_adjacency(...)
 
 ### build_knn_adjacency
 ```python
-build_knn_adjacency(rows: int, cols: int, k: int)  [source]
+build_knn_adjacency(rows: int, cols: int, k: int)  
 ```
 Construct a k-nearest neighbour adjacency matrix on a 2-D grid.
 
@@ -818,7 +786,7 @@ result = build_knn_adjacency(...)
 
 ### _select_range_value
 ```python
-_select_range_value(trial: Any, name: str, value_range: Union[int, Tuple[int, int]], step: int)  [source]
+_select_range_value(trial: Any, name: str, value_range: Union[int, Tuple[int, int]], step: int)  
 ```
 Helper to pick an integer from a fixed value or an Optuna range.
 
@@ -850,7 +818,7 @@ result = _select_range_value(...)
 
 ### _select_float_range_value
 ```python
-_select_float_range_value(trial: Any, name: str, value_range: Union[float, Tuple[float, float]], step: float)  [source]
+_select_float_range_value(trial: Any, name: str, value_range: Union[float, Tuple[float, float]], step: float)  
 ```
 Helper to pick a float from a fixed value or an Optuna range.
 
@@ -882,7 +850,7 @@ result = _select_float_range_value(...)
 
 ### build_gcn
 ```python
-build_gcn(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], units_step: int, dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_gcn(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], units_step: int, dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Build a single Graph Convolutional Network (GCN) layer.
 
@@ -928,7 +896,7 @@ result = build_gcn(...)
 
 ### build_gat
 ```python
-build_gat(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], heads_range: Union[int, Tuple[int, int]], units_step: int, dropout_rate_step: float, heads_step: int, concat_heads: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_gat(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], heads_range: Union[int, Tuple[int, int]], units_step: int, dropout_rate_step: float, heads_step: int, concat_heads: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Build a single Graph Attention (GAT) layer.
 
@@ -979,7 +947,7 @@ result = build_gat(...)
 
 ### build_cheb
 ```python
-build_cheb(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], K_range: Union[int, Tuple[int, int]], units_step: int, dropout_rate_step: float, K_step: int, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_cheb(trial: Any, kparams: KParams, x: layers.Layer, a_graph: tf.sparse.SparseTensor, units_range: Union[int, Tuple[int, int]], dropout_rate_range: Union[float, Tuple[float, float]], K_range: Union[int, Tuple[int, int]], units_step: int, dropout_rate_step: float, K_step: int, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Build a single Chebyshev graph convolution layer.
 
@@ -1031,7 +999,7 @@ result = build_cheb(...)
 
 ### build_lstm
 ```python
-build_lstm(trial: Any, kparams: KParams, x: layers.Layer, return_sequences: bool, units_range: Union[int, tuple[int, int]], units_step: int, dropout_rate_range: Union[float, tuple[float, float]], dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_lstm(trial: Any, kparams: KParams, x: layers.Layer, return_sequences: bool, units_range: Union[int, tuple[int, int]], units_step: int, dropout_rate_range: Union[float, tuple[float, float]], dropout_rate_step: float, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_bias: bool, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Builds a single LSTM block with optional regularization, batch normalization, and dynamic dropout.
 
@@ -1079,7 +1047,7 @@ result = build_lstm(...)
 
 ### build_squeeze_excite_1d
 ```python
-build_squeeze_excite_1d(x: tf.keras.layers.Layer, trial: optuna.Trial, kparams: KParams, ratio_choices: List[int], name_prefix: str)  [source]
+build_squeeze_excite_1d(x: tf.keras.layers.Layer, trial: optuna.Trial, kparams: KParams, ratio_choices: List[int], name_prefix: str)  
 ```
 Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
 
@@ -1112,7 +1080,7 @@ result = build_squeeze_excite_1d(...)
 
 ### trial_skip_connections
 ```python
-trial_skip_connections(trial: optuna.trial.Trial, layers_list: Sequence[tf.Tensor], axis_to_concat: int, print_combinations: bool, strategy: str, merge_mode: str)  [source]
+trial_skip_connections(trial: optuna.trial.Trial, layers_list: Sequence[tf.Tensor], axis_to_concat: int, print_combinations: bool, strategy: str, merge_mode: str)  
 ```
 Constructs conditional skip connections between layers based on Optuna trial choices.
 
@@ -1147,7 +1115,7 @@ result = trial_skip_connections(...)
 
 ### build_tcnn1d
 ```python
-build_tcnn1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_range: Union[int, tuple[int, int]], kernel_size_step: int, data_format: str, padding: str, strides: int, dilation_rate: int, use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_tcnn1d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_range: Union[int, tuple[int, int]], kernel_size_step: int, data_format: str, padding: str, strides: int, dilation_rate: int, use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Builds a single 1D transposed convolution block with optional batch norm and activation.
 
@@ -1196,7 +1164,7 @@ result = build_tcnn1d(...)
 
 ### build_tcnn2d
 ```python
-build_tcnn2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]], kernel_size_step: int, data_format: str, padding: str, strides: tuple[int, int], dilation_rate: tuple[int, int], use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_tcnn2d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, tuple[int, int]], filters_step: int, kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]], kernel_size_step: int, data_format: str, padding: str, strides: tuple[int, int], dilation_rate: tuple[int, int], use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Builds a single 2D transposed convolution block with optional batch norm and activation.
 
@@ -1250,7 +1218,7 @@ result = build_tcnn2d(...)
 
 ### build_tcnn3d
 ```python
-build_tcnn3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, Tuple[int, int]], filters_step: int, kernel_size_range: Union[Tuple[int, int, int], Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]], kernel_size_step: int, data_format: str, padding: str, strides: Tuple[int, int, int], dilation_rate: Tuple[int, int, int], use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  [source]
+build_tcnn3d(trial: Any, kparams: KParams, x: layers.Layer, filters_range: Union[int, Tuple[int, int]], filters_step: int, kernel_size_range: Union[Tuple[int, int, int], Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]], kernel_size_step: int, data_format: str, padding: str, strides: Tuple[int, int, int], dilation_rate: Tuple[int, int, int], use_bias: bool, kernel_initializer: initializers.Initializer, bias_initializer: initializers.Initializer, use_batch_norm: bool, trial_kernel_reg: bool, trial_bias_reg: bool, trial_activity_reg: bool, name_prefix: str)  
 ```
 Builds a single 3D transposed convolution block with optional batch norm and activation.
 
@@ -1311,7 +1279,7 @@ result = build_tcnn3d(...)
 
 ### get_callbacks_study
 ```python
-get_callbacks_study(trial: optuna.Trial, tensorboard_logs: str, monitor: str)  [source]
+get_callbacks_study(trial: optuna.Trial, tensorboard_logs: str, monitor: str)  
 ```
 Constructs and returns a list of Keras callbacks tailored for Optuna trials.
 
@@ -1340,7 +1308,7 @@ result = get_callbacks_study(...)
 
 ### get_callbacks_model
 ```python
-get_callbacks_model(backup_dir: str, tensorboard_logs: str)  [source]
+get_callbacks_model(backup_dir: str, tensorboard_logs: str)  
 ```
 Constructs and returns a list of Keras callbacks for model training.
 
@@ -1370,7 +1338,7 @@ result = get_callbacks_model(...)
 
 ### _sample_choice
 ```python
-_sample_choice(trial: optuna.Trial, name: str, choices: Sequence[Any])  [source]
+_sample_choice(trial: optuna.Trial, name: str, choices: Sequence[Any])  
 ```
 Sample a value from ``choices`` using Optuna.
 
@@ -1399,7 +1367,7 @@ result = _sample_choice(...)
 
 ### _ensure_mapping
 ```python
-_ensure_mapping(choices: Union[Sequence[Any], Mapping[str, Any]])  [source]
+_ensure_mapping(choices: Union[Sequence[Any], Mapping[str, Any]])  
 ```
 Convert choices to a ``dict`` keyed by unique strings.
 
@@ -1430,7 +1398,7 @@ result = _ensure_mapping(...)
 
 ### convert_to_saved_model
 ```python
-convert_to_saved_model(input_keras_path: str, output_zip_path: str)  [source]
+convert_to_saved_model(input_keras_path: str, output_zip_path: str)  
 ```
 Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
 
@@ -1458,7 +1426,7 @@ result = convert_to_saved_model(...)
 
 ### capture_model_summary
 ```python
-capture_model_summary(model: Any)  [source]
+capture_model_summary(model: Any)  
 ```
 Capture model summary as a string.
 
@@ -1485,7 +1453,7 @@ result = capture_model_summary(...)
 
 ### punish_model_flops
 ```python
-punish_model_flops(target: Union[float, Sequence[float]], model: tf.keras.Model, penalty_factor: float, direction: Literal['minimize', 'maximize'])  [source]
+punish_model_flops(target: Union[float, Sequence[float]], model: tf.keras.Model, penalty_factor: float, direction: Literal['minimize', 'maximize'])  
 ```
 Penalize an objective according to the model's FLOPs.
 
@@ -1517,7 +1485,7 @@ result = punish_model_flops(...)
 
 ### punish_model_params
 ```python
-punish_model_params(target: Union[float, Sequence[float]], model: tf.keras.Model, penalty_factor: float, direction: Literal['minimize', 'maximize'])  [source]
+punish_model_params(target: Union[float, Sequence[float]], model: tf.keras.Model, penalty_factor: float, direction: Literal['minimize', 'maximize'])  
 ```
 Penalize an objective according to the model's parameter count.
 
@@ -1549,7 +1517,7 @@ result = punish_model_params(...)
 
 ### punish_model
 ```python
-punish_model(target: Union[float, Sequence[float]], model: tf.keras.Model, type: Literal['flops', 'params', None], flops_penalty_factor: float, params_penalty_factor: float, direction: Literal['minimize', 'maximize'])  [source]
+punish_model(target: Union[float, Sequence[float]], model: tf.keras.Model, type: Literal['flops', 'params', None], flops_penalty_factor: float, params_penalty_factor: float, direction: Literal['minimize', 'maximize'])  
 ```
 Apply both FLOPs and parameter penalties to an objective.
 
@@ -1587,7 +1555,7 @@ result = punish_model(...)
 
 ### print_monitoring_config_summary
 ```python
-print_monitoring_config_summary(file_path: str, file_type: str, success_flag_file: str, max_restarts: int, email_enabled: bool, title: str, restart_after_delay: Optional[float])  [source]
+print_monitoring_config_summary(file_path: str, file_type: str, success_flag_file: str, max_restarts: int, email_enabled: bool, title: str, restart_after_delay: Optional[float])  
 ```
 Print a summary of monitoring configuration only once.
 
@@ -1620,7 +1588,7 @@ result = print_monitoring_config_summary(...)
 
 ### print_process_status
 ```python
-print_process_status(message: str, pid: Optional[int], runtime: Optional[float])  [source]
+print_process_status(message: str, pid: Optional[int], runtime: Optional[float])  
 ```
 Print process status messages with consistent formatting.
 
@@ -1649,7 +1617,7 @@ result = print_process_status(...)
 
 ### print_restart_info
 ```python
-print_restart_info(restart_count: int, max_restarts: int, delay: float)  [source]
+print_restart_info(restart_count: int, max_restarts: int, delay: float)  
 ```
 Print restart information with formatting.
 
@@ -1678,7 +1646,7 @@ result = print_restart_info(...)
 
 ### print_completion_summary
 ```python
-print_completion_summary(restart_count: int, total_runtime: Optional[float])  [source]
+print_completion_summary(restart_count: int, total_runtime: Optional[float])  
 ```
 Print final completion summary.
 
@@ -1706,7 +1674,7 @@ result = print_completion_summary(...)
 
 ### print_error_message
 ```python
-print_error_message(error_type: str, message: str)  [source]
+print_error_message(error_type: str, message: str)  
 ```
 Print error messages with consistent formatting.
 
@@ -1734,7 +1702,7 @@ result = print_error_message(...)
 
 ### print_warning_message
 ```python
-print_warning_message(message: str)  [source]
+print_warning_message(message: str)  
 ```
 Print warning messages with consistent formatting.
 
@@ -1761,7 +1729,7 @@ result = print_warning_message(...)
 
 ### print_success_message
 ```python
-print_success_message(message: str)  [source]
+print_success_message(message: str)  
 ```
 Print success messages with consistent formatting.
 
@@ -1788,7 +1756,7 @@ result = print_success_message(...)
 
 ### print_cleanup_info
 ```python
-print_cleanup_info(terminated: int, killed: int)  [source]
+print_cleanup_info(terminated: int, killed: int)  
 ```
 Print child process cleanup information.
 
@@ -1816,7 +1784,7 @@ result = print_cleanup_info(...)
 
 ### _cleanup_stale_monitor_files
 ```python
-_cleanup_stale_monitor_files()  [source]
+_cleanup_stale_monitor_files()  
 ```
 
 
@@ -1842,7 +1810,7 @@ result = _cleanup_stale_monitor_files(...)
 
 ### get_process_resource_usage
 ```python
-get_process_resource_usage(pid: int)  [source]
+get_process_resource_usage(pid: int)  
 ```
 Return memory percentage, memory in GB, and CPU percentage for a process.
 
@@ -1869,7 +1837,7 @@ result = get_process_resource_usage(...)
 
 ### print_process_resource_usage
 ```python
-print_process_resource_usage(pid: int)  [source]
+print_process_resource_usage(pid: int)  
 ```
 Display CPU and memory usage for a process in a single updating line.
 
@@ -1896,7 +1864,7 @@ result = print_process_resource_usage(...)
 
 ### start_monitor
 ```python
-start_monitor(pid: int, title: str, supress_tf_warnings: bool)  [source]
+start_monitor(pid: int, title: str, supress_tf_warnings: bool)  
 ```
 Start simplified crash monitor without email capabilities.
 
@@ -1926,7 +1894,7 @@ result = start_monitor(...)
 
 ### stop_monitor
 ```python
-stop_monitor(monitor_info: Dict[str, Any])  [source]
+stop_monitor(monitor_info: Dict[str, Any])  
 ```
 Stop monitor and cleanup files with optimized batch operations.
 
@@ -1954,7 +1922,7 @@ result = stop_monitor(...)
 
 ### check_crash_signal
 ```python
-check_crash_signal(monitor_info: Dict[str, Any])  [source]
+check_crash_signal(monitor_info: Dict[str, Any])  
 ```
 Check if process crashed with minimal I/O operations.
 
@@ -1982,7 +1950,7 @@ result = check_crash_signal(...)
 
 ### run_auto_restart
 ```python
-run_auto_restart(file_path: str, success_flag_file: str, title: Optional[str], max_restarts: int, restart_delay: float, recipients_file: Optional[str], credentials_file: Optional[str], restart_after_delay: Optional[float], retry_attempts: int, supress_tf_warnings: bool, resource_usage_log_file: Optional[str])  [source]
+run_auto_restart(file_path: str, success_flag_file: str, title: Optional[str], max_restarts: int, restart_delay: float, recipients_file: Optional[str], credentials_file: Optional[str], restart_after_delay: Optional[float], retry_attempts: int, supress_tf_warnings: bool, resource_usage_log_file: Optional[str])  
 ```
 Main function with notebook conversion, file cleanup, and consolidated email notification support.
 > [!WARNING]
@@ -2025,7 +1993,7 @@ result = run_auto_restart(...)
 
 ### set_plot_config_param
 ```python
-set_plot_config_param(param_name: str, value: Any)  [source]
+set_plot_config_param(param_name: str, value: Any)  
 ```
 Set a single parameter in :data:`PLOT_CFG`.
 
@@ -2053,7 +2021,7 @@ result = set_plot_config_param(...)
 
 ### set_plot_config_params
 ```python
-set_plot_config_params()  [source]
+set_plot_config_params()  
 ```
 Set multiple parameters in :data:`PLOT_CFG`.
 
@@ -2079,7 +2047,7 @@ result = set_plot_config_params(...)
 
 ### format_title
 ```python
-format_title(template: str, display_name: str)  [source]
+format_title(template: str, display_name: str)  
 ```
 Format a title template with the given display name.
 
@@ -2107,7 +2075,7 @@ result = format_title(...)
 
 ### calculate_grid
 ```python
-calculate_grid(n_plots: int, subplot_width: int, subplot_height: int, base_max_cols: int)  [source]
+calculate_grid(n_plots: int, subplot_width: int, subplot_height: int, base_max_cols: int)  
 ```
 Calculate grid dimensions ensuring the resulting figure stays within
 
@@ -2137,7 +2105,7 @@ result = calculate_grid(...)
 
 ### draw_warning_box
 ```python
-draw_warning_box(ax: plt.Axes, message: str)  [source]
+draw_warning_box(ax: plt.Axes, message: str)  
 ```
 Display a warning message inside a plot area.
 
@@ -2165,7 +2133,7 @@ result = draw_warning_box(...)
 
 ### create_directories
 ```python
-create_directories(table_dir: str, create_standalone: bool, save_data: bool, create_plotly: bool)  [source]
+create_directories(table_dir: str, create_standalone: bool, save_data: bool, create_plotly: bool)  
 ```
 Create organized subdirectories for storing analysis outputs.
 
@@ -2195,7 +2163,7 @@ result = create_directories(...)
 
 ### save_data_for_latex
 ```python
-save_data_for_latex(data_dict: Dict[str, Any], filename: str, data_dir: str)  [source]
+save_data_for_latex(data_dict: Dict[str, Any], filename: str, data_dir: str)  
 ```
 Save graph data to CSV files for LaTeX plotting.
 
@@ -2225,7 +2193,7 @@ result = save_data_for_latex(...)
 
 ### save_plotly_html
 ```python
-save_plotly_html(fig: Any, filepath: str)  [source]
+save_plotly_html(fig: Any, filepath: str)  
 ```
 Save a Plotly figure to an HTML file.
 
@@ -2253,7 +2221,7 @@ result = save_plotly_html(...)
 
 ### save_plot
 ```python
-save_plot(fig: plt.Figure, dirs: Dict[str, str], base_name: str, subdir_key: str, create_plotly: bool, plotly_fig: Any)  [source]
+save_plot(fig: plt.Figure, dirs: Dict[str, str], base_name: str, subdir_key: str, create_plotly: bool, plotly_fig: Any)  
 ```
 Save Matplotlib figure and optionally a Plotly HTML version.
 
@@ -2286,7 +2254,7 @@ result = save_plot(...)
 
 ### get_param_display_name
 ```python
-get_param_display_name(param_name: str, param_name_mapping: Dict[str, str])  [source]
+get_param_display_name(param_name: str, param_name_mapping: Dict[str, str])  
 ```
 Get display name for parameter, using mapping if provided.
 
@@ -2315,7 +2283,7 @@ result = get_param_display_name(...)
 
 ### prepare_dataframe
 ```python
-prepare_dataframe(study: optuna.Study)  [source]
+prepare_dataframe(study: optuna.Study)  
 ```
 Extract and clean completed trial data from Optuna study.
 
@@ -2342,7 +2310,7 @@ result = prepare_dataframe(...)
 
 ### classify_columns
 ```python
-classify_columns(df: pd.DataFrame)  [source]
+classify_columns(df: pd.DataFrame)  
 ```
 Split DataFrame columns into numeric and categorical parameter types.
 
@@ -2369,7 +2337,7 @@ result = classify_columns(...)
 
 ### get_trial_subsets
 ```python
-get_trial_subsets(df: pd.DataFrame, top_frac: float)  [source]
+get_trial_subsets(df: pd.DataFrame, top_frac: float)  
 ```
 Extract best and worst performing trial subsets based on loss values.
 
@@ -2397,7 +2365,7 @@ result = get_trial_subsets(...)
 
 ### format_numeric_value
 ```python
-format_numeric_value(x: float)  [source]
+format_numeric_value(x: float)  
 ```
 Format numeric values with appropriate precision for readability.
 
@@ -2424,7 +2392,7 @@ result = format_numeric_value(...)
 
 ### save_summary_tables
 ```python
-save_summary_tables(df: pd.DataFrame, best: pd.DataFrame, worst: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str])  [source]
+save_summary_tables(df: pd.DataFrame, best: pd.DataFrame, worst: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str])  
 ```
 Generate and save statistical summary tables for different trial subsets.
 
@@ -2457,7 +2425,7 @@ result = save_summary_tables(...)
 
 ### _safe_plot
 ```python
-_safe_plot(plot_name: str, func: Callable)  [source]
+_safe_plot(plot_name: str, func: Callable)  
 ```
 Execute a plotting function, catching and reporting any errors.
 
@@ -2485,7 +2453,7 @@ result = _safe_plot(...)
 
 ### print_study_columns
 ```python
-print_study_columns(study: optuna.Study, exclude: Optional[List[str]], param_name_mapping: Optional[Dict[str, str]])  [source]
+print_study_columns(study: optuna.Study, exclude: Optional[List[str]], param_name_mapping: Optional[Dict[str, str]])  
 ```
 Print the names of the DataFrame columns from the study as a bullet list.
 
@@ -2515,7 +2483,7 @@ result = print_study_columns(...)
 
 ### analyze_study
 ```python
-analyze_study(study: optuna.Study, table_dir: str, top_frac: float, param_name_mapping: Dict[str, str], create_standalone: bool, save_data: bool, create_plotly: bool, plots: Optional[List[str]])  [source]
+analyze_study(study: optuna.Study, table_dir: str, top_frac: float, param_name_mapping: Dict[str, str], create_standalone: bool, save_data: bool, create_plotly: bool, plots: Optional[List[str]])  
 ```
 Comprehensive analysis of Optuna hyperparameter optimization study results.
 
@@ -2552,7 +2520,7 @@ result = analyze_study(...)
 
 ### create_frequency_table
 ```python
-create_frequency_table(data: pd.DataFrame, cols: List[str])  [source]
+create_frequency_table(data: pd.DataFrame, cols: List[str])  
 ```
 Generate frequency tables for categorical hyperparameters.
 
@@ -2582,7 +2550,7 @@ result = create_frequency_table(...)
 
 ### describe_numeric
 ```python
-describe_numeric(data: pd.DataFrame, cols: List[str])  [source]
+describe_numeric(data: pd.DataFrame, cols: List[str])  
 ```
 Generate descriptive statistics for numeric hyperparameters.
 
@@ -2612,7 +2580,7 @@ result = describe_numeric(...)
 
 ### plot_contour
 ```python
-plot_contour(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_contour(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Generate contour plots for parameter pairs.
 
@@ -2646,7 +2614,7 @@ result = plot_contour(...)
 
 ### plot_edf
 ```python
-plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  
 ```
 Plot the empirical distribution function of objective values.
 
@@ -2678,7 +2646,7 @@ result = plot_edf(...)
 
 ### plot_hyperparameter_distributions
 ```python
-plot_hyperparameter_distributions(df: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_hyperparameter_distributions(df: pd.DataFrame, numeric_cols: List[str], categorical_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
 
@@ -2715,7 +2683,7 @@ result = plot_hyperparameter_distributions(...)
 
 ### plot_intermediate_values
 ```python
-plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  
 ```
 Plot intermediate values reported during trials.
 
@@ -2747,7 +2715,7 @@ result = plot_intermediate_values(...)
 
 ### plot_optimal_ranges_analysis
 ```python
-plot_optimal_ranges_analysis(df: pd.DataFrame, best: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_optimal_ranges_analysis(df: pd.DataFrame, best: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
 
@@ -2784,7 +2752,7 @@ result = plot_optimal_ranges_analysis(...)
 
 ### plot_optimization_history
 ```python
-plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  
 ```
 Plot optimization history of the study.
 
@@ -2816,7 +2784,7 @@ result = plot_optimization_history(...)
 
 ### plot_parallel_coordinate
 ```python
-plot_parallel_coordinate(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_parallel_coordinate(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_plotly: bool)  
 ```
 Create a parallel coordinate plot for trials.
 
@@ -2849,7 +2817,7 @@ result = plot_parallel_coordinate(...)
 
 ### plot_param_importances
 ```python
-plot_param_importances(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_param_importances(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  
 ```
 Generate and save parameter importance analysis.
 
@@ -2881,7 +2849,7 @@ result = plot_param_importances(...)
 
 ### plot_parameter_boxplots
 ```python
-plot_parameter_boxplots(df: pd.DataFrame, best: pd.DataFrame, worst: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_parameter_boxplots(df: pd.DataFrame, best: pd.DataFrame, worst: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
 
@@ -2919,7 +2887,7 @@ result = plot_parameter_boxplots(...)
 
 ### make_rank_plotly
 ```python
-make_rank_plotly(df: pd.DataFrame, pairs: List[Tuple[str, str]])  [source]
+make_rank_plotly(df: pd.DataFrame, pairs: List[Tuple[str, str]])  
 ```
 
 
@@ -2948,7 +2916,7 @@ result = make_rank_plotly(...)
 
 ### plot_rank
 ```python
-plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_rank(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Plot parameter relations colored by rank.
 
@@ -2982,7 +2950,7 @@ result = plot_rank(...)
 
 ### plot_slice
 ```python
-plot_slice(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_slice(study: optuna.Study, params: List[str], dirs: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Create slice plots for each parameter.
 
@@ -3016,7 +2984,7 @@ result = plot_slice(...)
 
 ### plot_spearman_correlation
 ```python
-plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_spearman_correlation(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], create_plotly: bool)  
 ```
 Generate and save Spearman correlation heatmap for numeric parameters and loss.
 
@@ -3049,7 +3017,7 @@ result = plot_spearman_correlation(...)
 
 ### _get_improvement_info
 ```python
-_get_improvement_info(study: optuna.Study, get_error: bool, improvement_evaluator: Optional[BaseImprovementEvaluator], error_evaluator: Optional[BaseErrorEvaluator])  [source]
+_get_improvement_info(study: optuna.Study, get_error: bool, improvement_evaluator: Optional[BaseImprovementEvaluator], error_evaluator: Optional[BaseErrorEvaluator])  
 ```
 
 
@@ -3079,7 +3047,7 @@ result = _get_improvement_info(...)
 
 ### _get_y_range
 ```python
-_get_y_range(info: _ImprovementInfo, min_n_trials: int)  [source]
+_get_y_range(info: _ImprovementInfo, min_n_trials: int)  
 ```
 
 
@@ -3107,7 +3075,7 @@ result = _get_y_range(...)
 
 ### plot_terminator_improvement
 ```python
-plot_terminator_improvement(study: optuna.Study, dirs: Dict[str, str], plot_error: bool, print_variance: bool, improvement_evaluator: Optional[BaseImprovementEvaluator], error_evaluator: Optional[BaseErrorEvaluator], min_n_trials: int, create_plotly: bool)  [source]
+plot_terminator_improvement(study: optuna.Study, dirs: Dict[str, str], plot_error: bool, print_variance: bool, improvement_evaluator: Optional[BaseImprovementEvaluator], error_evaluator: Optional[BaseErrorEvaluator], min_n_trials: int, create_plotly: bool)  
 ```
 Plot the potentials for future objective improvement using Matplotlib.
 
@@ -3144,7 +3112,7 @@ result = plot_terminator_improvement(...)
 
 ### plot_timeline
 ```python
-plot_timeline(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  [source]
+plot_timeline(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool)  
 ```
 Visualize trial durations on a timeline with detailed information.
 
@@ -3176,7 +3144,7 @@ result = plot_timeline(...)
 
 ### plot_trend_analysis
 ```python
-plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  [source]
+plot_trend_analysis(df: pd.DataFrame, numeric_cols: List[str], dirs: Dict[str, str], param_name_mapping: Dict[str, str], create_standalone: bool, create_plotly: bool)  
 ```
 Create a single comprehensive plot with trend analysis for parameter-loss relationships.
 
@@ -3212,7 +3180,7 @@ result = plot_trend_analysis(...)
 
 ### get_model_stats
 ```python
-get_model_stats(trial: optuna.Trial, model: tf.keras.Model, bits_per_param: int, batch_size: int, n_trials: int, device: int, verbose: bool)  [source]
+get_model_stats(trial: optuna.Trial, model: tf.keras.Model, bits_per_param: int, batch_size: int, n_trials: int, device: int, verbose: bool)  
 ```
 Extract and return model statistics from the given Optuna trial.
 
@@ -3247,7 +3215,7 @@ result = get_model_stats(...)
 
 ### supress_optuna_warnings
 ```python
-supress_optuna_warnings()  [source]
+supress_optuna_warnings()  
 ```
 Suppress only Optuna experimental warnings.
 
@@ -3273,7 +3241,7 @@ result = supress_optuna_warnings(...)
 
 ### get_remaining_trials
 ```python
-get_remaining_trials(study: optuna.Study, num_trials: int)  [source]
+get_remaining_trials(study: optuna.Study, num_trials: int)  
 ```
 Returns a list of completed trials from the given Optuna study.
 
@@ -3301,7 +3269,7 @@ result = get_remaining_trials(...)
 
 ### cleanup_non_top_trials
 ```python
-cleanup_non_top_trials(all_trial_ids: Set[int], top_trial_ids: Set[int], cleanup_paths: List[Tuple[str, str]])  [source]
+cleanup_non_top_trials(all_trial_ids: Set[int], top_trial_ids: Set[int], cleanup_paths: List[Tuple[str, str]])  
 ```
 Remove files or directories for trials not in the top-K set.
 
@@ -3331,7 +3299,7 @@ result = cleanup_non_top_trials(...)
 
 ### rename_top_k_files
 ```python
-rename_top_k_files(top_trials: List[optuna.Trial], file_configs: List[Tuple[str, str]])  [source]
+rename_top_k_files(top_trials: List[optuna.Trial], file_configs: List[Tuple[str, str]])  
 ```
 Rename top-K trial files with ranking prefix.
 
@@ -3360,7 +3328,7 @@ result = rename_top_k_files(...)
 
 ### save_trial_params_to_file
 ```python
-save_trial_params_to_file(filepath: str, params: dict[str, float])  [source]
+save_trial_params_to_file(filepath: str, params: dict[str, float])  
 ```
 Save Optuna trial parameters and associated metadata to a text file.
 
@@ -3389,7 +3357,7 @@ result = save_trial_params_to_file(...)
 
 ### get_top_trials
 ```python
-get_top_trials(study: optuna.Study, top_k: int, rank_key: str, order: str)  [source]
+get_top_trials(study: optuna.Study, top_k: int, rank_key: str, order: str)  
 ```
 Get the top-K trials from an Optuna study based on ranking criteria.
 
@@ -3419,7 +3387,7 @@ result = get_top_trials(...)
 
 ### save_top_k_trials
 ```python
-save_top_k_trials(top_trials: List[optuna.Trial], args_dir: str, study: optuna.Study, extra_attrs: Optional[List[str]])  [source]
+save_top_k_trials(top_trials: List[optuna.Trial], args_dir: str, study: optuna.Study, extra_attrs: Optional[List[str]])  
 ```
 Save top-K trials to text files.
 
@@ -3449,7 +3417,7 @@ result = save_top_k_trials(...)
 
 ### init_study_dirs
 ```python
-init_study_dirs(run_dir: Any, study_name: Any, subdirs: Any)  [source]
+init_study_dirs(run_dir: Any, study_name: Any, subdirs: Any)  
 ```
 Create and return study directory structure for experiments.
 
@@ -3480,7 +3448,7 @@ result = init_study_dirs(...)
 
 ### config_plt
 ```python
-config_plt(style: str)  [source]
+config_plt(style: str)  
 ```
 Configure matplotlib rcParams for IEEE‑style figures
 
@@ -3509,7 +3477,7 @@ result = config_plt(...)
 
 ### get_model_usage_stats
 ```python
-get_model_usage_stats(saved_model: str | tf.keras.Model, n_trials: int, device: int, rapl_path: str, verbose: bool)  [source]
+get_model_usage_stats(saved_model: str | tf.keras.Model, n_trials: int, device: int, rapl_path: str, verbose: bool)  
 ```
 Estimate average power draw and energy usage.
 
@@ -3543,7 +3511,7 @@ result = get_model_usage_stats(...)
 
 ### create_run_directory
 ```python
-create_run_directory(prefix: str, base_dir: str)  [source]
+create_run_directory(prefix: str, base_dir: str)  
 ```
 Creates a new run directory with an incremented numeric suffix and returns its full path.
 
@@ -3573,7 +3541,7 @@ result = create_run_directory(...)
 
 ### get_user_gpu_choice
 ```python
-get_user_gpu_choice()  [source]
+get_user_gpu_choice()  
 ```
 Prompts the user to select a GPU index and validates the input.
 
@@ -3599,7 +3567,7 @@ result = get_user_gpu_choice(...)
 
 ### _get_nvidia_smi_data
 ```python
-_get_nvidia_smi_data()  [source]
+_get_nvidia_smi_data()  
 ```
 Retrieves GPU information using nvidia-smi command.
 
@@ -3625,7 +3593,7 @@ result = _get_nvidia_smi_data(...)
 
 ### _print_tensorflow_info
 ```python
-_print_tensorflow_info()  [source]
+_print_tensorflow_info()  
 ```
 Print TensorFlow configuration information.
 
@@ -3651,7 +3619,7 @@ result = _print_tensorflow_info(...)
 
 ### _print_gpu_table
 ```python
-_print_gpu_table(gpu_data: Any)  [source]
+_print_gpu_table(gpu_data: Any)  
 ```
 Print GPU information in nvidia-smi style table format.
 
@@ -3678,7 +3646,7 @@ result = _print_gpu_table(...)
 
 ### _print_memory_summary
 ```python
-_print_memory_summary(gpu_data: Any)  [source]
+_print_memory_summary(gpu_data: Any)  
 ```
 Print memory summary similar to nvidia-smi bottom section.
 
@@ -3705,7 +3673,7 @@ result = _print_memory_summary(...)
 
 ### get_gpu_info
 ```python
-get_gpu_info()  [source]
+get_gpu_info()  
 ```
 Prints detailed TensorFlow and GPU configuration information in nvidia-smi style format.
 
@@ -3731,7 +3699,7 @@ result = get_gpu_info(...)
 
 ### gpu_summary
 ```python
-gpu_summary()  [source]
+gpu_summary()  
 ```
 Prints a compact GPU summary similar to nvidia-smi output.
 
@@ -3759,7 +3727,7 @@ result = gpu_summary(...)
 
 ### log_resources
 ```python
-log_resources(log_dir: str, interval: int)  [source]
+log_resources(log_dir: str, interval: int)  
 ```
 Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regular time intervals.
 > [!TIP]
@@ -3791,7 +3759,7 @@ result = log_resources(...)
 
 ### clear
 ```python
-clear()  [source]
+clear()  
 ```
 Clear all prints from terminal or notebook cell.
 
@@ -3817,7 +3785,7 @@ result = clear(...)
 
 ### format_number
 ```python
-format_number(number: Any, precision: Any)  [source]
+format_number(number: Any, precision: Any)  
 ```
 Format a number using scientific suffixes.
 
@@ -3845,7 +3813,7 @@ result = format_number(...)
 
 ### format_bytes
 ```python
-format_bytes(bytes_value: Any, precision: Any)  [source]
+format_bytes(bytes_value: Any, precision: Any)  
 ```
 Format bytes using binary suffixes (B, KB, MB, GB, etc.).
 
@@ -3873,7 +3841,7 @@ result = format_bytes(...)
 
 ### format_scientific
 ```python
-format_scientific(number: Any, max_precision: Any)  [source]
+format_scientific(number: Any, max_precision: Any)  
 ```
 Format to scientific notation with automatic precision based on number magnitude.
 
@@ -3901,7 +3869,7 @@ result = format_scientific(...)
 
 ### format_number_commas
 ```python
-format_number_commas(number: Any, precision: Any)  [source]
+format_number_commas(number: Any, precision: Any)  
 ```
 Format a number with commas as thousands separators.
 
