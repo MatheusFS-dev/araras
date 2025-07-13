@@ -88,13 +88,18 @@ logger_time = make_logger(
     datefmt="%H:%M:%S"
 )
 
+# —————————————————————————————————— Errors —————————————————————————————————— #
+from rich.traceback import install
+
+install(show_locals=True)
+
 # —————————————————————————————————— Checks —————————————————————————————————— #
-try:
-    import pretty_errors
-except ImportError:
-    logger.warning(
-        "Module pretty_errors not found. Install it with 'pip install pretty_errors' for better error formatting."
-    )
+# try:
+#     import pretty_errors
+# except ImportError:
+#     logger.warning(
+#         "Module pretty_errors not found. Install it with 'pip install pretty_errors' for better error formatting."
+#     )
 
 from matplotlib import font_manager
 if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist):
