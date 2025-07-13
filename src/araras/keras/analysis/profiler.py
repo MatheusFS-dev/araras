@@ -10,12 +10,13 @@ Example:
     >>> from araras.keras.utils.profiler import get_flops
     >>> get_flops(...)
 """
+
 from araras.commons import *
 
 import time
 import tensorflow as tf
 import psutil
-from rich.progress import track
+from araras.utils import white_track
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
@@ -55,7 +56,7 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     # 3) Grab the concrete graph and profile it
     concrete = _forward_fn.get_concrete_function()
     opts = ProfileOptionBuilder.float_operation()
-    opts["output"] = "none" # Supress report
+    opts["output"] = "none"  # Supress report
     info = profile(concrete.graph, options=opts)
     return info.total_float_ops
 
@@ -127,7 +128,9 @@ def get_memory_and_time(
     """
     # Prepare dummy inputs matching model.inputs
     shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
-    dummy_inputs = [tf.zeros(shape, dtype=inp.dtype) for shape, inp in zip(shapes, model.inputs)]
+    dummy_inputs = [
+        tf.zeros(shape, dtype=inp.dtype) for shape, inp in zip(shapes, model.inputs)
+    ]
 
     @tf.function
     def infer(*args):
@@ -154,11 +157,10 @@ def get_memory_and_time(
         times = []
         progress_iter = range(test_runs)
         if verbose:
-            progress_iter = track(
+            progress_iter = white_track(
                 progress_iter,
                 description="Measuring GPU",
                 total=test_runs,
-                style="white",
             )
         for _ in progress_iter:
             t0 = time.perf_counter()
@@ -191,11 +193,10 @@ def get_memory_and_time(
         with tf.device(f"/CPU:{cpu_index}"):
             progress_iter = range(test_runs)
             if verbose:
-                progress_iter = track(
+                progress_iter = white_track(
                     progress_iter,
                     description="Measuring CPU",
                     total=test_runs,
-                    style="white",
                 )
             for _ in progress_iter:
                 t0 = time.perf_counter()
@@ -217,7 +218,7 @@ def get_memory_and_time(
         peak_mem, avg_time = _measure_cpu()
         if peak_mem != 0:
             break
-        if attempt < max_retries: 
+        if attempt < max_retries:
             logger.warning(
                 f"{YELLOW}CPU memory usage measured as 0 bytes, retrying measurement...{RESET}"
             )

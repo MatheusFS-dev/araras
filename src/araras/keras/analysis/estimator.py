@@ -21,7 +21,7 @@ import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
-from rich.progress import track
+from araras.utils import white_track
 
 from araras.plot.configs import config_plt
 
@@ -108,7 +108,9 @@ def calculate_activation_memory(model: keras.Model, bytes_per_param: int) -> int
             try:
                 x = layer(x)
                 if hasattr(x, "shape"):
-                    elements = tf.reduce_prod(x.shape[1:]).numpy()  # Exclude batch dimension
+                    elements = tf.reduce_prod(
+                        x.shape[1:]
+                    ).numpy()  # Exclude batch dimension
                     total_elements += elements
             except:
                 continue
@@ -186,11 +188,10 @@ def model_param_distribution(
 
     progress_iter = range(n_trials)
     if n_trials:
-        progress_iter = track(
+        progress_iter = white_track(
             progress_iter,
             description="Sampling models",
             total=n_trials,
-            style="white",
         )
     for _ in progress_iter:
         trial = study.ask()
@@ -202,7 +203,9 @@ def model_param_distribution(
         size_mb = (n_params * bits_per_param) / (8 * 1024 * 1024)
         model_sizes_mb.append(size_mb)
 
-        training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024)
+        training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (
+            1024 * 1024
+        )
         training_memory.append(training_memory_mb)
 
         study.tell(trial, 0.0)
