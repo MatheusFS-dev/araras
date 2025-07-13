@@ -22,8 +22,11 @@ def white_track(iterable, *, description: str, total: int):
     """
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None, complete_style="white",
-            finished_style="white", style="black"),
+        BarColumn(
+            bar_width=None,
+            # complete_style="white",
+            # finished_style="white",
+        ),
         TaskProgressColumn(),
         TextColumn("{task.completed}/{task.total}"),
         TimeRemainingColumn(),
