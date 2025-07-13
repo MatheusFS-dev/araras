@@ -12,22 +12,18 @@ from rich.progress import (
 def white_track(iterable, *, description: str, total: int):
     """Iterate with a white progress bar showing ``done/total``.
 
-    Parameters
-    ----------
-    iterable:
-        Iterable to wrap.
-    description:
-        Progress bar description.
-    total:
-        Number of iterations.
+    Args:
+        iterable (Iterable): The iterable to wrap and iterate over.
+        description (str): A description to display alongside the progress bar.
+        total (int): The total number of iterations.
 
-    Yields
-    ------
-    Items from ``iterable`` with progress display.
+    Yields:
+        Any: Items from the provided iterable, while displaying the progress bar.
     """
     progress = Progress(
         TextColumn("[progress.description]{task.description}"),
-        BarColumn(bar_width=None, style="white"),
+        BarColumn(bar_width=None, complete_style="white",
+            finished_style="white"),
         TaskProgressColumn(),
         TextColumn("{task.completed}/{task.total}"),
         TimeRemainingColumn(),
