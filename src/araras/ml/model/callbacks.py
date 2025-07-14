@@ -38,15 +38,14 @@ def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras
     )
 
     checkpoint = callbacks.ModelCheckpoint(
-        filepath=os.path.join(backup_dir, "checkpoint.h5"),
+        filepath=os.path.join(backup_dir, ".weights.h5"),
         monitor=monitor,
         save_best_only=True,
         save_weights_only=True,
     )
 
-    trial_log_dir = os.path.join(tensorboard_logs, f"tensorboard_logs")
     tensorboard_cb = callbacks.TensorBoard(
-        log_dir=trial_log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq="epoch"
+        log_dir=tensorboard_logs, histogram_freq=1, write_graph=True, write_images=True, update_freq="epoch"
     )
 
     return [early_stopping, reduce_lr, checkpoint, tensorboard_cb]
