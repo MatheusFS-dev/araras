@@ -550,8 +550,6 @@ def analyze_study(
             If None, generates all .plots.
     """
 
-    print(f"\n{BLUE}{BOLD}Analyzing study...{RESET}")
-
     # Define all available plot types
     all_plots = {
         "distributions",
@@ -613,6 +611,7 @@ def analyze_study(
         # Deactivate parallel coordinate and rank plots by default
         plots_to_generate -= {"parallel_coordinate", "rank"}
 
+    print(f"\n{BLUE}Analyzing study...{RESET}")
     print("     Generating summary tables...", flush=True)
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
 
