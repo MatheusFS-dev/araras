@@ -10,6 +10,9 @@ from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
 import pynvml
 
+from araras.ml.model.utils import capture_model_summary
+from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
+
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     """
@@ -389,3 +392,62 @@ def get_model_usage_stats(
 
             return per_run_time, 0.0, 0.0
         logger.warning(f"{YELLOW}Negative average power measured, retrying measurement...{RESET}")
+
+
+def write_model_stats_to_file(
+    model: tf.keras.Model,
+    file_path: str,
+    bits_per_param: int,
+    batch_size: int,
+    device: int = 0,
+    n_trials: int = 1000,
+    extra_attrs: Optional[List[str]] = None,
+    verbose: bool = False,
+) -> None:
+    """
+    Write model statistics to a file.
+
+    Args:
+        model (tf.keras.Model): The Keras model to analyze.
+        file_path (str): The path to the output file.
+        bits_per_param (int): Number of bits per parameter for model size calculation.
+        batch_size (int): The batch size to simulate for input.
+        device (int): GPU index to run the model on. Use ``-1`` for CPU.
+        n_trials (int): Number of trials for power and energy measurement.
+        extra_attrs (Optional[List[str]]): Additional attributes to write to the file.
+        verbose (bool): If True, print detailed information.
+    """
+    params = model.count_params()
+    peak_mem_usage, inference_time = get_memory_and_time(
+        model, batch_size=batch_size, device=device, verbose=verbose
+    )
+    _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
+
+    model_stats = {
+        "num_params": params,
+        "model_size": params * bits_per_param,
+        "flops": get_flops(model),
+        "macs": get_macs(model),
+        "model_summary": capture_model_summary(model),
+        "peak_memory_usage": peak_mem_usage,
+        "inference_time": inference_time,
+        "avg_power": avg_power,
+        "avg_energy": avg_energy,
+    }
+
+    with open(file_path, "w") as file:
+        for key, value in model_stats.items():
+            file.write(f"Number of parameters: {format_number_commas(model_stats['num_params'])}\n")
+            file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
+            file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
+            file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
+            file.write(f"Peak memory usage: {format_bytes(model_stats['peak_memory_usage'])}\n")
+            file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
+            file.write(f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n")
+            file.write(f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n")
+
+        # Write extra attributes
+        for attr, value in extra_attrs.items():
+            file.write(f"{attr}: {value}\n")
+
+        file.write(f"\nModel summary: {model_stats['model_summary']}\n")
