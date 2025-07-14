@@ -105,9 +105,9 @@ def plot_trend_analysis(
 
         # Check if we have enough valid data points
         if len(x_clean) < 2:
-            logger.warning(
-                f"{YELLOW}Not enough valid data points for parameter '{col}'. Skipping trend analysis.{RESET}"
-            )
+            # logger.warning(
+            #     f"{YELLOW}Not enough valid data points for parameter '{col}'. Skipping trend analysis.{RESET}"
+            # )
             ax.text(
                 0.5,
                 0.5,
@@ -131,9 +131,9 @@ def plot_trend_analysis(
 
         # Check for constant values (no variance)
         if np.var(x_clean) == 0 or np.var(y_clean) == 0:
-            logger.warning(
-                f"{YELLOW}Parameter '{col}' or loss has no variance. Skipping trend analysis.{RESET}"
-            )
+            # logger.warning(
+            #     f"{YELLOW}Parameter '{col}' or loss has no variance. Skipping trend analysis.{RESET}"
+            # )
             ax.text(
                 0.5,
                 0.5,

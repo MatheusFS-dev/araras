@@ -111,8 +111,8 @@ def plot_contour(
                 )
                 fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
             except Exception as e:
-                logger.warning(f"{YELLOW}Error generating contour for {p1} vs {p2}: {e}{RESET}")
-                draw_warning_box(ax, "No Data or Error Generating")
+                # logger.warning(f"{YELLOW}Error generating contour for {p1} vs {p2}: {e}{RESET}")
+                draw_warning_box(ax, f"{e}")
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
         ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.label_fs)
@@ -171,10 +171,10 @@ def plot_contour(
                     )
                     fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
                 except Exception as e:
-                    logger.warning(
-                        f"{YELLOW}Error generating standalone contour for {p1} vs {p2}: {e}{RESET}"
-                    )
-                    draw_warning_box(ax, "No Data or Error Generating")
+                    # logger.warning(
+                    #     f"{YELLOW}Error generating standalone contour for {p1} vs {p2}: {e}{RESET}"
+                    # )
+                    draw_warning_box(ax, f"{e}")
 
             ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.standalone_label_fs)
             ax.set_ylabel(get_param_display_name(p2), fontsize=PLOT_CFG.standalone_label_fs)
