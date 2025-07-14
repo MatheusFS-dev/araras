@@ -11,11 +11,11 @@ import subprocess
 import time
 from pathlib import Path
 
-from araras.runtime.cleanup import ChildProcessCleanup
-from araras.runtime.terminal import SimpleTerminalLauncher
+from .cleanup import ChildProcessCleanup
+from .terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
-from araras.runtime.email_manager import ConsolidatedEmailManager
-from araras.runtime.file_handler import FileTypeHandler
+from .email_manager import ConsolidatedEmailManager
+from .file_handler import FileTypeHandler
 from . import monitoring as _mon
 from .monitoring import (
     print_completion_summary,
