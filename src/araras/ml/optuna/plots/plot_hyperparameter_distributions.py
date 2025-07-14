@@ -114,7 +114,7 @@ def plot_hyperparameter_distributions(
                 x_range = np.linspace(values.min(), values.max(), 200)
                 kde_values = kde(x_range)
             except ValueError as e:
-                # logger.warning(f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}")
+                logger.warning(f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}")
                 ax.text(
                     0.5,
                     0.5,
@@ -133,7 +133,7 @@ def plot_hyperparameter_distributions(
                 )
                 continue
             except Exception as e:
-                # logger.warning(f"{YELLOW}Error generating KDE for {col}: {e}{RESET}")
+                logger.warning(f"{YELLOW}Error generating KDE for {col}: {e}{RESET}")
                 ax.text(
                     0.5,
                     0.5,
