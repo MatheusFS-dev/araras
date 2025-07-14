@@ -265,9 +265,6 @@ def print_process_resource_usage(pid: int) -> None:
         pass
 
 
-from .restart_manager import FlagBasedRestartManager
-
-
 def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
     """Start simplified crash monitor without email capabilities.
 
@@ -450,6 +447,9 @@ def run_auto_restart(
     RESOURCE_USAGE_LOG_FILE = resource_usage_log_file
 
     try:
+        # late import to avoid circular dependencies
+        from .restart_manager import FlagBasedRestartManager
+
         # Clean up any existing success flag file before starting
         Path(success_flag_file).unlink(missing_ok=True)
 
