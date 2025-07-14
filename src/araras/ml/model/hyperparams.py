@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Dataclass for storing model hyperparameters.
+"""
 from araras.core import *
 
 from dataclasses import dataclass, field

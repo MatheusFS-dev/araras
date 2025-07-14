@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Logging utilities and progress bar helpers.
+"""
 # ————————————————————————————— Standard Imports ————————————————————————————— #
 import logging
 import warnings
@@ -19,7 +24,15 @@ BOLD = "\x1b[1m"
 
 # ——————————————————————————— Logger configurations —————————————————————————— #
 class ColorFormatter(logging.Formatter):
-    def __init__(self, fmt: str, datefmt: str | None = None):
+    """Formatter that adds ANSI colors based on the log level."""
+
+    def __init__(self, fmt: str, datefmt: str | None = None) -> None:
+        """Initialize the formatter with the given format strings.
+
+        Args:
+            fmt: Log message format string.
+            datefmt: Optional date format string.
+        """
         super().__init__(fmt, datefmt)
         self._colors = {
             logging.INFO: WHITE,
@@ -29,6 +42,7 @@ class ColorFormatter(logging.Formatter):
         }
 
     def format(self, record: logging.LogRecord) -> str:
+        """Return the formatted record wrapped in the appropriate color codes."""
         text = super().format(record)
         color = self._colors.get(record.levelno, WHITE)
         return f"{color}{text}{RESET}"

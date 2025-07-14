@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Visualize hyperparameter distributions.
+"""
 from araras.core import *
 
 import numpy as np

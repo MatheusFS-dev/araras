@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Handle persistent logging and file rotation.
+"""
 from araras.core import *
 
 import sys

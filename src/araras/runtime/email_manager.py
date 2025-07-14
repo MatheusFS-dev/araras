@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Manage consolidated email notifications.
+"""
 from araras.core import *
 
 import time

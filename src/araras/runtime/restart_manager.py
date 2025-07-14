@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Flag-based restart mechanism for processes.
+"""
 from araras.core import *
 
 import os

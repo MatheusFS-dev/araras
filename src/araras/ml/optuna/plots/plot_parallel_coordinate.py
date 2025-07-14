@@ -1,4 +1,9 @@
 """
+Last Edited: 14 July 2025
+Description:
+    Parallel coordinate plot for trials.
+"""
+"""
 Module plot_parallel_coordinate of analysis
 
 Functions:

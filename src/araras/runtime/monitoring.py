@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Monitor processes and control restarts.
+"""
 from araras.core import *
 
 import os

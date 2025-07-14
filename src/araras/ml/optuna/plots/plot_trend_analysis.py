@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Trend analysis of metric values.
+"""
 from araras.core import *
 
 import numpy as np

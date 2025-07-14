@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Building blocks for 1D convolutional networks.
+"""
 from araras.core import * 
 
 from tensorflow.keras import layers, initializers

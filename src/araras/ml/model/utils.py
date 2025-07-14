@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Helper utilities for capturing model summaries.
+"""
 from araras.core import *
 
 

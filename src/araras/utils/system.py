@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Gather GPU information and system resources.
+"""
 import os
 import time
 import psutil

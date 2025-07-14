@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Conversion and penalty utilities for trained models.
+"""
 from araras.core import *
 
 

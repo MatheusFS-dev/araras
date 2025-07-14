@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    LSTM-based model construction routines.
+"""
 from araras.core import *
 
 from tensorflow.keras import layers, initializers

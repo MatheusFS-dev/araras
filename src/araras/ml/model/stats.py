@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Functions to compute FLOPs, MACs and memory usage.
+"""
 from araras.core import *
 
 import time

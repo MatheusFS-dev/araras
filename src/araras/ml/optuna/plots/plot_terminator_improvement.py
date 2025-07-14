@@ -1,3 +1,8 @@
+"""
+Last Edited: 14 July 2025
+Description:
+    Improvement curve until termination.
+"""
 from araras.core import *
 
 import matplotlib.pyplot as plt
