@@ -151,7 +151,7 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
     return param_memory + activation_memory + framework_overhead
 
 
-def model_param_distribution(
+def plot_model_param_distribution(
     build_model_fn: Callable[[optuna.Trial], tf.keras.Model],
     bits_per_param: int,
     batch_size: int = 1,
@@ -219,7 +219,7 @@ def model_param_distribution(
     plt.show()
 
 
-def get_model_stats(
+def set_user_attr_model_stats(
     trial: optuna.Trial,
     model: tf.keras.Model,
     bits_per_param: int,
