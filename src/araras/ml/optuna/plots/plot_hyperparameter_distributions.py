@@ -114,7 +114,7 @@ def plot_hyperparameter_distributions(
                 x_range = np.linspace(values.min(), values.max(), 200)
                 kde_values = kde(x_range)
             except Exception as e:
-                logger_error(f"{RED}Error generating KDE for {col}: {e}{RESET}")
+                logger_error.error(f"{RED}Error generating KDE for {col}: {e}{RESET}")
                 ax.text(
                     0.5,
                     0.5,
