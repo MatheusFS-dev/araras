@@ -563,7 +563,7 @@ def analyze_study(
             If None, generates all .plots.
     """
     console = Console()
-    with console.status("[bold green]Analyzing study...", spinner="dots"):
+    with console.status("[bold green]Analyzing study...", spinner="line"):
 
         # Define all available plot types
         all_plots = {

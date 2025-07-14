@@ -1,6 +1,7 @@
 from araras.core import *
 
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 
 from araras.ml.optuna.analyzer import (
@@ -40,6 +41,16 @@ def plot_spearman_correlation(
         save_plot(fig, dirs, "params_overall_correlation", "figs", create_plotly)
         plt.close(fig)
         return
+
+    # Add data validation before correlation calculation
+    if df[cols].isnull().any().any():
+        logger.warning(f"{YELLOW} NaN values detected in data{RESET}")
+        df = df.dropna(subset=cols)
+
+    # Check for infinite values
+    if not np.isfinite(df[cols]).all().all():
+        logger.warning(f"{YELLOW} Infinite values detected in data{RESET}")
+        df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=cols)
 
     # Include loss column with numeric parameters for correlation analysis
     cols = numeric_cols + ["loss"]
