@@ -42,6 +42,9 @@ def plot_spearman_correlation(
         plt.close(fig)
         return
 
+    # Include loss column with numeric parameters for correlation analysis
+    cols = numeric_cols + ["loss"]
+
     # Add data validation before correlation calculation
     if df[cols].isnull().any().any():
         logger.warning(f"{YELLOW} NaN values detected in data{RESET}")
@@ -51,9 +54,6 @@ def plot_spearman_correlation(
     if not np.isfinite(df[cols]).all().all():
         logger.warning(f"{YELLOW} Infinite values detected in data{RESET}")
         df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=cols)
-
-    # Include loss column with numeric parameters for correlation analysis
-    cols = numeric_cols + ["loss"]
 
     # Calculate Spearman rank correlation matrix (robust to non-linear relationships)
     corr = df[cols].corr(method="spearman")
