@@ -97,7 +97,16 @@ def white_track(iterable, *, description: str, total: int):
     Yields:
         Any: Items from the provided iterable, while displaying the progress bar.
     """
-    with tqdm(iterable, total=total, desc=description, colour="white") as pbar:
+    bar_fmt = "{percentage:3.0f}% {bar} {n_fmt}/{total_fmt} in {remaining}"
+    with tqdm(
+        iterable,
+        total=total,
+        desc=description,
+        colour="white",
+        ncols=100,
+        bar_format=bar_fmt,
+        unit="",  # remove default “it” label
+    ) as pbar:
         for item in pbar:
             yield item
 
