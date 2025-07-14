@@ -113,8 +113,27 @@ def plot_hyperparameter_distributions(
                 kde = gaussian_kde(values)
                 x_range = np.linspace(values.min(), values.max(), 200)
                 kde_values = kde(x_range)
+            except ValueError as e:
+                logger.warning(f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}")
+                ax.text(
+                    0.5,
+                    0.5,
+                    "Insufficient unique values\nfor KDE estimation",
+                    transform=ax.transAxes,
+                    ha="center",
+                    va="center",
+                    fontsize=PLOT_CFG.label_fs,
+                    style="italic",
+                )
+                ax.set_title(
+                    format_title(PLOT_CFG.param_title_tpl, display_name),
+                    fontsize=PLOT_CFG.title_fs,
+                    fontweight="bold",
+                    pad=PLOT_CFG.title_pad,
+                )
+                continue
             except Exception as e:
-                logger_error.error(f"{RED}Error generating KDE for {col}: {e}{RESET}")
+                logger.warning(f"{YELLOW}Error generating KDE for {col}: {e}{RESET}")
                 ax.text(
                     0.5,
                     0.5,

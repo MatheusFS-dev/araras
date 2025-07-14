@@ -12,7 +12,7 @@ Example:
 
 from araras.core import *
 
-import os
+import os, sys
 import re
 import math
 import optuna
@@ -562,9 +562,9 @@ def analyze_study(
                 - 'rank' (Can cause crashes and not very useful)
             If None, generates all .plots.
     """
-    console = Console()
+    console = Console(file=sys.stdout, force_terminal=True)
     with console.status("[bold green]Analyzing study...", spinner="pong"):
-    
+
         # Define all available plot types
         all_plots = {
             "distributions",
@@ -583,7 +583,7 @@ def analyze_study(
             "timeline",
             "terminator",
         }
-    
+
         # Set plots to generate (default: all plots)
         if plots is None:
             plots_to_generate = all_plots
@@ -593,17 +593,17 @@ def analyze_study(
             if invalid_plots:
                 logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
                 plots_to_generate = plots_to_generate & all_plots
-    
+
         dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
-    
+
         df = prepare_dataframe(study)
         if df.empty:
             logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
             return
-    
+
         numeric_cols, categorical_cols = classify_columns(df)
         best, worst = get_trial_subsets(df, top_frac)
-    
+
         print_study_columns(
             study,
             exclude=[
@@ -621,14 +621,14 @@ def analyze_study(
             + [col for col in df.columns if col.startswith("user_")],
             param_name_mapping=param_name_mapping,
         )
-    
+
         if plots is None:
             # Deactivate parallel coordinate and rank plots by default
             plots_to_generate -= {"parallel_coordinate", "rank"}
-    
+
         console.log("Generating summary tables...")
         save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
-    
+
         if "distributions" in plots_to_generate:
             console.log("Generating hyperparameter distribution .plots...")
             _safe_plot(
@@ -642,15 +642,15 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         if "importances" in plots_to_generate:
             console.log("Generating parameter importances...")
             _safe_plot("importances", plot_param_importances, study, dirs, create_plotly)
-    
+
         if "correlations" in plots_to_generate:
             console.log("Generating Spearman correlations...")
             _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly)
-    
+
         if "boxplots" in plots_to_generate:
             console.log("Generating boxplots for parameter distributions...")
             _safe_plot(
@@ -665,7 +665,7 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         if "trends" in plots_to_generate:
             console.log("Generating trend analysis...")
             _safe_plot(
@@ -678,7 +678,7 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         if "ranges" in plots_to_generate:
             console.log("Generating optimal ranges analysis...")
             _safe_plot(
@@ -692,19 +692,19 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         if "contours" in plots_to_generate:
             console.log("Generating contour .plots...")
             _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone, create_plotly)
-    
+
         if "edf" in plots_to_generate:
             console.log("Generating EDF of study values...")
             _safe_plot("edf", plot_edf, study, dirs, create_plotly)
-    
+
         if "intermediate" in plots_to_generate:
             console.log("Generating intermediate values .plots...")
             _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly)
-    
+
         if "parallel_coordinate" in plots_to_generate:
             console.log("Generating parallel coordinate .plots...")
             _safe_plot(
@@ -715,7 +715,7 @@ def analyze_study(
                 dirs,
                 create_plotly,
             )
-    
+
         if "slice" in plots_to_generate:
             console.log("Generating slice .plots...")
             _safe_plot(
@@ -727,19 +727,19 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         if "history" in plots_to_generate:
             console.log("Generating optimization history plot...")
             _safe_plot("history", plot_optimization_history, study, dirs, create_plotly)
-    
+
         if "timeline" in plots_to_generate:
             console.log("Generating timeline plot...")
             _safe_plot("timeline", plot_timeline, study, dirs, create_plotly)
-    
+
         if "terminator" in plots_to_generate:
             console.log("Generating terminator improvement plot...")
             _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly)
-    
+
         #! Rank plots are deprecated, they are causing crashes and not helping much
         #! So they are not generated by default anymore
         if "rank" in plots_to_generate:
@@ -753,7 +753,7 @@ def analyze_study(
                 create_standalone,
                 create_plotly,
             )
-    
+
         print(f"\nAnalysis complete! Results saved to: {table_dir}")
         print(f"- Figures: {dirs['figs']}")
         if save_data:
@@ -765,7 +765,7 @@ def analyze_study(
             print("  * Importances:", dirs["data_importances"])
             print("  * Correlations:", dirs["data_correlations"])
         print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
-    
+
         if create_standalone:
             print("- Standalone images:")
             print(f"  * Distributions: {dirs['standalone_distributions']}")
@@ -775,7 +775,7 @@ def analyze_study(
             print(f"  * Contours: {dirs['standalone_contours']}")
             print(f"  * Slices: {dirs['standalone_slices']}")
             print(f"  * Ranks: {dirs['standalone_ranks']}")
-    
+
         if create_plotly:
             print("- Plotly HTML files:")
             print(f"  * Combined: {dirs['plotly']}")
@@ -795,6 +795,6 @@ def analyze_study(
         print(
             f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
         )
-    
+
         if plots is not None:
             console.log(f"Generated plots: {sorted(plots_to_generate)}")
