@@ -1,4 +1,3 @@
-from araras.core import *
 import araras
 import importlib.metadata
 import pkgutil
