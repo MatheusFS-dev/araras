@@ -562,8 +562,8 @@ def analyze_study(
                 - 'rank' (Can cause crashes and not very useful)
             If None, generates all .plots.
     """
-    console = Console(file=sys.stdout, force_terminal=True)
-    with console.status("[bold green]Analyzing study...", spinner="pong"):
+    console = Console()
+    with console.status("[bold green]Analyzing study...", spinner="dots"):
 
         # Define all available plot types
         all_plots = {
