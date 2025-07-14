@@ -30,6 +30,7 @@ dependencies = [
   "cmaes>=0.8.0",
   "torch>=1.9.0",
   "rich>=13.0.0",
+  "tqdm>=4.0.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",

@@ -700,7 +700,8 @@ Start background threads that periodically log CPU, RAM, GPU and TensorFlow reso
 ```python
 white_track(iterable, *, description: str, total: int)
 ```
-Iterate over `iterable` while displaying a progress bar in white style.
+Iterate over `iterable` while displaying a progress bar in white style using
+``tqdm``.
 
 ### cleanup.ChildProcessCleanup
 

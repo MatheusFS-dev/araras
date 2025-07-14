@@ -83,13 +83,7 @@ if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist
     )
 
 # ——————————————————————————————— Progress bar ——————————————————————————————— #
-from rich.progress import (
-    Progress,
-    TextColumn,
-    BarColumn,
-    TaskProgressColumn,
-    TimeRemainingColumn,
-)
+from tqdm import tqdm
 
 
 def white_track(iterable, *, description: str, total: int):
@@ -103,20 +97,9 @@ def white_track(iterable, *, description: str, total: int):
     Yields:
         Any: Items from the provided iterable, while displaying the progress bar.
     """
-    progress = Progress(
-        TextColumn("[progress.description]{task.description}"),
-        BarColumn(
-            bar_width=None,
-            # complete_style="white",
-            # finished_style="white",
-        ),
-        TaskProgressColumn(),
-        TextColumn("{task.completed}/{task.total}"),
-        TimeRemainingColumn(),
-    )
-
-    with progress:
-        yield from progress.track(iterable, total=total, description=description)
+    with tqdm(iterable, total=total, desc=description, colour="white") as pbar:
+        for item in pbar:
+            yield item
 
 
 # ————————————————————————————— Supress warnings ————————————————————————————— #
