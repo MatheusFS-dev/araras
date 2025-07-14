@@ -111,7 +111,7 @@ def plot_contour(
                 )
                 fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
             except Exception as e:
-                logger_error.error(f"{RED}Error generating contour for {p1} vs {p2}: {e}{RESET}")
+                logger.warning(f"{YELLOW}Error generating contour for {p1} vs {p2}: {e}{RESET}")
                 draw_warning_box(ax, "No Data or Error Generating")
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
