@@ -13,7 +13,7 @@ Example:
 #                           github.com/MatheusFS-dev                           #
 # ———————————————————————————————————————————————————————————————————————————— #
 
-from araras.commons import *
+from araras.core import *
 
 import matplotlib.pyplot as plt
 from cycler import cycler

@@ -9,7 +9,7 @@ Example:
     >>> from araras.kernel.file_type_handler import FileTypeHandler
     >>> FileTypeHandler.build_execution_command(Path("train.py"), "success.txt")
 """
-from araras.commons import *
+from araras.core import *
 
 import sys
 from pathlib import Path

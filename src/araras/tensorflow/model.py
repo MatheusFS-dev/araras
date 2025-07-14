@@ -9,7 +9,7 @@ Example:
     >>> get_model_usage_stats(...)
 """
 
-from araras.commons import *
+from araras.core import *
 
 import time
 import pynvml

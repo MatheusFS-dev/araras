@@ -8,7 +8,7 @@ Example:
     >>> from araras.utils.cleanup import ChildProcessCleanup
     >>> ChildProcessCleanup().cleanup_children()
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 import psutil

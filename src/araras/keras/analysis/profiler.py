@@ -11,7 +11,7 @@ Example:
     >>> get_flops(...)
 """
 
-from araras.commons import *
+from araras.core import *
 
 import time
 import tensorflow as tf

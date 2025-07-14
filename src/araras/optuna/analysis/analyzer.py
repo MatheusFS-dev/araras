@@ -10,7 +10,7 @@ Example:
     >>> analyze_study("path/to/study")
 """
 
-from araras.commons import *
+from araras.core import *
 
 import os
 import re

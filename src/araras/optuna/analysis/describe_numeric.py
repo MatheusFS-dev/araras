@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.describe_numeric import describe_numeric
     >>> describe_numeric(...)
 """
-from araras.commons import *
+from araras.core import *
 import pandas as pd
 
 from .analyzer import format_numeric_value

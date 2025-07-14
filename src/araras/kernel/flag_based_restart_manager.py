@@ -10,7 +10,7 @@ Example:
     >>> manager = FlagBasedRestartManager()
     >>> manager.run_file_with_restart("train.py")
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 import psutil

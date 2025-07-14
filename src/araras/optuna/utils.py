@@ -15,7 +15,7 @@ Example:
     >>> from araras.optuna.utils import supress_optuna_warnings
     >>> supress_optuna_warnings(...)
 """
-from araras.commons import *
+from araras.core import *
 
 import os, shutil
 import math

@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_spearman_correlation import plot_spearman_correlation
     >>> plot_spearman_correlation(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import pandas as pd
 import matplotlib.pyplot as plt

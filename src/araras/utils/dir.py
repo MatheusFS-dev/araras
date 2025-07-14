@@ -8,7 +8,7 @@ Example:
     >>> from araras.utils.dir import create_run_directory
     >>> create_run_directory(...)
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 

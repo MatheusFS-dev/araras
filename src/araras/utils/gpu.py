@@ -14,7 +14,7 @@ Example:
     >>> from araras.utils.gpu import get_user_gpu_choice
     >>> get_user_gpu_choice(...)
 """
-from araras.commons import *
+from araras.core import *
 
 import tensorflow as tf
 import subprocess

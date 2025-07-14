@@ -8,7 +8,7 @@ Example:
     >>> from araras.utils.terminal import SimpleTerminalLauncher
     >>> SimpleTerminalLauncher().launch(["echo", "hello"], ".")
 """
-from araras.commons import *
+from araras.core import *
 import os
 import platform
 import subprocess

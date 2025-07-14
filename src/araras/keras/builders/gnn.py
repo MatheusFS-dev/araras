@@ -15,7 +15,7 @@ Example:
     >>> x = build_gcn(..., x_graph, a_graph)
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 import numpy as np
 import tensorflow as tf

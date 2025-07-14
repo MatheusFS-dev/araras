@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_edf import plot_edf
     >>> plot_edf(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import optuna

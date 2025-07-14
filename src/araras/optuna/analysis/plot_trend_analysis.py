@@ -9,7 +9,7 @@ Example:
     >>> plot_trend_analysis(...)
 """
 
-from araras.commons import *
+from araras.core import *
 import os
 import numpy as np
 import pandas as pd

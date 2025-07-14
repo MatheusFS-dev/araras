@@ -21,7 +21,7 @@ Example using custom parameters:
 
 """
 
-from araras.commons import *
+from araras.core import *
 
 from dataclasses import dataclass, field
 from typing import Optional, Sequence, Any, Callable, Union, Mapping, Dict

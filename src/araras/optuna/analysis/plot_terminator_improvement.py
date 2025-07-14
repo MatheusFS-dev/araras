@@ -10,7 +10,7 @@ Example:
     >>> from araras.optuna.analysis.plot_terminator_improvement import _get_improvement_info
     >>> _get_improvement_info(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 
 import matplotlib.pyplot as plt

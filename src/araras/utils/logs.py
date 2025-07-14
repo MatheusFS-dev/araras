@@ -8,7 +8,7 @@ Example:
     >>> from araras.utils.logs import log_resources
     >>> log_resources(...)
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 import time

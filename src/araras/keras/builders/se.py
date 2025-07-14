@@ -11,7 +11,7 @@ Example:
     >>> x = build_squeeze_excite_1d(...)
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 import optuna
 import tensorflow as tf

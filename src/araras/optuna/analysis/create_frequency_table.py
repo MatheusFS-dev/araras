@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.create_frequency_table import create_frequency_table
     >>> create_frequency_table(...)
 """
-from araras.commons import *
+from araras.core import *
 import pandas as pd
 
 

@@ -14,7 +14,7 @@ Example:
     >>> NanLossPrunerOptuna(trial)
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 import os
 import numpy as np

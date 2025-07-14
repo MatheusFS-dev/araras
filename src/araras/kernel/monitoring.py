@@ -22,7 +22,7 @@ Example:
     >>> from araras.kernel.monitoring import run_auto_restart
     >>> run_auto_restart("train.py", title="Training Process")
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 import sys

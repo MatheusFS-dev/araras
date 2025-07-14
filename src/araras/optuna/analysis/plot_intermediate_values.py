@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_intermediate_values import plot_intermediate_values
     >>> plot_intermediate_values(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import optuna

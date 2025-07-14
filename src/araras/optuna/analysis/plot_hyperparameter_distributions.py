@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_hyperparameter_distributions import plot_hyperparameter_distributions
     >>> plot_hyperparameter_distributions(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import numpy as np
 import pandas as pd

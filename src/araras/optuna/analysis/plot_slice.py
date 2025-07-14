@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_slice import plot_slice
     >>> plot_slice(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import optuna

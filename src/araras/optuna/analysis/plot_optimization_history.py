@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_optimization_history import plot_optimization_history
     >>> plot_optimization_history(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import optuna

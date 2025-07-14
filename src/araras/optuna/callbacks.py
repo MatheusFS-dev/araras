@@ -11,7 +11,7 @@ Example:
     >>> ImprovementStagnationCallback()  # used as a callback in study.optimize
 """
 
-from araras.commons import *
+from araras.core import *
 
 import numpy as np
 

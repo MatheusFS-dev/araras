@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_timeline import plot_timeline
     >>> plot_timeline(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates

@@ -12,7 +12,7 @@ Example:
     >>> from araras.utils.misc import clear
     >>> clear(...)
 """
-from araras.commons import *
+from araras.core import *
 
 import os
 import math

@@ -9,7 +9,7 @@ Funtions:
     - punish_model: A convenience function to apply both FLOPs and parameter penalties to an objective.
 """
 
-from araras.commons import *
+from araras.core import *
 
 
 import tempfile

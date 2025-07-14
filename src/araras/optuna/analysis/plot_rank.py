@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_rank import plot_rank
     >>> plot_rank(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import matplotlib as mpl

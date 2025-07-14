@@ -7,7 +7,7 @@ Functions:
     - send_email: Sends an email notification with the specified subject and body content to multiple recipients.
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 import json
 import smtplib

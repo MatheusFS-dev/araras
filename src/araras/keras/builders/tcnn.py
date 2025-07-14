@@ -11,7 +11,7 @@ Example:
     >>> x = build_tcnn1d(...)
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 from tensorflow.keras import layers, initializers
 from araras.keras.hyperparams import KParams

@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_parallel_coordinate import plot_parallel_coordinate
     >>> plot_parallel_coordinate(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import matplotlib.pyplot as plt
 import optuna

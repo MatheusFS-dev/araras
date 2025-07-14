@@ -9,12 +9,12 @@ Example:
     >>> manager = ConsolidatedEmailManager()
     >>> manager.send_consolidated_status_email("task_complete", {})
 """
-from araras.commons import *
+from araras.core import *
 
 import time
 from pathlib import Path
 
-from araras.email.utils import send_email
+from araras.notifications.email import send_email
 from . import monitoring as _mon
 
 

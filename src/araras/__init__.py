@@ -5,7 +5,7 @@ import pkgutil
 import importlib
 import inspect
 from importlib.metadata import version, PackageNotFoundError
-from araras.commons import *
+from araras.core import *
 
 __all__ = []
 

@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.keras.model_stats import get_model_stats
     >>> get_model_stats(...)
 """
-from araras.commons import *
+from araras.core import *
 import tensorflow as tf
 import optuna
 from araras.keras.analysis.profiler import get_flops, get_macs, get_memory_and_time

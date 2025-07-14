@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_param_importances import plot_param_importances
     >>> plot_param_importances(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import pandas as pd
 import matplotlib.pyplot as plt

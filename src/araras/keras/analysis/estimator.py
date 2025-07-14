@@ -15,7 +15,7 @@ Example:
     >>> model_param_distribution(...)
 """
 
-from araras.commons import *
+from araras.core import *
 
 import optuna
 import matplotlib.pyplot as plt

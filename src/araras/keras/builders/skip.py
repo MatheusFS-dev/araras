@@ -10,7 +10,7 @@ Example:
     >>> final_tensor = trial_skip_connections(trial, layers_list)
 """
 
-from araras.commons import *  # Common imports and configs for the Araras lib
+from araras.core import *  # Common imports and configs for the Araras lib
 
 import optuna
 import itertools

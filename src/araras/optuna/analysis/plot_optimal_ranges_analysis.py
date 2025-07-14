@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
     >>> plot_optimal_ranges_analysis(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import numpy as np
 import pandas as pd

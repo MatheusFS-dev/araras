@@ -8,7 +8,7 @@ Example:
     >>> from araras.optuna.analysis.plot_parameter_boxplots import plot_parameter_boxplots
     >>> plot_parameter_boxplots(...)
 """
-from araras.commons import *
+from araras.core import *
 import os
 import numpy as np
 import pandas as pd
