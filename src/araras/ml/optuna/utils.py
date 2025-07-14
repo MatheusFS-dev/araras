@@ -1,8 +1,7 @@
 """
 Last Edited: 14 July 2025
 Description:
-    This script demonstrates a detailed 
-    header format with additional metadata.
+    Helper functions and warning suppression for Optuna.
 """
 from araras.core import *
 

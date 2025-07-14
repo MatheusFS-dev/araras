@@ -1,8 +1,7 @@
 """
 Last Edited: 14 July 2025
 Description:
-    This script demonstrates a detailed 
-    header format with additional metadata.
+    Dataclass for storing model hyperparameters.
 """
 from araras.core import *
 
