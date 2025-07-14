@@ -1,14 +1,3 @@
-"""
-Common setup for the Araras library.
-
-Functions:
-    - make_logger: Create a logger with its own StreamHandler and ColorFormatter.
-
-Example:
-    >>> from araras.commons import make_logger
-    >>> make_logger(...)
-"""
-
 # ————————————————————————————— Standard Imports ————————————————————————————— #
 import logging
 import warnings
@@ -86,14 +75,6 @@ install(
 )
 
 # —————————————————————————————————— Checks —————————————————————————————————— #
-#? Replaced `pretty_errors` with `rich.traceback` for better error formatting
-# try:
-#     import pretty_errors
-# except ImportError:
-#     logger.warning(
-#         "Module pretty_errors not found. Install it with 'pip install pretty_errors' for better error formatting."
-#     )
-
 from matplotlib import font_manager
 
 if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist):
@@ -101,7 +82,44 @@ if not any(f.name == "Times New Roman" for f in font_manager.fontManager.ttflist
         f"{YELLOW}Times New Roman font not found. Install it by running {ORANGE}'sudo apt install msttcorefonts -qq && rm ~/.cache/matplotlib -rf'{YELLOW}."
     )
 
+# ——————————————————————————————— Progress bar ——————————————————————————————— #
+from rich.progress import (
+    Progress,
+    TextColumn,
+    BarColumn,
+    TaskProgressColumn,
+    TimeRemainingColumn,
+)
+
+
+def white_track(iterable, *, description: str, total: int):
+    """Iterate with a white progress bar showing ``done/total``.
+
+    Args:
+        iterable (Iterable): The iterable to wrap and iterate over.
+        description (str): A description to display alongside the progress bar.
+        total (int): The total number of iterations.
+
+    Yields:
+        Any: Items from the provided iterable, while displaying the progress bar.
+    """
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(
+            bar_width=None,
+            # complete_style="white",
+            # finished_style="white",
+        ),
+        TaskProgressColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeRemainingColumn(),
+    )
+
+    with progress:
+        yield from progress.track(iterable, total=total, description=description)
+
+
 # ————————————————————————————— Supress warnings ————————————————————————————— #
-from araras.optuna.utils import supress_optuna_warnings
+from .ml.optuna.utils import supress_optuna_warnings
 
 supress_optuna_warnings()
