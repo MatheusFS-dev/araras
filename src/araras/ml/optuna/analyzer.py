@@ -204,6 +204,7 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
         func(*args, **kwargs)
     except Exception as e:  # pragma: no cover - errors are user-facing
         logger_error.error(f"{RED}Error generating {plot_name} plot: {e}{RESET}")
+        traceback.print_exc()
 
 
 def format_title(template: str, display_name: str) -> str:
