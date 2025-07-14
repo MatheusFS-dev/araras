@@ -1,4 +1,10 @@
 """
+Last Edited: 14 July 2025
+Description:
+    This script demonstrates a detailed 
+    header format with additional metadata.
+"""
+"""
 Module plot_parallel_coordinate of analysis
 
 Functions:
