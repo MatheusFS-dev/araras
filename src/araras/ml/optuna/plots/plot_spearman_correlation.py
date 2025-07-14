@@ -117,7 +117,17 @@ def plot_spearman_correlation(
 
     # ——————————————————————————— Only loss correlation —————————————————————————— #
     # Extract correlations between each parameter and loss function only
-    param_loss_corr = corr.loc[numeric_cols, "loss"].sort_values(key=abs, ascending=False)
+    param_loss_corr = corr.loc[numeric_cols, "loss"]
+
+    # Warn about NaN correlations (e.g., caused by constant parameters)
+    nan_params = param_loss_corr[param_loss_corr.isna()].index.tolist()
+    if nan_params:
+        logger.warning(
+            f"{YELLOW}NaN correlations detected for {nan_params}; skipping them.{RESET}"
+        )
+
+    # Drop NaN correlations so plotting works correctly
+    param_loss_corr = param_loss_corr.dropna().sort_values(key=abs, ascending=False)
 
     # Save parameter-loss correlation data for LaTeX
     save_data_for_latex(
@@ -129,9 +139,19 @@ def plot_spearman_correlation(
         dirs["data_correlations"],
     )
 
+    if param_loss_corr.empty:
+        fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)
+        draw_warning_box(ax, "No valid correlations to display.")
+        plt.tight_layout()
+        save_plot(fig, dirs, "params_study_value_correlations", "figs", create_plotly)
+        plt.close(fig)
+        return
+
     # Dynamic figure sizing based on parameter count and name length
     max_param_length = (
-        max(len(str(param)) for param in param_loss_corr.index) if param_loss_corr.index.size > 0 else 10
+        max(len(str(param)) for param in param_loss_corr.index)
+        if param_loss_corr.index.size > 0
+        else 10
     )
     fig_width = max(PLOT_CFG.corr_bar_min_width, len(numeric_cols) * PLOT_CFG.corr_bar_scale + 2)
     fig_height = max(PLOT_CFG.box_subplot_height, len(numeric_cols) * 0.4 + 3)
