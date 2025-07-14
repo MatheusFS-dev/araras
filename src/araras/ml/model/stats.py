@@ -436,15 +436,14 @@ def write_model_stats_to_file(
     }
 
     with open(file_path, "w") as file:
-        for key, value in model_stats.items():
-            file.write(f"Number of parameters: {format_number_commas(model_stats['num_params'])}\n")
-            file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
-            file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
-            file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
-            file.write(f"Peak memory usage: {format_bytes(model_stats['peak_memory_usage'])}\n")
-            file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
-            file.write(f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n")
-            file.write(f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n")
+        file.write(f"Number of parameters: {format_number_commas(model_stats['num_params'])}\n")
+        file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
+        file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
+        file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
+        file.write(f"Peak memory usage: {format_bytes(model_stats['peak_memory_usage'])}\n")
+        file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
+        file.write(f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n")
+        file.write(f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n")
 
         # Write extra attributes
         for attr, value in extra_attrs.items():
