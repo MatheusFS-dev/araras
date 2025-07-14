@@ -6,7 +6,7 @@ from datetime import timedelta
 import numpy as np
 import optuna
 
-from araras.ml.optuna.analysis.analyzer import PLOT_CFG, draw_warning_box, save_plot
+from araras.ml.optuna.analyzer import PLOT_CFG, draw_warning_box, save_plot
 
 import warnings
 

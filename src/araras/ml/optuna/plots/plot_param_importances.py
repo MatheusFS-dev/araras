@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
-from araras.ml.optuna.analysis.analyzer import (
+from araras.ml.optuna.analyzer import (
     PLOT_CFG,
     save_data_for_latex,
     get_param_display_name,

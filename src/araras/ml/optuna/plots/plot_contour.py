@@ -6,7 +6,7 @@ import numpy as np
 from itertools import combinations
 from matplotlib.tri import Triangulation
 
-from araras.ml.optuna.analysis.analyzer import (
+from araras.ml.optuna.analyzer import (
     PLOT_CFG,
     format_title,
     get_param_display_name,

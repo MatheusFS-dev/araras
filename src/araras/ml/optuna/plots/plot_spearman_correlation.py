@@ -3,7 +3,7 @@ from araras.core import *
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from araras.ml.optuna.analysis.analyzer import (
+from araras.ml.optuna.analyzer import (
     PLOT_CFG,
     save_data_for_latex,
     draw_warning_box,

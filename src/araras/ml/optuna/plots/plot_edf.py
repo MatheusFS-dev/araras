@@ -5,7 +5,7 @@ import optuna
 import numpy as np
 import scipy.interpolate
 
-from araras.ml.optuna.analysis.analyzer import (
+from araras.ml.optuna.analyzer import (
     PLOT_CFG,
     draw_warning_box,
     save_plot,

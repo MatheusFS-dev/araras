@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import optuna
 import pandas as pd
 
-from araras.ml.optuna.analysis.analyzer import PLOT_CFG, draw_warning_box, save_plot, save_plotly_html
+from araras.ml.optuna.analyzer import PLOT_CFG, draw_warning_box, save_plot, save_plotly_html
 
 
 def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
