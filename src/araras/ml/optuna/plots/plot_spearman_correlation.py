@@ -119,8 +119,6 @@ def plot_spearman_correlation(
     # Extract correlations between each parameter and loss function only
     param_loss_corr = corr.loc[numeric_cols, "loss"].sort_values(key=abs, ascending=False)
 
-    param_loss_corr = param_loss_corr.dropna()
-
     # Save parameter-loss correlation data for LaTeX
     save_data_for_latex(
         {
