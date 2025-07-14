@@ -754,47 +754,47 @@ def analyze_study(
                 create_plotly,
             )
 
-        print(f"\nAnalysis complete! Results saved to: {table_dir}")
-        print(f"- Figures: {dirs['figs']}")
-        if save_data:
-            print(f"- Data for LaTeX: {dirs['data']}")
-            print("  * Distributions:", dirs["data_distributions"])
-            print("  * Boxplots:", dirs["data_boxplots"])
-            print("  * Trends:", dirs["data_trends"])
-            print("  * Ranges:", dirs["data_ranges"])
-            print("  * Importances:", dirs["data_importances"])
-            print("  * Correlations:", dirs["data_correlations"])
-        print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
+    print(f"\nAnalysis complete! Results saved to: {table_dir}")
+    print(f"- Figures: {dirs['figs']}")
+    if save_data:
+        print(f"- Data for LaTeX: {dirs['data']}")
+        print("  * Distributions:", dirs["data_distributions"])
+        print("  * Boxplots:", dirs["data_boxplots"])
+        print("  * Trends:", dirs["data_trends"])
+        print("  * Ranges:", dirs["data_ranges"])
+        print("  * Importances:", dirs["data_importances"])
+        print("  * Correlations:", dirs["data_correlations"])
+    print(f"- Summary tables: {dirs['table_overall']}, {dirs['table_best']}, {dirs['table_worst']}")
 
+    if create_standalone:
+        print("- Standalone images:")
+        print(f"  * Distributions: {dirs['standalone_distributions']}")
+        print(f"  * Boxplots: {dirs['standalone_boxplots']}")
+        print(f"  * Trends: {dirs['standalone_trends']}")
+        print(f"  * Ranges: {dirs['standalone_ranges']}")
+        print(f"  * Contours: {dirs['standalone_contours']}")
+        print(f"  * Slices: {dirs['standalone_slices']}")
+        print(f"  * Ranks: {dirs['standalone_ranks']}")
+
+    if create_plotly:
+        print("- Plotly HTML files:")
+        print(f"  * Combined: {dirs['plotly']}")
         if create_standalone:
-            print("- Standalone images:")
-            print(f"  * Distributions: {dirs['standalone_distributions']}")
-            print(f"  * Boxplots: {dirs['standalone_boxplots']}")
-            print(f"  * Trends: {dirs['standalone_trends']}")
-            print(f"  * Ranges: {dirs['standalone_ranges']}")
-            print(f"  * Contours: {dirs['standalone_contours']}")
-            print(f"  * Slices: {dirs['standalone_slices']}")
-            print(f"  * Ranks: {dirs['standalone_ranks']}")
+            print(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
+            print(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
+            print(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
+            print(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
+            print(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
+            print(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
 
-        if create_plotly:
-            print("- Plotly HTML files:")
-            print(f"  * Combined: {dirs['plotly']}")
-            if create_standalone:
-                print(f"  * Standalone Distributions: {dirs['plotly_standalone_distributions']}")
-                print(f"  * Standalone Boxplots: {dirs['plotly_standalone_boxplots']}")
-                print(f"  * Standalone Trends: {dirs['plotly_standalone_trends']}")
-                print(f"  * Standalone Ranges: {dirs['plotly_standalone_ranges']}")
-                print(f"  * Standalone Contours: {dirs['plotly_standalone_contours']}")
-                print(f"  * Standalone Slices: {dirs['plotly_standalone_slices']}")
+    if param_name_mapping:
+        print(f"\nParameter name mappings applied:")
+        for orig, display in param_name_mapping.items():
+            print(f"  {orig} -> {display}")
 
-        if param_name_mapping:
-            print(f"\nParameter name mappings applied:")
-            for orig, display in param_name_mapping.items():
-                print(f"  {orig} -> {display}")
+    print(
+        f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
+    )
 
-        print(
-            f"\nProcessed {len(df)} trials with {len(numeric_cols)} numeric and {len(categorical_cols)} categorical parameters."
-        )
-
-        if plots is not None:
-            console.log(f"Generated plots: {sorted(plots_to_generate)}")
+    if plots is not None:
+        print(f"Generated plots: {sorted(plots_to_generate)}")
