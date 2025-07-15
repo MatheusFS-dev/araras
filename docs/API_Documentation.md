@@ -868,6 +868,8 @@ get_model_usage_stats(
 )
 ```
 Estimate average power draw and energy usage. Careful with the RAPL path; it may vary by system. The RAPL interface is typically found at: $ ls /sys/class/powercap intel-rapl $ ls /sys/class/powercap/intel-rapl intel-rapl:0       intel-rapl:0:0    intel-rapl:1    … $ ls /sys/class/powercap/intel-rapl/intel-rapl:0 energy_uj  max_energy_range_uj  name Also, you MUST run this on a linux system with Intel CPUs!!!!! And run the python script with SUDO to access RAPL files.
+> [!IMPORTANT]
+> This function must be executed on a Linux system with Intel CPUs and requires sudo privileges to read RAPL counters.
 
 **Parameters**
 | Name | Type | Description |
@@ -883,7 +885,7 @@ Estimate average power draw and energy usage. Careful with the RAPL path; it may
 
 **Raises**
 - RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
-- ValueError: If ``device`` is neither ``
+- ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
 
 ### write_model_stats_to_file
 
@@ -910,8 +912,11 @@ Write model statistics to a file.
 | batch_size | `int` | The batch size to simulate for input. |
 | device | `int` | GPU index to run the model on. Use ``-1`` for CPU. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
-| extra_attrs | `Optional[List[str]]` | Additional attributes to write to the file. |
+| extra_attrs | `Optional[Dict[str, Any]]` | Mapping of attribute names to values written after the main statistics. |
 | verbose | `bool` | If True, print detailed information. |
+
+> [!NOTE]
+> Extra attributes can be used to record custom metrics such as accuracy or F1 score alongside the default statistics.
 
 **Returns**
 `Any`
@@ -930,6 +935,8 @@ convert_to_saved_model(
 )
 ```
 Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel. This will load the model, export it in SavedModel directory format, then compress that directory into a .zip file.
+> [!TIP]
+> The resulting zip file can be unzipped and loaded with `tf.saved_model.load` just like a standard SavedModel directory.
 
 **Parameters**
 | Name | Type | Description |
@@ -1525,6 +1532,8 @@ run_auto_restart(
 )
 ```
 Main function with notebook conversion, file cleanup, and consolidated email notification support.
+> [!CAUTION]
+> The target script is executed repeatedly until a success flag is detected or the maximum number of restarts is reached.
 
 **Parameters**
 | Name | Type | Description |
@@ -1692,16 +1701,16 @@ get_user_gpu_choice(
 )
 ```
 Prompts the user to select a GPU index and validates the input.
-
-**Parameters**
-| Name | Type | Description |
-|------|------|-------------|
+- This function does not accept any arguments.
 
 **Returns**
 ` str: Valid GPU index as string`
 
 **Raises**
 - None
+
+> [!TIP]
+> If only one GPU is detected, the function automatically selects index `0` and skips prompting the user.
 
 ### get_gpu_info
 
@@ -1713,14 +1722,15 @@ get_gpu_info(
 Prints detailed TensorFlow and GPU configuration information in nvidia-smi style format. This function reports: - TensorFlow version and CUDA configuration - GPU devices in tabular format similar to nvidia-smi - Memory usage summary - Temperature and utilization data (when available)
 
 **Parameters**
-| Name | Type | Description |
-|------|------|-------------|
+This function does not accept any arguments.
 
 **Returns**
 ` None Example: get_gpu_info()`
 
 **Raises**
 - None
+> [!IMPORTANT]
+> Requires an NVIDIA driver and the `nvidia-smi` utility installed to query hardware information.
 
 ### gpu_summary
 
@@ -1732,14 +1742,15 @@ gpu_summary(
 Prints a compact GPU summary similar to nvidia-smi output.
 
 **Parameters**
-| Name | Type | Description |
-|------|------|-------------|
+This function does not accept any arguments.
 
 **Returns**
-`Any`
+` None`
 
 **Raises**
 - None
+> [!NOTE]
+> The summary lists only GPUs visible to TensorFlow and may omit devices hidden by environment variables.
 
 ### log_resources
 
@@ -1756,13 +1767,15 @@ Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regul
 |------|------|-------------|
 | log_dir | `str` | Directory where log files will be stored. |
 | interval | `int` | Time interval between consecutive logs in seconds. Defaults to 5. |
-| kwargs | `None` | Boolean flags to specify which resources to log. Supported flags: "cpu", "ram", "gpu", "cuda", "tensorflow". |
+| kwargs | `bool` flags | Set a flag to ``True`` to log a given resource. Supported flags: "cpu", "ram", "gpu", "cuda", "tensorflow". |
 
 **Returns**
 ` None Example: log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)`
 
 **Raises**
 - None
+> [!CAUTION]
+> Log files are appended indefinitely; on long-running experiments they can grow very large. Ensure there is enough disk space.
 
 ## visualization.configs
 
@@ -1778,10 +1791,13 @@ Configure matplotlib rcParams for IEEE‑style figures
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| style | `str` | The figure style to use. Options are 'single-column' or 'double-column'. Default is 'single-column'. |
+| style | `str` | Figure style. Use `'single-column'` for narrow figures or `'double-column'` for wide figures. Defaults to `'single-column'`. |
 
 **Returns**
 ` None`
 
 **Raises**
 - None
+
+> [!TIP]
+> Use `'double-column'` when creating figures that span both columns in a conference paper for consistent font sizes.
