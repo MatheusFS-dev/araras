@@ -162,6 +162,7 @@ def plot_model_param_distribution(
     bits_per_param: int,
     batch_size: int = 1,
     n_trials: int = 1000,
+    save_path: Optional[str] = None,
 ) -> None:
     """Sample random models and plot parameter and size histograms.
 
@@ -178,6 +179,7 @@ def plot_model_param_distribution(
         bits_per_param: Number of bits used to store each parameter.
         batch_size: Batch size used when estimating the training memory.
         n_trials: Total number of random trials to sample.
+        save_path: Optional path to save the figure. If None, the figure is shown only.
 
     Returns:
         None. The histograms are displayed using ``matplotlib``.
@@ -254,6 +256,9 @@ def plot_model_param_distribution(
 
     plt.tight_layout()
     plt.show()
+    
+    if save_path:
+        fig.savefig(save_path, bbox_inches="tight", dpi=300)
 
     if oom_count:
         print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")
