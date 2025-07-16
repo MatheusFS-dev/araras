@@ -163,6 +163,7 @@ def plot_model_param_distribution(
     batch_size: int = 1,
     n_trials: int = 1000,
     save_path: Optional[str] = None,
+    figsize: Tuple[int, int] = (18, 6),
 ) -> None:
     """Sample random models and plot parameter and size histograms.
 
@@ -180,6 +181,7 @@ def plot_model_param_distribution(
         batch_size: Batch size used when estimating the training memory.
         n_trials: Total number of random trials to sample.
         save_path: Optional path to save the figure. If None, the figure is shown only.
+        figsize: Figure size for the histograms.
 
     Returns:
         None. The histograms are displayed using ``matplotlib``.
@@ -238,7 +240,7 @@ def plot_model_param_distribution(
             tf.keras.backend.clear_session()
             gc.collect()
 
-    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
+    fig, axes = plt.subplots(1, 3, figsize=figsize)
     axes[0].hist(param_counts, bins=100, color="black")
     axes[0].set_xlabel("Number of parameters")
     axes[0].set_ylabel("Frequency")
