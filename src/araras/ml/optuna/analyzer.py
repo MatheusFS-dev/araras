@@ -11,6 +11,22 @@ import matplotlib.pyplot as plt
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from .plots.plot_hyperparameter_distributions import plot_hyperparameter_distributions
+from .plots.plot_param_importances import plot_param_importances
+from .plots.plot_spearman_correlation import plot_spearman_correlation
+from .plots.plot_parameter_boxplots import plot_parameter_boxplots
+from .plots.plot_trend_analysis import plot_trend_analysis
+from .plots.plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
+from .plots.plot_contour import plot_contour
+from .plots.plot_edf import plot_edf
+from .plots.plot_intermediate_values import plot_intermediate_values
+from .plots.plot_parallel_coordinate import plot_parallel_coordinate
+from .plots.plot_rank import plot_rank
+from .plots.plot_slice import plot_slice
+from .plots.plot_optimization_history import plot_optimization_history
+from .plots.plot_timeline import plot_timeline
+from .plots.plot_terminator_improvement import plot_terminator_improvement
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                 Configuration                                #
@@ -117,25 +133,6 @@ def set_plot_config_params(**kwargs: Any) -> None:
 
     for name, val in kwargs.items():
         set_plot_config_param(name, val)
-
-
-# Adding import statements for all plot functions
-#! Must be done after the utility functions to ensure no circular imports
-from .plots.plot_hyperparameter_distributions import plot_hyperparameter_distributions
-from .plots.plot_param_importances import plot_param_importances
-from .plots.plot_spearman_correlation import plot_spearman_correlation
-from .plots.plot_parameter_boxplots import plot_parameter_boxplots
-from .plots.plot_trend_analysis import plot_trend_analysis
-from .plots.plot_optimal_ranges_analysis import plot_optimal_ranges_analysis
-from .plots.plot_contour import plot_contour
-from .plots.plot_edf import plot_edf
-from .plots.plot_intermediate_values import plot_intermediate_values
-from .plots.plot_parallel_coordinate import plot_parallel_coordinate
-from .plots.plot_rank import plot_rank
-from .plots.plot_slice import plot_slice
-from .plots.plot_optimization_history import plot_optimization_history
-from .plots.plot_timeline import plot_timeline
-from .plots.plot_terminator_improvement import plot_terminator_improvement
 
 # ———————————————————————————————————————————————————————————————————————————— #
 
