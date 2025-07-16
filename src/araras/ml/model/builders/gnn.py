@@ -31,7 +31,7 @@ def print_warning_jit():
             "Call:",
         ]
         for msg in warnings:
-            print(f"{YELLOW}{msg}")
+            print(f"{YELLOW}{msg}{RESET}")
 
         # commands in orange
         commands = [
@@ -40,8 +40,8 @@ def print_warning_jit():
             "'jit_compile=False'  # pass into model.compile()",
         ]
         for cmd in commands:
-            print(f"{ORANGE}{cmd}")
-        print(f"{YELLOW}==============================================================")
+            print(f"{ORANGE}{cmd}{RESET}")
+        print(f"{YELLOW}=============================================================={RESET}")
         PRINT_ONCE_JIT = False
 
 
