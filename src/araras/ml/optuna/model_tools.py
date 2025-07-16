@@ -256,7 +256,7 @@ def plot_model_param_distribution(
     plt.show()
 
     if oom_count:
-        print(f"Skipped {oom_count} trial(s) due to ResourceExhaustedError.")
+        print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")
 
 
 def set_user_attr_model_stats(
