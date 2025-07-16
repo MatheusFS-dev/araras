@@ -21,7 +21,8 @@ from optuna.terminator.improvement.evaluator import (
     DEFAULT_MIN_N_TRIALS,
 )
 
-from araras.ml.optuna.analyzer import PLOT_CFG, draw_warning_box, save_plot, save_plotly_html
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import draw_warning_box, save_plot, save_plotly_html
 
 
 PADDING_RATIO_Y = 0.05

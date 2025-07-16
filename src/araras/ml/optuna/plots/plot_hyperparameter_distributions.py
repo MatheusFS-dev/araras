@@ -10,8 +10,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.stats import gaussian_kde
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     format_title,
     get_param_display_name,
     format_numeric_value,

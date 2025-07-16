@@ -10,11 +10,8 @@ import optuna
 import numpy as np
 import scipy.interpolate
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
-    draw_warning_box,
-    save_plot,
-)
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import draw_warning_box, save_plot
 
 
 def plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:

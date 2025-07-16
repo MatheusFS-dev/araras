@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 import optuna
 from optuna.importance import get_param_importances
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     save_data_for_latex,
     get_param_display_name,
     draw_warning_box,

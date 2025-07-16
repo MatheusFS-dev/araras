@@ -10,8 +10,8 @@ import optuna
 import numpy as np
 import pandas as pd
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     get_param_display_name,
     format_title,
     calculate_grid,
