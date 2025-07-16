@@ -552,11 +552,11 @@ def analyze_study(
             Deactivated by default:
                 - 'parallel_coordinate' (Too much of a mess to be useful)
                 - 'rank' (Can cause crashes and not very useful)
-            If None, generates all .plots.
+            If None, generates a recommended default set of plots.
     """
 
-    # Define all available plot types
-    all_plots = {
+    # Define all available plot types in order
+    valid_plots = [
         "distributions",
         "importances",
         "correlations",
@@ -572,17 +572,19 @@ def analyze_study(
         "history",
         "timeline",
         "terminator",
-    }
+    ]
 
-    # Set plots to generate (default: all plots)
+    # Default plots exclude the noisy/experimental ones
+    default_plots = [p for p in valid_plots if p not in {"parallel_coordinate", "rank"}]
+
+    # Validate requested plot names
     if plots is None:
-        plots_to_generate = all_plots
+        plots_to_generate = default_plots
     else:
-        plots_to_generate = set(plots)
-        invalid_plots = plots_to_generate - all_plots
+        invalid_plots = [p for p in plots if p not in valid_plots]
         if invalid_plots:
             logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
-            plots_to_generate = plots_to_generate & all_plots
+        plots_to_generate = [p for p in plots if p in valid_plots]
 
     dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
 
@@ -612,138 +614,151 @@ def analyze_study(
         param_name_mapping=param_name_mapping,
     )
 
-    if plots is None:
-        # Deactivate parallel coordinate and rank plots by default
-        plots_to_generate -= {"parallel_coordinate", "rank"}
 
     print(f"\n{BLUE}{BOLD}Analyzing study...{RESET}")
     print("     Generating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
 
-    if "distributions" in plots_to_generate:
-        print("     Generating hyperparameter distribution plots...")
-        _safe_plot(
-            "distributions",
-            plot_hyperparameter_distributions,
-            df,
-            numeric_cols,
-            categorical_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
+    plot_actions = {
+        "distributions": (
+            "hyperparameter distribution plots",
+            lambda: _safe_plot(
+                "distributions",
+                plot_hyperparameter_distributions,
+                df,
+                numeric_cols,
+                categorical_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "importances": (
+            "parameter importances",
+            lambda: _safe_plot("importances", plot_param_importances, study, dirs, create_plotly),
+        ),
+        "correlations": (
+            "Spearman correlations",
+            lambda: _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly),
+        ),
+        "boxplots": (
+            "boxplots for parameter distributions",
+            lambda: _safe_plot(
+                "boxplots",
+                plot_parameter_boxplots,
+                df,
+                best,
+                worst,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "trends": (
+            "trend analysis",
+            lambda: _safe_plot(
+                "trends",
+                plot_trend_analysis,
+                df,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "ranges": (
+            "optimal ranges analysis",
+            lambda: _safe_plot(
+                "ranges",
+                plot_optimal_ranges_analysis,
+                df,
+                best,
+                numeric_cols,
+                dirs,
+                param_name_mapping,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "contours": (
+            "contour plots",
+            lambda: _safe_plot(
+                "contours",
+                plot_contour,
+                study,
+                numeric_cols,
+                dirs,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "edf": (
+            "EDF of study values",
+            lambda: _safe_plot("edf", plot_edf, study, dirs, create_plotly),
+        ),
+        "intermediate": (
+            "intermediate values plots",
+            lambda: _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly),
+        ),
+        "parallel_coordinate": (
+            "parallel coordinate plots",
+            lambda: _safe_plot(
+                "parallel_coordinate",
+                plot_parallel_coordinate,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_plotly,
+            ),
+        ),
+        "slice": (
+            "slice plots",
+            lambda: _safe_plot(
+                "slice",
+                plot_slice,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+        "history": (
+            "optimization history plot",
+            lambda: _safe_plot("history", plot_optimization_history, study, dirs, create_plotly),
+        ),
+        "timeline": (
+            "timeline plot",
+            lambda: _safe_plot("timeline", plot_timeline, study, dirs, create_plotly),
+        ),
+        "terminator": (
+            "terminator improvement plot",
+            lambda: _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly),
+        ),
+        # Rank plots are deprecated but kept for backward compatibility
+        "rank": (
+            "rank plots",
+            lambda: _safe_plot(
+                "rank",
+                plot_rank,
+                study,
+                numeric_cols + categorical_cols,
+                dirs,
+                create_standalone,
+                create_plotly,
+            ),
+        ),
+    }
 
-    if "importances" in plots_to_generate:
-        print("     Generating parameter importances...")
-        _safe_plot("importances", plot_param_importances, study, dirs, create_plotly)
-
-    if "correlations" in plots_to_generate:
-        print("     Generating Spearman correlations...")
-        _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly)
-
-    if "boxplots" in plots_to_generate:
-        print("     Generating boxplots for parameter distributions...")
-        _safe_plot(
-            "boxplots",
-            plot_parameter_boxplots,
-            df,
-            best,
-            worst,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "trends" in plots_to_generate:
-        print("     Generating trend analysis...")
-        _safe_plot(
-            "trends",
-            plot_trend_analysis,
-            df,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "ranges" in plots_to_generate:
-        print("     Generating optimal ranges analysis...")
-        _safe_plot(
-            "ranges",
-            plot_optimal_ranges_analysis,
-            df,
-            best,
-            numeric_cols,
-            dirs,
-            param_name_mapping,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "contours" in plots_to_generate:
-        print("     Generating contour plots...")
-        _safe_plot("contours", plot_contour, study, numeric_cols, dirs, create_standalone, create_plotly)
-
-    if "edf" in plots_to_generate:
-        print("     Generating EDF of study values...")
-        _safe_plot("edf", plot_edf, study, dirs, create_plotly)
-
-    if "intermediate" in plots_to_generate:
-        print("     Generating intermediate values plots...")
-        _safe_plot("intermediate", plot_intermediate_values, study, dirs, create_plotly)
-
-    if "parallel_coordinate" in plots_to_generate:
-        print("     Generating parallel coordinate plots...")
-        _safe_plot(
-            "parallel_coordinate",
-            plot_parallel_coordinate,
-            study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_plotly,
-        )
-
-    if "slice" in plots_to_generate:
-        print("     Generating slice plots...")
-        _safe_plot(
-            "slice",
-            plot_slice,
-            study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_standalone,
-            create_plotly,
-        )
-
-    if "history" in plots_to_generate:
-        print("     Generating optimization history plot...")
-        _safe_plot("history", plot_optimization_history, study, dirs, create_plotly)
-
-    if "timeline" in plots_to_generate:
-        print("     Generating timeline plot...")
-        _safe_plot("timeline", plot_timeline, study, dirs, create_plotly)
-
-    if "terminator" in plots_to_generate:
-        print("     Generating terminator improvement plot...")
-        _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly)
-
-    #! Rank plots are deprecated, they are causing crashes and not helping much
-    #! So they are not generated by default anymore
-    if "rank" in plots_to_generate:
-        print("     Generating rank plots...")
-        _safe_plot(
-            "rank",
-            plot_rank,
-            study,
-            numeric_cols + categorical_cols,
-            dirs,
-            create_standalone,
-            create_plotly,
-        )
+    for plot_name in plots_to_generate:
+        desc, action = plot_actions.get(plot_name, (None, None))
+        if action is not None:
+            print(f"     Generating {desc}...")
+            action()
 
     print(f"\nAnalysis complete! Results saved to: {table_dir}")
     print(f"- Figures: {dirs['figs']}")

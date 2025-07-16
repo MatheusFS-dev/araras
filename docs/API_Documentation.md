@@ -1083,7 +1083,7 @@ Comprehensive analysis of Optuna hyperparameter optimization study results.
 | create_standalone | `bool` | If True, generates standalone images for each plot type. |
 | save_data | `bool` | If True, saves data for LaTeX plotting into CSV files. |
 | create_plotly | `bool` | If True, also saves interactive Plotly HTML versions of the figures. |
-| plots | `Any` | List of plot types to generate. Available options: 'distributions', 'importances', 'correlations', 'boxplots', 'trends', 'ranges', 'contours', 'edf', 'intermediate', 'parallel_coordinate', 'slice', 'rank', 'history', 'timeline', 'terminator'. Deactivated by default: - 'parallel_coordinate' (Too much of a mess to be useful) - 'rank' (Can cause crashes and not very useful) If None, generates all .plots. |
+| plots | `Any` | List of plot types to generate. Valid options: 'distributions', 'importances', 'correlations', 'boxplots', 'trends', 'ranges', 'contours', 'edf', 'intermediate', 'parallel_coordinate', 'slice', 'rank', 'history', 'timeline', 'terminator'. The default set excludes 'parallel_coordinate' and 'rank'. If ``None`` the default set is used. |
 
 **Returns**
 `Any`
