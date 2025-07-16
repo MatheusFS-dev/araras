@@ -1268,15 +1268,20 @@ Sample random models and plot parameter and size histograms.
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| build_model_fn | `Any` | Function that builds a Keras model given an Optuna ``Trial``. |
+| build_model_fn | `Callable` | Callable that receives an Optuna ``Trial`` and returns a compiled ``tf.keras.Model``. |
 | bits_per_param | `int` | Number of bits used to store each parameter. |
-| n_trials | `int` | Number of random trials to run. |
+| batch_size | `int` | Batch size used when estimating the training memory. |
+| n_trials | `int` | Total number of random trials to sample. |
 
 **Returns**
-`Any`
+`None`
 
 **Raises**
 - None
+
+**Notes**
+- Clearing the Keras backend session between trials mitigates ``ResourceExhaustedError``.
+- Trials that raise ``ResourceExhaustedError`` are skipped and the count is printed.
 
 ### set_user_attr_model_stats
 
