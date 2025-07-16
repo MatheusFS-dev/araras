@@ -29,10 +29,22 @@ def plot_slice(
 ) -> None:
     """Create slice plots for each parameter.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save interactive HTML versions of the plots.
+    Slice plots reveal the relationship between a single parameter and the
+    objective while holding other parameters fixed. An interactive Plotly
+    version can also be generated.
+
+    Args:
+        study: Optuna study containing the trials.
+        params: List of parameter names to include in the plot.
+        dirs: Dictionary with output directories for saving figures.
+        create_standalone: Whether to save each slice plot separately.
+        create_plotly: Whether to save interactive HTML versions of the plots.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

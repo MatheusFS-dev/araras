@@ -33,12 +33,23 @@ def plot_parallel_coordinate(
     dirs: Dict[str, str],
     create_plotly: bool = False,
 ) -> None:
-    """Create a parallel coordinate plot for trials.
+    """Create a parallel coordinate plot for completed trials.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    The plot visualizes how each parameter influences the objective value by
+    drawing parallel axes for the provided parameters. If ``create_plotly`` is
+    ``True`` an interactive HTML version of the plot is also saved.
+
+    Args:
+        study: Optuna study containing the trials to visualize.
+        params: List of parameter names to include in the plot.
+        dirs: Dictionary with output directories used for saving figures.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

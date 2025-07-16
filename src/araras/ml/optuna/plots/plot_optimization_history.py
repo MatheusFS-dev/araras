@@ -15,10 +15,20 @@ from araras.ml.optuna.analyzer import PLOT_CFG, draw_warning_box, save_plot, sav
 def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
     """Plot optimization history of the study.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    This chart displays how the objective value evolves with each trial. Use it
+    to diagnose convergence trends. When ``create_plotly`` is ``True`` an
+    interactive version of the plot is also generated.
+
+    Args:
+        study: Optuna study to visualize.
+        dirs: Dictionary with output directories for saving figures.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     df = study.trials_dataframe(attrs=("number", "value", "state"))
     df = df.query("state == 'COMPLETE'")

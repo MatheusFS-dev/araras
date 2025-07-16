@@ -16,24 +16,29 @@ from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
 
 
 class ImprovementStagnation:
-    """Stop a study when the terminator improvement variance plateaus.
+    """Stop a study when improvement variance plateaus.
 
-    After each completed trial the callback computes the potential future
-    improvement using an ``optuna.terminator`` improvement evaluator. The
-    variance of the most recent ``window_size`` improvement values is measured
-    and if it falls below ``variance_threshold`` after ``min_n_trials`` trials
-    the study is terminated via :meth:`optuna.Study.stop`.
+    After each completed trial this callback estimates the potential future
+    improvement using an ``optuna.terminator`` evaluator. It monitors the
+    variance of the last ``window_size`` improvement values and stops the study
+    via :meth:`optuna.Study.stop` once the variance drops below
+    ``variance_threshold`` after ``min_n_trials`` trials.
 
-    Parameters
-    ----------
-    min_n_trials:
-        Minimum number of completed trials before starting variance checks.
-    window_size:
-        Number of recent improvement values used to compute the variance.
-    variance_threshold:
-        Threshold below which the variance of improvements indicates stagnation.
-    improvement_evaluator:
-        Custom improvement evaluator. Defaults to :class:`RegretBoundEvaluator`.
+    Args:
+        min_n_trials: Minimum number of completed trials before variance checks
+            are performed.
+        window_size: Number of recent improvement values used to compute the
+            variance.
+        variance_threshold: Threshold below which the variance of improvements
+            indicates stagnation.
+        improvement_evaluator: Custom improvement evaluator. Defaults to
+            :class:`RegretBoundEvaluator`.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
 
     def __init__(
