@@ -9,8 +9,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     save_data_for_latex,
     draw_warning_box,
     save_plot,

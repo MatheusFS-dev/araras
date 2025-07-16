@@ -8,11 +8,8 @@ from araras.core import *
 import matplotlib.pyplot as plt
 import optuna
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
-    draw_warning_box,
-    save_plot,
-)
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import draw_warning_box, save_plot
 
 
 def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:

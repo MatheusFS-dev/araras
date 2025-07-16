@@ -19,8 +19,8 @@ import matplotlib.pyplot as plt
 import optuna
 import numpy as np
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     get_param_display_name,
     draw_warning_box,
     save_plot,

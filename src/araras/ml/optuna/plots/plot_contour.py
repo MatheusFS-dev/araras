@@ -11,8 +11,8 @@ import numpy as np
 from itertools import combinations
 from matplotlib.tri import Triangulation
 
-from araras.ml.optuna.analyzer import (
-    PLOT_CFG,
+from araras.ml.optuna.analyzer import PLOT_CFG
+from araras.ml.optuna.analysis_utils import (
     format_title,
     get_param_display_name,
     calculate_grid,
