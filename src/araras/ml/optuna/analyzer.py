@@ -3,6 +3,7 @@ Last Edited: 14 July 2025
 Description:
     Analyze hyperparameter optimization results.
 """
+
 from araras.core import *
 
 import os
@@ -17,6 +18,7 @@ from dataclasses import dataclass
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                 Configuration                                #
 # ———————————————————————————————————————————————————————————————————————————— #
+
 
 @dataclass
 class PlotConfig:
@@ -109,6 +111,7 @@ def set_plot_config_params(**kwargs: Any) -> None:
     """Set multiple parameters in :data:`PLOT_CFG`."""
     for name, val in kwargs.items():
         set_plot_config_param(name, val)
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                               Utility Functions                              #
@@ -330,24 +333,12 @@ def create_directories(
                     "plotly_standalone_distributions": os.path.join(
                         table_dir, "plotly", "standalone", "distributions"
                     ),
-                    "plotly_standalone_boxplots": os.path.join(
-                        table_dir, "plotly", "standalone", "boxplots"
-                    ),
-                    "plotly_standalone_trends": os.path.join(
-                        table_dir, "plotly", "standalone", "trends"
-                    ),
-                    "plotly_standalone_ranges": os.path.join(
-                        table_dir, "plotly", "standalone", "ranges"
-                    ),
-                    "plotly_standalone_contours": os.path.join(
-                        table_dir, "plotly", "standalone", "contours"
-                    ),
-                    "plotly_standalone_slices": os.path.join(
-                        table_dir, "plotly", "standalone", "slices"
-                    ),
-                    "plotly_standalone_ranks": os.path.join(
-                        table_dir, "plotly", "standalone", "ranks"
-                    ),
+                    "plotly_standalone_boxplots": os.path.join(table_dir, "plotly", "standalone", "boxplots"),
+                    "plotly_standalone_trends": os.path.join(table_dir, "plotly", "standalone", "trends"),
+                    "plotly_standalone_ranges": os.path.join(table_dir, "plotly", "standalone", "ranges"),
+                    "plotly_standalone_contours": os.path.join(table_dir, "plotly", "standalone", "contours"),
+                    "plotly_standalone_slices": os.path.join(table_dir, "plotly", "standalone", "slices"),
+                    "plotly_standalone_ranks": os.path.join(table_dir, "plotly", "standalone", "ranks"),
                 }
             )
 
@@ -371,11 +362,10 @@ def save_plotly_html(fig: Any, filepath: str) -> None:
     """Save a Plotly figure to an HTML file."""
     try:
         import plotly.io as pio
+
         pio.write_html(fig, filepath, include_plotlyjs="cdn")
     except Exception as e:  # pragma: no cover - runtime warning only
-        logger_error.error(
-            f"{RED}Error saving plotly figure {filepath}: {e}{RESET}"
-        )
+        logger_error.error(f"{RED}Error saving plotly figure {filepath}: {e}{RESET}")
 
 
 def save_plot(
@@ -523,6 +513,7 @@ from .plots.plot_terminator_improvement import plot_terminator_improvement
 
 # ———————————————————————————————————————————————————————————————————————————— #
 
+
 def analyze_study(
     study: optuna.Study,
     table_dir: str,
@@ -552,6 +543,10 @@ def analyze_study(
             Deactivated by default:
                 - 'parallel_coordinate' (Too much of a mess to be useful)
                 - 'rank' (Can cause crashes and not very useful)
+                - 'contours' (For many parameters, this is quite messy)
+                - 'slice' (Similar to trend)
+                - 'edf' (Useful, but not always needed)
+                - 'intermediate' (Similar to history. Did the study converge?)
             If None, generates a recommended default set of plots.
     """
 
@@ -575,7 +570,19 @@ def analyze_study(
     ]
 
     # Default plots exclude the noisy/experimental ones
-    default_plots = [p for p in valid_plots if p not in {"parallel_coordinate", "rank"}]
+    default_plots = [
+        p
+        for p in valid_plots
+        if p
+        not in {
+            "parallel_coordinate",
+            "rank",
+            "contours",
+            "slice",
+            "edf",
+            "intermediate",
+        }
+    ]
 
     # Validate requested plot names
     if plots is None:
@@ -614,7 +621,6 @@ def analyze_study(
         param_name_mapping=param_name_mapping,
     )
 
-
     print(f"\n{BLUE}{BOLD}Analyzing study...{RESET}")
     print("     Generating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
@@ -640,7 +646,9 @@ def analyze_study(
         ),
         "correlations": (
             "Spearman correlations",
-            lambda: _safe_plot("correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly),
+            lambda: _safe_plot(
+                "correlations", plot_spearman_correlation, df, numeric_cols, dirs, create_plotly
+            ),
         ),
         "boxplots": (
             "boxplots for parameter distributions",
@@ -739,7 +747,7 @@ def analyze_study(
             "terminator improvement plot",
             lambda: _safe_plot("terminator", plot_terminator_improvement, study, dirs, create_plotly),
         ),
-        # Rank plots are deprecated but kept for backward compatibility
+        #! Deprecated
         "rank": (
             "rank plots",
             lambda: _safe_plot(
