@@ -113,12 +113,27 @@ def plot_terminator_improvement(
     min_n_trials: int = DEFAULT_MIN_N_TRIALS,
     create_plotly: bool = False,
 ) -> None:
-    """Plot the potentials for future objective improvement using Matplotlib.
+    """Plot the potential for future objective improvement.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    The function visualizes how much improvement might still be achievable
+    according to an ``optuna.terminator`` evaluator. Optionally an interactive
+    Plotly version can also be generated.
+
+    Args:
+        study: Optuna study containing optimization results.
+        dirs: Dictionary with output directories for saving figures.
+        plot_error: Whether to include error bars in the plot.
+        print_variance: If ``True`` prints the variance of the last few trials.
+        improvement_evaluator: Custom improvement evaluator instance.
+        error_evaluator: Custom error evaluator instance.
+        min_n_trials: Minimum number of completed trials before plotting.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
 
     info = _get_improvement_info(

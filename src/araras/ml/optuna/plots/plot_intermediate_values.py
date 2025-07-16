@@ -18,10 +18,20 @@ from araras.ml.optuna.analyzer import (
 def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
     """Plot intermediate values reported during trials.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    This plot shows how reported metrics evolve during the optimization. It can
+    highlight variance and potential early stopping points. An optional
+    interactive Plotly version can also be saved.
+
+    Args:
+        study: Optuna study containing the trials.
+        dirs: Dictionary with output directories for saving figures.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not trials:

@@ -213,24 +213,24 @@ def calculate_grid(
     subplot_height: int,
     base_max_cols: int,
 ) -> Tuple[int, int]:
-    """Calculate grid dimensions ensuring the resulting figure stays within
-    Matplotlib's maximum image size.
+    """Calculate grid dimensions for subplots.
 
-    Parameters
-    ----------
-    n_plots : int
-        Number of subplots to create.
-    subplot_width : int
-        Width of each subplot in inches.
-    subplot_height : int
-        Height of each subplot in inches.
-    base_max_cols : int
-        Desired number of columns before auto-adjustment.
+    This function determines the number of rows and columns required so that
+    the resulting figure does not exceed Matplotlib's maximum allowable image
+    size. If the desired layout would be too large, the number of columns is
+    reduced accordingly.
 
-    Returns
-    -------
-    Tuple[int, int]
-        (n_rows, n_cols) suitable for ``plt.subplots``.
+    Args:
+        n_plots: Number of subplots to create.
+        subplot_width: Width of each subplot in inches.
+        subplot_height: Height of each subplot in inches.
+        base_max_cols: Desired number of columns before auto-adjustment.
+
+    Returns:
+        Tuple[int, int]: ``(n_rows, n_cols)`` suitable for ``plt.subplots``.
+
+    Raises:
+        None
     """
 
     if n_plots <= 0:

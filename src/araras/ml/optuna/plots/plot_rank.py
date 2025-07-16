@@ -54,12 +54,26 @@ def plot_rank(
     create_standalone: bool = False,
     create_plotly: bool = False,
 ) -> None:
-    """Plot parameter relations colored by rank.
+    """Plot pairwise parameter relations colored by rank.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save interactive HTML versions of the plots.
+    This function generates scatter plots showing the interaction between
+    parameters with points colored by the rank of the objective value. If
+    ``create_plotly`` is ``True`` interactive HTML versions of the plots are
+    also saved.
+
+    Args:
+        study: Optuna study containing the trials.
+        params: List of parameter names to include in the plot.
+        dirs: Dictionary with output directories for saving figures.
+        create_standalone: Whether to save separate figures for each parameter
+            pair.
+        create_plotly: Whether to save interactive HTML versions of the plots.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

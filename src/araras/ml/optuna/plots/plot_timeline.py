@@ -25,10 +25,20 @@ warnings.filterwarnings(
 def plot_timeline(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
     """Visualize trial durations on a timeline with detailed information.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    The figure shows when each trial started and how long it ran. Failed and
+    pruned trials are displayed alongside completed ones. An optional Plotly
+    version can be generated for interactive exploration.
+
+    Args:
+        study: Optuna study with the recorded trials.
+        dirs: Dictionary with output directories for saving figures.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     considered_states = {
         optuna.trial.TrialState.COMPLETE,

@@ -30,13 +30,23 @@ def plot_contour(
 ) -> None:
     """Generate contour plots for parameter pairs.
 
-    This creates a single multipanel figure covering all provided parameters
-    and optionally standalone figures for each pair of parameters.
+    A multipanel figure is generated for the provided parameters. Optionally
+    standalone figures for each pair can be produced and interactive Plotly
+    versions may also be saved.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save interactive HTML versions of the plots.
+    Args:
+        study: Optuna study containing optimization results.
+        params: List of parameter names to include in the plot.
+        dirs: Dictionary with output directories for saving figures.
+        create_standalone: Whether to save separate figures for each parameter
+            pair.
+        create_plotly: Whether to save interactive HTML versions of the plots.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

@@ -20,10 +20,19 @@ from araras.ml.optuna.analyzer import (
 def plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
     """Plot the empirical distribution function of objective values.
 
-    Parameters
-    ----------
-    create_plotly : bool
-        Whether to save an interactive HTML version of the plot.
+    This figure shows the cumulative distribution of completed trial values.
+    An optional interactive Plotly version can also be generated.
+
+    Args:
+        study: Optuna study containing optimization results.
+        dirs: Dictionary with output directories for saving figures.
+        create_plotly: Whether to save an interactive HTML version of the plot.
+
+    Returns:
+        None
+
+    Raises:
+        None
     """
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'")
