@@ -9,6 +9,7 @@ import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
+import gc
 
 
 from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
@@ -164,12 +165,33 @@ def plot_model_param_distribution(
 ) -> None:
     """Sample random models and plot parameter and size histograms.
 
-    Args:
-        build_model_fn: Function that builds a Keras model given an Optuna
-            ``Trial``.
-        bits_per_param: Number of bits used to store each parameter.
-        n_trials: Number of random trials to run.
+    This helper draws ``n_trials`` random models using ``build_model_fn`` and
+    records their parameter counts, approximate model sizes and estimated
+    training memory consumption. Histograms for each metric are displayed once
+    sampling finishes. The TensorFlow session is cleared between trials to
+    release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``
+    are skipped and the total number of skipped trials is printed at the end.
 
+    Args:
+        build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
+            compiled :class:`tf.keras.Model`.
+        bits_per_param: Number of bits used to store each parameter.
+        batch_size: Batch size used when estimating the training memory.
+        n_trials: Total number of random trials to sample.
+
+    Returns:
+        None. The histograms are displayed using ``matplotlib``.
+
+    Raises:
+        None
+
+    Notes:
+        Clearing the Keras backend session between trials mitigates
+        ``ResourceExhaustedError`` on GPUs with limited VRAM.
+
+    Warning:
+        Models that trigger ``ResourceExhaustedError`` are ignored in the final
+        statistics.
     """
     config_plt("double-column")  # Configure matplotlib for double-column figures
 
@@ -187,22 +209,32 @@ def plot_model_param_distribution(
             description="Sampling models",
             total=n_trials,
         )
+    oom_count = 0
     for _ in progress_iter:
         trial = study.ask()
-        model = build_model_fn(trial)
+        try:
+            model = build_model_fn(trial)
 
-        n_params = model.count_params()
-        param_counts.append(n_params)
+            n_params = model.count_params()
+            param_counts.append(n_params)
 
-        size_mb = (n_params * bits_per_param) / (8 * 1024 * 1024)
-        model_sizes_mb.append(size_mb)
+            size_mb = (n_params * bits_per_param) / (8 * 1024 * 1024)
+            model_sizes_mb.append(size_mb)
 
-        training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (
-            1024 * 1024
-        )
-        training_memory.append(training_memory_mb)
+            training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (
+                1024 * 1024
+            )
+            training_memory.append(training_memory_mb)
 
-        study.tell(trial, 0.0)
+            study.tell(trial, 0.0)
+        except tf.errors.ResourceExhaustedError:
+            oom_count += 1
+            continue
+        finally:
+            if "model" in locals():
+                del model
+            tf.keras.backend.clear_session()
+            gc.collect()
 
     fig, axes = plt.subplots(1, 3, figsize=(24, 8))
     axes[0].hist(param_counts, bins=100, color="black")
@@ -222,6 +254,9 @@ def plot_model_param_distribution(
 
     plt.tight_layout()
     plt.show()
+
+    if oom_count:
+        print(f"Skipped {oom_count} trial(s) due to ResourceExhaustedError.")
 
 
 def set_user_attr_model_stats(
