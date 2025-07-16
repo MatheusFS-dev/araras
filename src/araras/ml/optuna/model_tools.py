@@ -238,7 +238,7 @@ def plot_model_param_distribution(
             tf.keras.backend.clear_session()
             gc.collect()
 
-    fig, axes = plt.subplots(1, 3, figsize=(24, 8))
+    fig, axes = plt.subplots(1, 3, figsize=(12, 6))
     axes[0].hist(param_counts, bins=100, color="black")
     axes[0].set_xlabel("Number of parameters")
     axes[0].set_ylabel("Frequency")
