@@ -27,7 +27,7 @@ def print_warning_jit():
             "Spektral's GCNConv uses a sparse-dense matmul under the hood.",
             "XLA's GPU JIT compiler does not support that op.",
             "This may cause issues with the GNN layers.",
-            "Disable all auto-JIT clustering and auto-JIT compilation",
+            "Disable all auto-JIT clustering and auto-JIT compilation.",
             "Call:",
         ]
         for msg in warnings:
