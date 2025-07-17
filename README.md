@@ -254,7 +254,7 @@ Print a detailed GPU report.
 ### `utils.logs`
 
 #### `log_resources(log_dir: str, interval: int = 5, **kwargs) -> None`
-Periodically log CPU, RAM, GPU and TensorFlow usage statistics to ``log_dir``.
+Periodically log CPU, RAM, GPU (including temperature) and TensorFlow usage statistics to ``log_dir``.
 
 ### `utils.misc`
 
