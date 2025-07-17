@@ -220,6 +220,7 @@ def get_callbacks_study(
     Constructs and returns a list of Keras callbacks tailored for Optuna trials.
 
     Warning:
+        TensorBoard callback can cause high memory usage!
         The 'write_graph' option in TensorBoard callback is set to False. It causes absurdly high memory usage,
         especially with large models.
 
