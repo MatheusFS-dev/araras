@@ -14,6 +14,8 @@ from spektral.layers import GCNConv, GATConv, ChebConv
 import scipy.sparse as sp
 from spektral.utils import convolution
 from sklearn.neighbors import NearestNeighbors
+import ace_tools as tools
+import pandas as pd
 
 PRINT_ONCE_JIT = True
 
@@ -44,6 +46,45 @@ def print_warning_jit():
             print(f"{ORANGE}{cmd}{RESET}")
         print(f"{YELLOW}=============================================================={RESET}")
         PRINT_ONCE_JIT = False
+
+
+def check_gpu_limit(knn_list, K_list, units_list, n=20*200):
+    """
+    For each combination of knn_k, Chebyshev order K, and units, compute whether
+    the GPU sparse-dense matmul limit (output_channels * nnz(support) <= 2^31 - 1) is
+    respected. Returns a DataFrame summarizing threshold_units and lists of safe/error units.
+    """
+
+    def threshold_units(knn_k, K, n):
+        # Estimate nnz(A_norm) = 2*n*knn_k + n (including self-loops)
+        nnz_A = 2 * n * knn_k
+        nnz_A_norm = nnz_A + n
+        if K == 0:
+            nnz_support = n
+        elif K == 1:
+            nnz_support = nnz_A_norm
+        else:
+            # Approximate nnz of Chebyshev T_K as (nnz_A_norm^K) / (n^(K-1))
+            nnz_support = (nnz_A_norm**K) // (n ** (K - 1))
+        return (2**31 - 1) // nnz_support if nnz_support > 0 else 0
+
+    rows = []
+    for k in knn_list:
+        for K in K_list:
+            thr = threshold_units(k, K, n)
+            safe = [u for u in units_list if u <= thr] or ["none"]
+            error = [u for u in units_list if u > thr] or ["none"]
+            rows.append(
+                {
+                    "knn_k": k,
+                    "K": K,
+                    "threshold_units": thr,
+                    "safe_units": safe,
+                    "error_units": error,
+                }
+            )
+    df = pd.DataFrame(rows)
+    tools.display_dataframe_to_user(name="GPU Limit Check", dataframe=df)
 
 
 def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
