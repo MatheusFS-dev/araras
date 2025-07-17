@@ -23,6 +23,19 @@ from araras.ml.optuna.analysis_utils import (
 
 
 def make_rank_plotly(df: pd.DataFrame, pairs: List[Tuple[str, str]]):
+    """Create an interactive Plotly figure for parameter rank pairs.
+
+    Args:
+        df: DataFrame containing the trial parameters and objective values.
+        pairs: List of parameter name pairs to plot against each other.
+
+    Returns:
+        plotly.graph_objs._figure.Figure: The constructed Plotly figure object.
+
+    Notes:
+        This helper does not call :func:`plotly.io.show`. The caller is
+        responsible for rendering or saving the figure.
+    """
     import plotly.express as px
     from plotly.subplots import make_subplots
 

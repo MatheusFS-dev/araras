@@ -41,6 +41,25 @@ def _get_improvement_info(
     improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
     error_evaluator: Optional[BaseErrorEvaluator] = None,
 ) -> _ImprovementInfo:
+    """Collect improvement and error values for each completed trial.
+
+    Args:
+        study: The Optuna study being analysed.
+        get_error: If ``True`` also compute error estimates using
+            ``error_evaluator``.
+        improvement_evaluator: Evaluator used to estimate potential improvement
+            after each trial. When ``None`` a :class:`RegretBoundEvaluator` is
+            used.
+        error_evaluator: Evaluator used to compute error bars. If ``None`` a
+            sensible default is chosen based on ``improvement_evaluator``.
+
+    Returns:
+        _ImprovementInfo: Named tuple containing trial numbers, improvement
+        values and optional error values.
+
+    Raises:
+        ValueError: If the study is multi-objective.
+    """
     if study._is_multi_objective():
         raise ValueError("This function does not support multi-objective optimization study.")
 
@@ -88,6 +107,15 @@ def _get_improvement_info(
 
 
 def _get_y_range(info: _ImprovementInfo, min_n_trials: int) -> tuple[float, float]:
+    """Compute padded y-axis limits for the improvement plot.
+
+    Args:
+        info: Improvement data returned by :func:`_get_improvement_info`.
+        min_n_trials: Minimum number of trials before termination analysis.
+
+    Returns:
+        tuple[float, float]: Minimum and maximum y values including padding.
+    """
     min_value = min(info.improvements)
     if info.errors is not None:
         min_value = min(min_value, min(info.errors))

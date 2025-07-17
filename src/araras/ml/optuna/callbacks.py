@@ -49,6 +49,20 @@ class ImprovementStagnation:
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
         verbose: bool = False,
     ) -> None:
+        """Create a new callback instance.
+
+        Args:
+            min_n_trials: Minimum number of completed trials before the
+                stagnation checks start.
+            window_size: Number of recent improvements to use for the variance
+                calculation.
+            variance_threshold: Variance value below which the study will be
+                stopped.
+            improvement_evaluator: Custom evaluator used to compute expected
+                improvement. Defaults to :class:`RegretBoundEvaluator` when
+                ``None``.
+            verbose: Whether to log debugging information at each check.
+        """
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
         self.min_n_trials = min_n_trials
@@ -71,6 +85,17 @@ class ImprovementStagnation:
         self._variance_threshold = value
 
     def __call__(self, study: optuna.Study, trial: optuna.trial.FrozenTrial) -> None:
+        """Evaluate trial results and stop the study if stagnation is detected.
+
+        Args:
+            study: The Optuna study currently being optimised.
+            trial: The trial that has just completed.
+
+        Notes:
+            This method mutates internal state each time it is called and will
+            invoke :meth:`optuna.study.Study.stop` when the variance of recent
+            improvements falls below ``variance_threshold``.
+        """
         if trial.state != optuna.trial.TrialState.COMPLETE:
             return
 
