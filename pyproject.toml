@@ -31,7 +31,7 @@ dependencies = [
   "torch>=1.9.0",
   "rich>=13.0.0",
   "tqdm>=4.0.0",
-  "ace_tools>=0.1.0",
+  "ace-tools>=0.1.0",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
