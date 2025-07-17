@@ -6,6 +6,8 @@ This document provides an overview of the API functions available in the ARARAS 
 
 - [API Documentation](#api-documentation)
   - [Table of Contents](#table-of-contents)
+  - [core](#core)
+    - [supress\_optuna\_warnings](#supress_optuna_warnings)
   - [ml.model.builders.cnn](#mlmodelbuilderscnn)
     - [build\_cnn1d](#build_cnn1d)
     - [build\_dense\_as\_conv1d](#build_dense_as_conv1d)
@@ -68,6 +70,7 @@ This document provides an overview of the API functions available in the ARARAS 
     - [send\_email](#send_email)
   - [runtime.monitoring](#runtimemonitoring)
     - [run\_auto\_restart](#run_auto_restart)
+  - [utils](#utils)
   - [utils.io](#utilsio)
     - [create\_run\_directory](#create_run_directory)
   - [utils.misc](#utilsmisc)
@@ -84,6 +87,28 @@ This document provides an overview of the API functions available in the ARARAS 
   - [visualization.configs](#visualizationconfigs)
     - [config\_plt](#config_plt)
 
+
+## core
+
+### supress_optuna_warnings
+
+```python
+supress_optuna_warnings(
+
+)
+```
+Suppress Optuna experimental warnings. This helper inspects Optuna for
+``ExperimentalWarning`` classes and filters them out.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+
+**Returns**
+`None`
+
+**Raises**
+- None
 
 ## ml.model.builders.cnn
 
@@ -768,6 +793,10 @@ get_callbacks_model(
 ```
 Constructs and returns a list of Keras callbacks for model training.
 
+> [!CAUTION]
+> The `write_graph` option in the TensorBoard callback is disabled because
+> enabling it drastically increases memory usage.
+
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
@@ -1161,6 +1190,10 @@ get_callbacks_study(
 )
 ```
 Constructs and returns a list of Keras callbacks tailored for Optuna trials.
+
+> [!CAUTION]
+> The `write_graph` option in the TensorBoard callback is disabled because
+> enabling it drastically increases memory usage.
 
 **Parameters**
 | Name | Type | Description |
@@ -1562,6 +1595,15 @@ Main function with notebook conversion, file cleanup, and consolidated email not
 - FileNotFoundError: If file doesn't exist
 - ValueError: If file type is unsupported
 - ImportError: If notebook dependencies missing for .ipynb files
+
+## utils
+
+Convenience imports for the `araras.utils` package. This initializer exposes
+commonly used utilities while avoiding heavy dependencies until their attributes
+are accessed. Functions from `io` and `misc` are lightweight, but `system`
+relies on TensorFlow. To prevent TensorFlow from loading when the
+`araras.utils` package is imported, the attributes from `system` are loaded
+on demand via `__getattr__`.
 
 ## utils.io
 
