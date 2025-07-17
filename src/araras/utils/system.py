@@ -281,20 +281,33 @@ def gpu_summary() -> None:
     print("+" + "-" * 88 + "+")
 
 def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
-    """
-    Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regular time intervals.
+    """Periodically record selected system metrics to CSV files.
+
+    This helper spawns background threads that poll system resources using
+    ``psutil`` and ``nvidia-smi``.  New entries are appended to CSV logs inside
+    ``log_dir`` every ``interval`` seconds.  Because the logging threads run
+    indefinitely, the resulting files can grow very large on long-running
+    experiments.
 
     Args:
-        log_dir (str): Directory where log files will be stored.
-        interval (int): Time interval between consecutive logs in seconds. Defaults to 5.
-        kwargs: Boolean flags to specify which resources to log.
-                Supported flags: "cpu", "ram", "gpu", "cuda", "tensorflow".
+        log_dir: Directory where log files will be written.
+        interval: Seconds between two consecutive samplings.
+        **kwargs: Flags indicating which resources should be logged. Supported
+            flags are ``"cpu"``, ``"ram"``, ``"gpu"``, ``"cuda"``, and
+            ``"tensorflow"``.
 
     Returns:
         None
 
+    Raises:
+        None
+
     Example:
         log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)
+
+    Note:
+        Ensure that ``log_dir`` has sufficient disk space available since the
+        files are appended indefinitely.
     """
     # Ensure the logging directory exists
     os.makedirs(log_dir, exist_ok=True)
@@ -343,10 +356,23 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
                     break
 
     def log_gpu():
-        """Logs NVIDIA GPU usage statistics using nvidia-smi."""
+        """Record GPU memory, utilization and temperature statistics.
+
+        Notes:
+            This function relies on the ``nvidia-smi`` CLI tool being
+            available in the system ``PATH``.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
         log_path = os.path.join(log_dir, "gpu_usage_log.csv")
         with open(log_path, "w") as f:
-            f.write("Timestamp,GPU_ID,Memory_Used(MB),Memory_Total(MB),GPU_Utilization(%)\n")
+            f.write(
+                "Timestamp,GPU_ID,Memory_Used(MB),Memory_Total(MB),GPU_Utilization(%),Temperature(C)\n"
+            )
             while True:
                 try:
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -354,7 +380,7 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
                     gpu_stats = subprocess.run(
                         [
                             "nvidia-smi",
-                            "--query-gpu=index,memory.used,memory.total,utilization.gpu",
+                            "--query-gpu=index,memory.used,memory.total,utilization.gpu,temperature.gpu",
                             "--format=csv,noheader,nounits",
                         ],
                         capture_output=True,
@@ -363,8 +389,10 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
 
                     # Parse and write each GPU's data
                     for line in gpu_stats.split("\n"):
-                        gpu_id, mem_used, mem_total, util = map(int, line.split(","))
-                        f.write(f"{timestamp},{gpu_id},{mem_used},{mem_total},{util}\n")
+                        gpu_id, mem_used, mem_total, util, temp = map(int, line.split(","))
+                        f.write(
+                            f"{timestamp},{gpu_id},{mem_used},{mem_total},{util},{temp}\n"
+                        )
                     f.flush()
                     time.sleep(interval)
                 except Exception as e:

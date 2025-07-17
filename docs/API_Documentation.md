@@ -1807,7 +1807,7 @@ log_resources(
     interval,
 )
 ```
-Logs selected system and ML resources (CPU, RAM, GPU, CUDA, TensorFlow) at regular time intervals.
+Logs selected system and ML resources (CPU, RAM, GPU with temperatures, CUDA, TensorFlow) at regular time intervals.
 
 **Parameters**
 | Name | Type | Description |
