@@ -181,6 +181,46 @@ def _select_float_range_value(
     return trial.suggest_float(name, low, high, step=step)
 
 
+def _apply_layer_with_retry(
+    layer: layers.Layer,
+    inputs: list,
+    name_prefix: str,
+    retry_on_cpu: bool = False,
+) -> tf.Tensor:
+    """Execute a graph layer with optional CPU fallback.
+
+    This helper centralises the handling of ``tf.errors.InvalidArgumentError``
+    that arises when TensorFlow's GPU sparse--dense matrix multiplication
+    exceeds its internal limits.  When ``retry_on_cpu`` is ``True`` the layer is
+    re-executed on the CPU, otherwise the original exception is propagated.
+
+    Args:
+        layer: The Spektral convolutional layer instance to call.
+        inputs: List of inputs ``[x, a_graph]`` for the layer.
+        name_prefix: Prefix used when logging error messages.
+        retry_on_cpu: If ``True``, retry the operation on the CPU on failure.
+
+    Returns:
+        The output tensor produced by ``layer``.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
+    """
+
+    try:
+        return layer(inputs)
+    except tf.errors.InvalidArgumentError as exc:
+        logger_error.fatal(
+            f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {exc}{RESET}"
+        )
+        if retry_on_cpu:
+            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
+            with tf.device("/CPU:0"):
+                return layer(inputs)
+        raise
+
+
 def build_gcn(
     trial: Any,
     kparams: KParams,
@@ -202,22 +242,42 @@ def build_gcn(
 ) -> layers.Layer:
     """Build a single Graph Convolutional Network (GCN) layer.
 
-    WARNING:
-        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
-        The GPU implementation enforces the constraint:
+    Creates a ``GCNConv`` layer and applies it to the input feature matrix and
+    adjacency tensor.  The layer supports Optuna-based hyperparameter tuning for
+    the number of units, dropout rate and regularizers.
 
-            output_channels * nnz(support) <= 2^31 - 1
+    Warning:
+        TensorFlow's GPU sparse--dense matrix multiplication has a hard limit
+        ``output_channels * nnz(support) <= 2^31 - 1``.  When this limit is
+        exceeded the operation fails with ``tf.errors.InvalidArgumentError``. Use
+        ``retry_on_cpu=True`` to automatically rerun the layer on the CPU.
 
-        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
-        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
-        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+    Args:
+        trial: Optuna trial object used for hyperparameter suggestions.
+        kparams: Hyperparameter helper for activation functions and regularizers.
+        x: Input feature tensor.
+        a_graph: Normalized adjacency matrix as a sparse tensor.
+        units_range: Either an integer or ``(low, high)`` tuple for the number of
+            output units.
+        dropout_rate_range: Float or ``(low, high)`` tuple for the dropout rate.
+        units_step: Step size when ``units_range`` is a tuple.
+        dropout_rate_step: Step size when ``dropout_rate_range`` is a tuple.
+        kernel_initializer: Initializer for kernel weights.
+        bias_initializer: Initializer for bias weights.
+        use_bias: Whether to include a bias term.
+        use_batch_norm: If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg: If ``True``, search for a kernel regularizer.
+        trial_bias_reg: If ``True``, search for a bias regularizer.
+        trial_activity_reg: If ``True``, search for an activity regularizer.
+        retry_on_cpu: Retry the layer on the CPU when a GPU ``InvalidArgumentError`` occurs.
+        name_prefix: Prefix for naming the created Keras layers.
 
-        To prevent this error, you can:
-        - Reduce the polynomial order `K` or the number of output channels `units`.
-        - Wrap the sparse matmul in a CPU context:
-                with tf.device('/CPU:0'):
-                    x = gnn_layer(...)([x, a_graph])
-        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    Returns:
+        The output tensor after convolution, normalization, activation and dropout.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
     """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -240,14 +300,12 @@ def build_gcn(
         name=name_prefix,
     )
 
-    try:
-        x = gnc_layer([x, a_graph])
-    except tf.errors.InvalidArgumentError as e:
-        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
-        if retry_on_cpu:
-            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
-            with tf.device('/CPU:0'):
-                x = gnc_layer([x, a_graph])
+    x = _apply_layer_with_retry(
+        gnc_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
@@ -282,23 +340,44 @@ def build_gat(
 ) -> layers.Layer:
     """Build a single Graph Attention (GAT) layer.
 
+    Applies ``GATConv`` to the input features with optional multi-head
+    attention. Hyperparameters such as units, number of heads and dropout rate
+    can be tuned via Optuna trials.
 
-    WARNING:
-        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
-        The GPU implementation enforces the constraint:
+    Warning:
+        As with ``build_gcn``, the GPU kernel may fail when
+        ``output_channels * nnz(support)`` exceeds ``2^31 - 1``. Enable
+        ``retry_on_cpu`` to fall back to a CPU implementation in this case.
 
-            output_channels * nnz(support) <= 2^31 - 1
+    Args:
+        trial: Optuna trial object for hyperparameter sampling.
+        kparams: Helper providing activations and regularizers.
+        x: Input feature tensor.
+        a_graph: Normalized adjacency matrix as a sparse tensor.
+        units_range: Integer or ``(low, high)`` tuple specifying output units.
+        dropout_rate_range: Float or ``(low, high)`` tuple for dropout.
+        heads_range: Integer or ``(low, high)`` tuple for the number of heads.
+        units_step: Step size when sampling ``units_range``.
+        dropout_rate_step: Step size when sampling ``dropout_rate_range``.
+        heads_step: Step size when sampling ``heads_range``.
+        concat_heads: Concatenate the outputs of the attention heads if ``True``.
+        kernel_initializer: Initializer for kernel weights.
+        bias_initializer: Initializer for bias weights.
+        use_bias: Whether to include a bias term.
+        use_batch_norm: If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg: If ``True``, search for a kernel regularizer.
+        trial_bias_reg: If ``True``, search for a bias regularizer.
+        trial_activity_reg: If ``True``, search for an activity regularizer.
+        retry_on_cpu: Retry the operation on the CPU if a GPU
+            ``InvalidArgumentError`` is raised.
+        name_prefix: Prefix for naming the created Keras layers.
 
-        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
-        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
-        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+    Returns:
+        The output tensor after convolution, normalization, activation and dropout.
 
-        To prevent this error, you can:
-        - Reduce the polynomial order `K` or the number of output channels `units`.
-        - Wrap the sparse matmul in a CPU context:
-                with tf.device('/CPU:0'):
-                    x = gnn_layer(...)([x, a_graph])
-        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
     """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -325,14 +404,12 @@ def build_gat(
         name=name_prefix,
     )
 
-    try:
-        x = gat_layer([x, a_graph])
-    except tf.errors.InvalidArgumentError as e:
-        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
-        if retry_on_cpu:
-            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
-            with tf.device('/CPU:0'):
-                x = gat_layer([x, a_graph])
+    x = _apply_layer_with_retry(
+        gat_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
@@ -366,23 +443,43 @@ def build_cheb(
 ) -> layers.Layer:
     """Build a single Chebyshev graph convolution layer.
 
+    Applies ``ChebConv`` using a Chebyshev polynomial approximation of the graph
+    Laplacian. The polynomial order ``K`` along with the number of units and
+    dropout rate can be tuned via Optuna.
 
-    WARNING:
-        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
-        The GPU implementation enforces the constraint:
+    Warning:
+        The GPU sparse--dense kernel has the same ``2^31 - 1`` limitation as in
+        ``build_gcn`` and ``build_gat``. Use ``retry_on_cpu`` to execute the
+        layer on the CPU when this error occurs.
 
-            output_channels * nnz(support) <= 2^31 - 1
+    Args:
+        trial: Optuna trial used for suggesting hyperparameters.
+        kparams: Hyperparameter helper instance.
+        x: Input feature tensor.
+        a_graph: Normalized adjacency matrix as a sparse tensor.
+        units_range: Integer or ``(low, high)`` tuple for output units.
+        dropout_rate_range: Float or ``(low, high)`` tuple for dropout rate.
+        K_range: Integer or ``(low, high)`` tuple for the Chebyshev order ``K``.
+        units_step: Step size when sampling ``units_range``.
+        dropout_rate_step: Step size when sampling ``dropout_rate_range``.
+        K_step: Step size when sampling ``K_range``.
+        kernel_initializer: Initializer for kernel weights.
+        bias_initializer: Initializer for bias weights.
+        use_bias: Whether to include a bias term.
+        use_batch_norm: If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg: If ``True``, search for a kernel regularizer.
+        trial_bias_reg: If ``True``, search for a bias regularizer.
+        trial_activity_reg: If ``True``, search for an activity regularizer.
+        retry_on_cpu: Retry the operation on the CPU if a GPU
+            ``InvalidArgumentError`` is raised.
+        name_prefix: Prefix for naming the created Keras layers.
 
-        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
-        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
-        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+    Returns:
+        The output tensor after convolution, normalization, activation and dropout.
 
-        To prevent this error, you can:
-        - Reduce the polynomial order `K` or the number of output channels `units`.
-        - Wrap the sparse matmul in a CPU context:
-                with tf.device('/CPU:0'):
-                    x = gnn_layer(...)([x, a_graph])
-        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
     """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
@@ -408,14 +505,12 @@ def build_cheb(
         name=name_prefix,
     )
 
-    try: 
-        x = cheb_layer([x, a_graph])
-    except tf.errors.InvalidArgumentError as e:
-        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
-        if retry_on_cpu:
-            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
-            with tf.device('/CPU:0'):
-                x = cheb_layer([x, a_graph])
+    x = _apply_layer_with_retry(
+        cheb_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
