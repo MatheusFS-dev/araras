@@ -3,6 +3,7 @@ Last Edited: 14 July 2025
 Description:
     Graph neural network layers and adjacency utilities.
 """
+
 from araras.core import *
 
 import numpy as np
@@ -155,9 +156,28 @@ def build_gcn(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
     name_prefix: str = "gcn",
 ) -> layers.Layer:
-    """Build a single Graph Convolutional Network (GCN) layer."""
+    """Build a single Graph Convolutional Network (GCN) layer.
+
+    WARNING:
+        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
+        The GPU implementation enforces the constraint:
+
+            output_channels * nnz(support) <= 2^31 - 1
+
+        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
+        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
+        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+
+        To prevent this error, you can:
+        - Reduce the polynomial order `K` or the number of output channels `units`.
+        - Wrap the sparse matmul in a CPU context:
+                with tf.device('/CPU:0'):
+                    x = gnn_layer(...)([x, a_graph])
+        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     dropout = _select_float_range_value(
@@ -167,7 +187,7 @@ def build_gcn(
     bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
     act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
-    x = GCNConv(
+    gnc_layer = GCNConv(
         channels=units,
         activation=None,
         use_bias=use_bias,
@@ -177,7 +197,16 @@ def build_gcn(
         bias_regularizer=bias_reg,
         activity_regularizer=act_reg,
         name=name_prefix,
-    )([x, a_graph])
+    )
+
+    try:
+        x = gnc_layer([x, a_graph])
+    except tf.errors.InvalidArgumentError as e:
+        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
+        if retry_on_cpu:
+            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
+            with tf.device('/CPU:0'):
+                x = gnc_layer([x, a_graph])
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
@@ -207,9 +236,29 @@ def build_gat(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
     name_prefix: str = "gat",
 ) -> layers.Layer:
-    """Build a single Graph Attention (GAT) layer."""
+    """Build a single Graph Attention (GAT) layer.
+
+
+    WARNING:
+        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
+        The GPU implementation enforces the constraint:
+
+            output_channels * nnz(support) <= 2^31 - 1
+
+        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
+        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
+        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+
+        To prevent this error, you can:
+        - Reduce the polynomial order `K` or the number of output channels `units`.
+        - Wrap the sparse matmul in a CPU context:
+                with tf.device('/CPU:0'):
+                    x = gnn_layer(...)([x, a_graph])
+        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     heads = _select_range_value(trial, f"{name_prefix}_heads", heads_range, heads_step)
@@ -221,7 +270,7 @@ def build_gat(
     bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
     act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
-    x = GATConv(
+    gat_layer = GATConv(
         channels=units,
         activation=None,
         attn_heads=heads,
@@ -233,7 +282,16 @@ def build_gat(
         bias_regularizer=bias_reg,
         activity_regularizer=act_reg,
         name=name_prefix,
-    )([x, a_graph])
+    )
+
+    try:
+        x = gat_layer([x, a_graph])
+    except tf.errors.InvalidArgumentError as e:
+        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
+        if retry_on_cpu:
+            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
+            with tf.device('/CPU:0'):
+                x = gat_layer([x, a_graph])
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
@@ -262,9 +320,29 @@ def build_cheb(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
     name_prefix: str = "cheb",
 ) -> layers.Layer:
-    """Build a single Chebyshev graph convolution layer."""
+    """Build a single Chebyshev graph convolution layer.
+
+
+    WARNING:
+        This layer uses TensorFlow's GPU kernel for sparse--dense matrix multiplication.
+        The GPU implementation enforces the constraint:
+
+            output_channels * nnz(support) <= 2^31 - 1
+
+        where `support` is the K-th Chebyshev polynomial of the normalized adjacency.
+        If the product exceeds this limit, the GPU kernel will raise an InvalidArgumentError:
+        "Cannot use GPU when output.shape[1] * nnz(a) > 2^31".
+
+        To prevent this error, you can:
+        - Reduce the polynomial order `K` or the number of output channels `units`.
+        - Wrap the sparse matmul in a CPU context:
+                with tf.device('/CPU:0'):
+                    x = gnn_layer(...)([x, a_graph])
+        - Convert `a_graph` to a dense tensor and use `tf.matmul` (at the cost of memory).
+    """
     print_warning_jit()
     units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
     K = _select_range_value(trial, f"{name_prefix}_K", K_range, K_step)
@@ -276,7 +354,7 @@ def build_cheb(
     bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
     act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
 
-    x = ChebConv(
+    cheb_layer = ChebConv(
         channels=units,
         K=K,
         activation=None,
@@ -287,7 +365,16 @@ def build_cheb(
         bias_regularizer=bias_reg,
         activity_regularizer=act_reg,
         name=name_prefix,
-    )([x, a_graph])
+    )
+
+    try: 
+        x = cheb_layer([x, a_graph])
+    except tf.errors.InvalidArgumentError as e:
+        logger_error.fatal(f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {e}{RESET}")
+        if retry_on_cpu:
+            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
+            with tf.device('/CPU:0'):
+                x = cheb_layer([x, a_graph])
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
