@@ -30,6 +30,21 @@ class ConsolidatedEmailManager:
         credentials_file: Optional[str] = None,
         retry_attempts: int = 2,
     ) -> None:
+        """Initialize the manager and validate configuration.
+
+        Args:
+            recipients_file: Path to the JSON file containing the list of email
+                recipients. Defaults to ``"./json/recipients.json"`` when not
+                provided.
+            credentials_file: Path to the JSON file with the SMTP credentials.
+                Defaults to ``"./json/credentials.json"``.
+            retry_attempts: Maximum number of retries to attempt before giving
+                up on sending a notification.
+
+        Notes:
+            The configuration files are only validated for existence. Any
+            parsing errors will surface later when sending emails.
+        """
         self.recipients_file = recipients_file or "./json/recipients.json"
         self.credentials_file = credentials_file or "./json/credentials.json"
         self.retry_attempts = retry_attempts
@@ -38,6 +53,16 @@ class ConsolidatedEmailManager:
         self.last_notification_time = 0
 
     def _validate_email_config(self) -> bool:
+        """Check that required email configuration files exist.
+
+        Returns:
+            bool: ``True`` if both files are present, ``False`` otherwise.
+
+        Notes:
+            This function does not read the files; it only verifies their
+            existence. Any issues with their contents will raise exceptions
+            when an email attempt is made.
+        """
         recipients_exists = Path(self.recipients_file).exists()
         credentials_exists = Path(self.credentials_file).exists()
 
@@ -50,6 +75,19 @@ class ConsolidatedEmailManager:
         return True
 
     def send_consolidated_status_email(self, status_type: str, process_data: Dict[str, Any]) -> None:
+        """Send a single consolidated status email.
+
+        Args:
+            status_type: Type of status message to send. Supported values are
+                ``"restart_success"``, ``"restart_failed"`` and
+                ``"task_complete"``.
+            process_data: Dictionary with details about the process.  The
+                expected keys vary depending on ``status_type``.
+
+        Raises:
+            Exception: Propagates any exception raised by the underlying email
+                sending routine after logging a warning.
+        """
         if not self.email_enabled:
             return
 
@@ -122,6 +160,20 @@ class ConsolidatedEmailManager:
             _mon.print_error_message("EMAIL", f"Failed to send consolidated status email: {e}")
 
     def should_attempt_restart(self, title: str, restart_count: int, max_restarts: int) -> bool:
+        """Determine whether another restart attempt should be made.
+
+        Args:
+            title: The process title used for email notifications.
+            restart_count: How many times the process has already been restarted.
+            max_restarts: Maximum allowed restarts overall.
+
+        Returns:
+            bool: ``True`` if another restart should be attempted, ``False`` otherwise.
+
+        Notes:
+            If the internal retry counter exceeds ``retry_attempts`` this method
+            will send a failure notification and reset the counter.
+        """
         if self.retry_count < self.retry_attempts:
             self.retry_count += 1
             return True
@@ -149,6 +201,7 @@ class ConsolidatedEmailManager:
         restart_count: int,
         runtime: float,
     ) -> None:
+        """Report that a crashed process was successfully restarted."""
         self.retry_count = 0
         self.send_consolidated_status_email(
             "restart_success",
@@ -162,6 +215,7 @@ class ConsolidatedEmailManager:
         )
 
     def report_task_completion(self, title: str, restart_count: int, total_runtime: float) -> None:
+        """Report that the monitored task finished successfully."""
         self.send_consolidated_status_email(
             "task_complete",
             {
@@ -172,6 +226,7 @@ class ConsolidatedEmailManager:
         )
 
     def report_final_failure(self, title: str, restart_count: int, error: str) -> None:
+        """Send a final failure notification when restarts are exhausted."""
         self.send_consolidated_status_email(
             "restart_failed",
             {

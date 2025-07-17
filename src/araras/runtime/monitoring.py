@@ -205,6 +205,7 @@ def print_cleanup_info(terminated: int, killed: int) -> None:
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
 def _cleanup_stale_monitor_files():
+    """Remove orphaned monitor helper files from the temporary directory."""
     tmpdir = tempfile.gettempdir()
     for path in glob.glob(os.path.join(tmpdir, "*_monitor.*")):
         try:
