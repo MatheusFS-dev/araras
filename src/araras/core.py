@@ -126,6 +126,39 @@ def white_track(iterable, *, description: str, total: int):
 
 
 # ————————————————————————————— Supress warnings ————————————————————————————— #
-from .ml.optuna.utils import supress_optuna_warnings
+def supress_optuna_warnings() -> None:
+    """Suppress Optuna experimental warnings.
+
+    This helper inspects the Optuna package for the ``ExperimentalWarning``
+    class in its possible locations and silences warnings triggered by
+    experimental features.
+
+    Notes:
+        The :mod:`optuna` import occurs within this function to avoid pulling in
+        optional dependencies at module import time.
+
+    Args:
+        None
+
+    Returns:
+        None
+
+    Raises:
+        None
+    """
+
+    import optuna
+
+    warning_classes = []
+    for module_name in ("_experimental", "exceptions"):
+        module = getattr(optuna, module_name, None)
+        if module is not None:
+            warning_cls = getattr(module, "ExperimentalWarning", None)
+            if warning_cls is not None:
+                warning_classes.append(warning_cls)
+
+    for cls in warning_classes:
+        warnings.filterwarnings("ignore", category=cls)
+
 
 supress_optuna_warnings()
