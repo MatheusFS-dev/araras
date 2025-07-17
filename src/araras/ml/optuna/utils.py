@@ -7,26 +7,8 @@ from araras.core import *
 
 import os, shutil
 import math
-import warnings
 import optuna
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
-
-
-def supress_optuna_warnings() -> None:
-    """Suppress only Optuna experimental warnings."""
-
-    # Attempt to obtain ExperimentalWarning classes from possible locations
-    warning_classes = []
-    for module_name in ("_experimental", "exceptions"):
-        module = getattr(optuna, module_name, None)
-        if module is not None:
-            warning_cls = getattr(module, "ExperimentalWarning", None)
-            if warning_cls is not None:
-                warning_classes.append(warning_cls)
-
-    # Filter warnings emitted by Optuna experimental features
-    for cls in warning_classes:
-        warnings.filterwarnings("ignore", category=cls)
 
 
 def get_remaining_trials(study: optuna.Study, num_trials: int) -> list[optuna.trial.FrozenTrial]:
