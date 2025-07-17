@@ -14,7 +14,7 @@ from spektral.layers import GCNConv, GATConv, ChebConv
 import scipy.sparse as sp
 from spektral.utils import convolution
 from sklearn.neighbors import NearestNeighbors
-import ace_tools as tools
+from IPython.display import display
 import pandas as pd
 
 PRINT_ONCE_JIT = True
@@ -84,7 +84,7 @@ def check_gpu_limit(knn_list, K_list, units_list, n=20*200):
                 }
             )
     df = pd.DataFrame(rows)
-    tools.display_dataframe_to_user(name="GPU Limit Check", dataframe=df)
+    display(df)
 
 
 def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
