@@ -14,6 +14,10 @@ import tensorflow as tf
 def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras.callbacks.Callback]:
     """
     Constructs and returns a list of Keras callbacks for model training.
+    
+    Warning:
+        The 'write_graph' option in TensorBoard callback is set to False. It causes absurdly high memory usage,
+        especially with large models.
 
     Args:
         backup_dir (str): Directory where the backup files will be stored.
@@ -50,7 +54,7 @@ def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras
     )
 
     tensorboard_cb = callbacks.TensorBoard(
-        log_dir=tensorboard_logs, histogram_freq=1, write_graph=True, write_images=True, update_freq="epoch"
+        log_dir=tensorboard_logs, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
     )
 
     return [early_stopping, reduce_lr, checkpoint, tensorboard_cb]

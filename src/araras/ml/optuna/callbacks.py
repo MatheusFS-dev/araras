@@ -214,10 +214,14 @@ class NanLossPrunerOptuna(callbacks.Callback):
 
 
 def get_callbacks_study(
-    trial: optuna.Trial, tensorboard_logs: str = None, monitor: str = "val_loss"
+    trial: optuna.Trial, tensorboard_logs: str = None, monitor: str = "val_loss", 
 ) -> List[tf.keras.callbacks.Callback]:
     """
     Constructs and returns a list of Keras callbacks tailored for Optuna trials.
+
+    Warning:
+        The 'write_graph' option in TensorBoard callback is set to False. It causes absurdly high memory usage,
+        especially with large models.
 
     Args:
         trial (optuna.Trial): The current Optuna trial object.
@@ -248,7 +252,7 @@ def get_callbacks_study(
     if tensorboard_logs is not None:
         trial_log_dir = os.path.join(tensorboard_logs, f"trial_{trial.number}")
         tensorboard_cb = callbacks.TensorBoard(
-            log_dir=trial_log_dir, histogram_freq=1, write_graph=True, write_images=True, update_freq="epoch"
+            log_dir=trial_log_dir, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
         )
 
     #! ——————— WARNING: the callbacks below do not work with multi-objective —————— !#
