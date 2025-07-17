@@ -50,9 +50,23 @@ def print_warning_jit():
 
 def check_gpu_limit(knn_list, K_list, units_list, n=20*200):
     """
-    For each combination of knn_k, Chebyshev order K, and units, compute whether
-    the GPU sparse-dense matmul limit (output_channels * nnz(support) <= 2^31 - 1) is
-    respected. Returns a DataFrame summarizing threshold_units and lists of safe/error units.
+        For each combination of knn_k, Chebyshev order K, and units, compute whether
+        the GPU sparse-dense matmul limit (output_channels * nnz(support) <= 2^31 - 1) is
+        respected. Returns a DataFrame summarizing threshold_units and lists of safe/error units.
+
+
+        Example code:
+            # Define your trial values
+            knn_values = [4, 8, 12, 16]
+            K_values = list(range(2, 11))
+            units_values = [128 * i for i in range(1, 9)]
+
+            check_gpu_limit(
+                knn_list=knn_values,
+                K_list=K_values,
+                units_list=units_values,
+                n=20*200,
+            )
     """
 
     def threshold_units(knn_k, K, n):
