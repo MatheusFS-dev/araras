@@ -12,8 +12,6 @@ from pathlib import Path
 from threading import Event, Thread
 
 # Local imports
-from araras.runtime.terminal import SimpleTerminalLauncher
-
 import shlex
 import subprocess
 
@@ -268,31 +266,32 @@ def start_monitor(
     pid: int,
     title: str,
     supress_tf_warnings: bool = False,
-    tmux_session: Optional[str] = None,
+    tmux_session: str = "araras",
     orientation: str = "vertical",
 ) -> Dict[str, Any]:
-    """Start simplified crash monitor.
+    """Start simplified crash monitor inside ``tmux``.
 
-    The function launches a lightweight monitoring script that watches a target
-    process and signals crashes. When ``tmux_session`` is provided, the monitor
-    runs inside a new pane of that session, allowing the monitored program and
-    the monitor to be displayed side by side. If ``tmux_session`` is ``None`` the
-    monitor is executed in a new terminal window.
+    This helper launches a lightweight monitoring script that observes the
+    specified process and reports crashes.  A dedicated ``tmux`` pane is created
+    within ``tmux_session`` where the monitor runs.  The orientation of the new
+    pane can be configured to split the session either vertically or
+    horizontally.
+
+    The function always uses ``tmux`` to display the monitoring output.  If the
+    session does not exist it will be created automatically.
 
     Args:
         pid: Process ID to monitor.
-        title: Process title for alerts.
+        title: Process title shown in monitoring messages.
         supress_tf_warnings: If ``True``, TensorFlow warnings are suppressed.
-        tmux_session: Name of a ``tmux`` session used for split view. If the
-            session does not exist it will be created. When omitted, the monitor
-            runs in a separate terminal.
+        tmux_session: Name of the ``tmux`` session. The session is created if it
+            does not already exist.
         orientation: Pane orientation for ``tmux``. Use ``"vertical"`` for a
             top/bottom split or ``"horizontal"`` for a side-by-side split.
 
     Returns:
         Dictionary containing monitor control information including the paths of
-        the temporary helper files. When ``tmux_session`` is used the returned
-        dictionary also contains ``tmux_pane_id``.
+        the temporary helper files and the ``tmux`` pane identifier.
 
     Raises:
         ValueError: If ``pid`` does not exist or ``orientation`` is invalid.
@@ -330,39 +329,43 @@ def start_monitor(
     if os.name != "nt":
         os.chmod(script_path, 0o755)
 
+    orientation_flag = "-v" if orientation == "vertical" else "-h" if orientation == "horizontal" else None
+    if orientation_flag is None:
+        raise ValueError("orientation must be 'vertical' or 'horizontal'")
+
+    # Ensure session exists
+    try:
+        subprocess.run(
+            ["tmux", "has-session", "-t", tmux_session],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=True,
+        )
+    except subprocess.CalledProcessError:
+        subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session], check=True)
+
+    cmd = " ".join(shlex.quote(arg) for arg in [sys.executable, script_path])
+    pane_id = (
+        subprocess.check_output(
+            [
+                "tmux",
+                "split-window",
+                "-P",
+                "-F",
+                "#{pane_id}",
+                orientation_flag,
+                "-t",
+                tmux_session,
+                cmd,
+            ]
+        )
+        .decode()
+        .strip()
+    )
+
+    control_files["tmux_session"] = tmux_session
+    control_files["tmux_pane_id"] = pane_id
     process = None
-
-    if tmux_session:
-        orientation_flag = "-v" if orientation == "vertical" else "-h" if orientation == "horizontal" else None
-        if orientation_flag is None:
-            raise ValueError("orientation must be 'vertical' or 'horizontal'")
-
-        # Ensure session exists
-        try:
-            subprocess.run(["tmux", "has-session", "-t", tmux_session], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
-        except subprocess.CalledProcessError:
-            subprocess.run(["tmux", "new-session", "-d", "-s", tmux_session], check=True)
-
-        cmd = " ".join(shlex.quote(arg) for arg in [sys.executable, script_path])
-        pane_id = subprocess.check_output([
-            "tmux",
-            "split-window",
-            "-P",
-            "-F",
-            "#{pane_id}",
-            orientation_flag,
-            "-t",
-            tmux_session,
-            cmd,
-        ]).decode().strip()
-
-        control_files["tmux_session"] = tmux_session
-        control_files["tmux_pane_id"] = pane_id
-    else:
-        # Launch monitor in a new terminal window
-        launcher = SimpleTerminalLauncher()
-        launcher.set_supress_tf_warnings(supress_tf_warnings)
-        process = launcher.launch([sys.executable, script_path], os.getcwd())
 
     time.sleep(0.1)
     if process and process.poll() is not None:  # Check if it died
@@ -513,14 +516,17 @@ def run_with_tmux_monitor(
 
     # Start tmux session running the command
     try:
-        subprocess.run([
-            "tmux",
-            "new-session",
-            "-d",
-            "-s",
-            session_name,
-            run_cmd,
-        ], check=True)
+        subprocess.run(
+            [
+                "tmux",
+                "new-session",
+                "-d",
+                "-s",
+                session_name,
+                run_cmd,
+            ],
+            check=True,
+        )
     except subprocess.CalledProcessError as exc:
         raise OSError(f"failed to start tmux session: {exc}") from exc
 
@@ -537,7 +543,9 @@ def run_with_tmux_monitor(
         time.sleep(0.1)
 
     if target_pid is None:
-        subprocess.run(["tmux", "kill-session", "-t", session_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        subprocess.run(
+            ["tmux", "kill-session", "-t", session_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
         raise OSError("failed to determine target pid")
 
     monitor_info = start_monitor(
@@ -566,12 +574,16 @@ def stop_tmux_monitor(monitor_info: Dict[str, Any]) -> None:
     session = monitor_info.get("session_name")
     if session:
         try:
-            subprocess.run([
-                "tmux",
-                "kill-session",
-                "-t",
-                session,
-            ], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            subprocess.run(
+                [
+                    "tmux",
+                    "kill-session",
+                    "-t",
+                    session,
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
         except Exception:
             pass
 
