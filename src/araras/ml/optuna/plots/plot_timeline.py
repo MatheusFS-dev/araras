@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Timeline of trial durations.
-"""
 from araras.core import *
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates

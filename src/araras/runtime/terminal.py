@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Simplified terminal launcher for subprocesses.
-"""
 from araras.core import *
 
 import platform

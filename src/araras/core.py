@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Logging utilities and progress bar helpers.
-"""
 # ————————————————————————————— Standard Imports ————————————————————————————— #
 import logging
 import warnings

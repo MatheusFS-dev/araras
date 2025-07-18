@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Optuna callbacks to track trial progress.
-"""
 from araras.core import *
 
 import os

@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Send formatted email alerts.
-"""
 from araras.core import *
 
 import json

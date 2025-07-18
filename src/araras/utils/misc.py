@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Generic formatting helper functions.
-"""
 from araras.core import *
 
 import os

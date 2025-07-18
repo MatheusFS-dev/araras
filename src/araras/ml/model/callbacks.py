@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Common Keras callbacks for model training.
-"""
 from araras.core import *
 
 import os

@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Box plots for hyperparameter values.
-"""
 from araras.core import *
 
 import numpy as np
