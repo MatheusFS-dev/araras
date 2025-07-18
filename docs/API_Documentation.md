@@ -70,6 +70,7 @@ This document provides an overview of the API functions available in the ARARAS 
     - [send\_email](#send_email)
   - [runtime.monitoring](#runtimemonitoring)
     - [run\_auto\_restart](#run_auto_restart)
+    - [monitor CLI](#monitor-cli)
   - [utils](#utils)
   - [utils.io](#utilsio)
     - [create\_run\_directory](#create_run_directory)
@@ -1608,7 +1609,6 @@ monitor path/to/job.py [options]
 
 | Flag | Type | Description |
 |------|------|-------------|
-| `-s, --success-flag-file` | `str` | Path where the monitored script writes a completion flag. Defaults to `/tmp/success.flag`. |
 | `-t, --title` | `str` | Custom title for monitoring and email alerts. |
 | `-m, --max-restarts` | `int` | Maximum number of restart attempts. Defaults to `10`. |
 | `-d, --restart-delay` | `float` | Delay between restarts in seconds. Defaults to `3.0`. |
@@ -1618,6 +1618,10 @@ monitor path/to/job.py [options]
 | `-a, --retry-attempts` | `int` | Number of retry attempts before a failure email is sent. |
 | `-w, --supress-tf-warnings` | `bool` | Suppress TensorFlow warnings. |
 | `-u, --resource-usage-log-file` | `str` | File to log process resource usage statistics. |
+| `-s, --success-flag-file` | `str` | Path where the monitored script writes a completion flag. Defaults to `/tmp/success.flag`. |
+
+> [!NOTE]
+> Avoid changing the success flag file path unless necessary. That could break the monitoring logic and cause a spam of emails.
 
 > [!CAUTION]
 > Run the `monitor` command from the **same directory** as the file being monitored so that relative paths resolve correctly.
