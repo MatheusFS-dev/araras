@@ -143,7 +143,7 @@ class FlagBasedRestartManager:
             max_restarts=self.max_restarts,
             email_enabled=self.email_manager.email_enabled,
             title=self.process_title,
-            restart_after_delay=restart_after_delay,
+            force_restart=restart_after_delay,
         )
 
         self.running = True
