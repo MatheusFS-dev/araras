@@ -11,8 +11,21 @@ from pathlib import Path
 
 from threading import Event, Thread
 
-# Local imports
-from araras.runtime.terminal import SimpleTerminalLauncher
+# Optional import of libtmux for split-pane monitoring
+try:
+    import libtmux
+except ImportError:  # pragma: no cover - libtmux may not be installed in all envs
+    libtmux = None
+
+
+
+# Global tmux session helpers. These are initialized lazily when the
+# monitoring system is first used. They allow the monitored process and
+# the monitor itself to share a single tmux window split into two panes.
+_TMUX_SERVER = None
+_TMUX_SESSION = None
+_TMUX_PROCESS_PANE = None
+_TMUX_MONITOR_PANE = None
 
 # Path where resource usage logs will be written. If ``None`` no logging occurs
 RESOURCE_USAGE_LOG_FILE: Optional[str] = None
@@ -261,28 +274,99 @@ def print_process_resource_usage(pid: int) -> None:
         pass
 
 
-def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
-    """Start simplified crash monitor without email capabilities.
+def _ensure_tmux_session(session_name: str = "araras_monitor") -> Tuple[Any, Any]:
+    """Ensure a tmux session with two panes exists and return its panes.
 
     Args:
-        pid: Process ID to monitor
-        title: Process title for alerts
-        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+        session_name: Name of the tmux session.
 
     Returns:
-        Monitor control info dictionary
+        Tuple with the process pane and monitor pane.
+
+    Notes:
+        The function lazily creates the session the first time it is called.
+    """
+
+    global _TMUX_SERVER, _TMUX_SESSION, _TMUX_PROCESS_PANE, _TMUX_MONITOR_PANE
+    if _TMUX_SESSION is None:
+        if libtmux is None:
+            raise ImportError("libtmux is required for tmux based monitoring")
+
+        _TMUX_SERVER = libtmux.Server()
+        _TMUX_SESSION = _TMUX_SERVER.new_session(
+            session_name=session_name, attach=False
+        )
+        window = _TMUX_SESSION.attached_window
+        _TMUX_PROCESS_PANE = window.panes[0]
+        _TMUX_MONITOR_PANE = _TMUX_PROCESS_PANE.split_window(attach=False)
+        window.select_layout("even-vertical")
+
+    return _TMUX_PROCESS_PANE, _TMUX_MONITOR_PANE
+
+
+def _get_pane_pid(pane: Any, retries: int = 10, delay: float = 0.2) -> Optional[int]:
+    """Return the PID running in a tmux pane."""
+
+    for _ in range(retries):
+        try:
+            pid_str = pane.cmd("display-message", "-p", "#{pane_pid}").stdout[0]
+            if pid_str and pid_str.strip().isdigit():
+                return int(pid_str.strip())
+        except Exception:
+            pass
+        time.sleep(delay)
+    return None
+
+
+def start_process_in_tmux(command: List[str], working_dir: str) -> Tuple[int, Any]:
+    """Run a command in the process pane of the tmux session.
+
+    Args:
+        command: Command to execute.
+        working_dir: Directory where the command should run.
+
+    Returns:
+        Tuple with the PID of the started process and the pane object.
 
     Raises:
-        ValueError: If PID doesn't exist
-        OSError: If monitor startup fails
+        OSError: If the process fails to start or PID cannot be determined.
     """
+
+    process_pane, _ = _ensure_tmux_session()
+    cmd_str = " ".join(f'"{c}"' for c in command)
+    process_pane.send_keys(f"cd {working_dir} && exec {cmd_str}", enter=True)
+    time.sleep(0.5)
+    pid = _get_pane_pid(process_pane)
+    if pid is None:
+        raise OSError("Failed to obtain PID from tmux pane")
+    return pid, process_pane
+
+
+def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
+    """Start a crash monitor in a tmux pane.
+
+    This function creates the helper monitoring script and launches it in the
+    monitor pane of the tmux session created by :func:`_ensure_tmux_session`.
+
+    Args:
+        pid: Process ID to monitor.
+        title: Process title for alerts.
+        supress_tf_warnings: Suppress TensorFlow warnings (default ``False``).
+
+    Returns:
+        Dictionary with monitor control information.
+
+    Raises:
+        ValueError: If ``pid`` does not exist.
+        OSError: If the monitor fails to start.
+    """
+
     _cleanup_stale_monitor_files()
-    time.sleep(0.1)  # Allow time for process to stabilize
+    time.sleep(0.1)
 
     if not psutil.pid_exists(pid):
         raise ValueError(f"Process PID {pid} not found")
 
-    # Create minimal control files
     fd, script_path = tempfile.mkstemp(suffix="_monitor.py")
     base_path = script_path.replace(".py", "")
 
@@ -293,7 +377,6 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
         "restart_file": f"{base_path}.restart",
     }
 
-    # Generate simplified monitoring script
     script_content = MONITOR_SCRIPT.format(
         cwd=os.getcwd(),
         pid=pid,
@@ -308,35 +391,19 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
     if os.name != "nt":
         os.chmod(script_path, 0o755)
 
-    # Launch monitor in terminal
-    launcher = SimpleTerminalLauncher()
-    launcher.set_supress_tf_warnings(supress_tf_warnings)
-    process = launcher.launch([sys.executable, script_path], os.getcwd())
+    process_pane, monitor_pane = _ensure_tmux_session()
 
-    time.sleep(0.1)
-    if process.poll() is not None:  # Check if it died
-        exit_code = process.returncode
-        error_msg = f"Monitor failed to start (exit code: {exit_code})"
+    # Launch monitoring script in its pane
+    command = f"exec {sys.executable} {script_path}"
+    monitor_pane.send_keys(command, enter=True)
 
-        # Try to get stderr output if available
-        try:
-            stdout, stderr = process.communicate(timeout=1)
-            if stderr:
-                error_msg += f". Error output: {stderr.decode().strip()}"
-            elif stdout:
-                error_msg += f". Output: {stdout.decode().strip()}"
-        except:
-            pass
+    # Best-effort check that the monitor started
+    time.sleep(0.5)
+    monitor_pid = _get_pane_pid(monitor_pane)
+    if monitor_pid is None:
+        raise OSError("Monitor failed to start in tmux pane")
 
-        # Cleanup the failed script file
-        try:
-            os.unlink(script_path)
-        except:
-            pass
-
-        raise OSError(error_msg)
-
-    return {"process": process, **control_files}
+    return {"pane": monitor_pane, **control_files}
 
 
 def stop_monitor(monitor_info: Dict[str, Any]) -> None:
@@ -348,27 +415,27 @@ def stop_monitor(monitor_info: Dict[str, Any]) -> None:
     if not monitor_info:
         return
 
-    # Signal stop (single I/O operation)
+    pane = monitor_info.get("pane")
+
+    # Gracefully stop the monitor script
+    if pane is not None:
+        try:
+            pane.send_keys("\x03", enter=False)
+        except Exception:
+            pass
+
+    # Signal stop file for consistency with monitor script
     try:
         with open(monitor_info["stop_file"], "w") as f:
             f.write("STOP")
-    except:
+    except Exception:
         pass
 
-    # Wait for graceful shutdown with optimized timeout
-    for _ in range(20):  # 2 second timeout
+    # Wait briefly to allow shutdown
+    for _ in range(20):
         if not os.path.exists(monitor_info["pid_file"]):
             break
         time.sleep(0.1)
-
-    # Force terminate if needed
-    process = monitor_info.get("process")
-    if process and process.poll() is None:
-        try:
-            process.terminate()
-            process.wait(timeout=2)
-        except:
-            pass
 
     # Batch file cleanup (single loop for efficiency)
     cleanup_files = ["script_path", "pid_file", "stop_file", "restart_file"]

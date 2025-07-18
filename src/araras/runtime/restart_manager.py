@@ -2,12 +2,10 @@ from araras.core import *
 
 import os
 import psutil
-import subprocess
 import time
 from pathlib import Path
 
 from .cleanup import ChildProcessCleanup
-from .terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
 from .email_manager import ConsolidatedEmailManager
 from .file_handler import FileTypeHandler
@@ -67,7 +65,7 @@ class FlagBasedRestartManager:
         self.last_process_start_time = None
 
         # Process tracking with minimal state
-        self.current_terminal_process: Optional[subprocess.Popen] = None
+        self.current_terminal_process: Optional[Any] = None
         self.current_target_pid: Optional[int] = None
         self.monitor_info: Optional[Dict[str, Any]] = None
         self._last_restart_file: Optional[str] = None
@@ -322,66 +320,14 @@ class FlagBasedRestartManager:
         # Build command for Python file
         command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
 
-        launcher = SimpleTerminalLauncher()
-        self.current_terminal_process = launcher.launch(command, working_dir)
-
-        # Efficient PID discovery with timeout
-        pid_file = self.current_terminal_process.pid_file
-        target_pid = self._discover_target_pid(pid_file, timeout=5.0)
-
-        if not target_pid:
-            self._cleanup_terminal()
-            raise OSError("Failed to get target process PID")
+        target_pid, pane = _mon.start_process_in_tmux(command, working_dir)
 
         self.current_target_pid = target_pid
-        # Record the pid so we can later ensure it has terminated
         self.pid_history.append(target_pid)
-
-        # Cleanup PID file immediately (no longer needed)
-        try:
-            os.unlink(pid_file)
-        except:
-            pass
+        self.current_terminal_process = pane  # store pane for cleanup semantics
 
         return target_pid
 
-    def _discover_target_pid(self, pid_file: str, timeout: float) -> Optional[int]:
-        """Discover target PID with optimized polling strategy.
-
-        Args:
-            pid_file: Path to PID file
-            timeout: Discovery timeout in seconds
-
-        Returns:
-            Target PID if found, None otherwise
-        """
-        end_time = time.time() + timeout
-        check_count = 0
-
-        # Adaptive polling: start fast, slow down for efficiency
-        while time.time() < end_time:
-            check_count += 1
-
-            try:
-                if os.path.exists(pid_file):
-                    with open(pid_file) as f:
-                        pid_str = f.read().strip()
-                        if pid_str.isdigit():
-                            pid = int(pid_str)
-                            if psutil.pid_exists(pid):
-                                return pid
-            except:
-                pass
-
-            # Progressive delay for efficiency optimization
-            if check_count < 10:
-                time.sleep(0.05)  # Fast initial checks
-            elif check_count < 30:
-                time.sleep(0.1)  # Medium frequency
-            else:
-                time.sleep(0.2)  # Stable frequency
-
-        return None
 
     def _wait_for_completion(self, flag_path: Path) -> str:
         """Wait for process completion with optimized polling strategy.
@@ -472,23 +418,12 @@ class FlagBasedRestartManager:
         self._cleanup_all()
 
     def _cleanup_terminal(self) -> None:
-        """Cleanup terminal process with minimal overhead."""
+        """Cleanup tmux pane running the target process."""
         if self.current_terminal_process:
             try:
-                self.current_terminal_process.terminate()
-                self.current_terminal_process.wait(timeout=2)
-            except:
+                self.current_terminal_process.send_keys("\x03", enter=False)
+            except Exception:
                 pass
-
-            # Cleanup PID file if exists
-            try:
-                if hasattr(self.current_terminal_process, "pid_file"):
-                    pid_file = self.current_terminal_process.pid_file
-                    if os.path.exists(pid_file):
-                        os.unlink(pid_file)
-            except:
-                pass
-
             self.current_terminal_process = None
 
     # ------------------------------------------------------------------
