@@ -97,7 +97,7 @@ class FlagBasedRestartManager:
         file_path: str,
         success_flag_file: str,
         title: Optional[str] = None,
-        restart_after_delay: Optional[float] = None,
+        force_restart: Optional[float] = None,
         supress_tf_warnings: bool = False,
     ) -> None:
         """Run file with flag-based restart logic and consolidated email notifications.
@@ -106,7 +106,9 @@ class FlagBasedRestartManager:
             file_path: Path to Python or Jupyter notebook file
             success_flag_file: Path where target process writes completion flag
             title: Custom title for monitoring
-            restart_after_delay: Optional delay after which the run will be restarted
+            force_restart: Optional delay after which the run will be
+                restarted regardless of crashes. This does not count
+                toward ``max_restarts``.
             supress_tf_warnings: Suppress TensorFlow warnings (default: False)
 
         Raises:
@@ -143,7 +145,7 @@ class FlagBasedRestartManager:
             max_restarts=self.max_restarts,
             email_enabled=self.email_manager.email_enabled,
             title=self.process_title,
-            force_restart=restart_after_delay,
+            force_restart=force_restart,
         )
 
         self.running = True

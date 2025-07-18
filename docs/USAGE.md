@@ -38,7 +38,7 @@ pip install git+https://github.com/MatheusFS-dev/araras.git
 
 ### Running the Monitoring CLI
 After installing **araras** via `pip`, you can execute a script with
-automatic restarts using the built-in command-line interface.
+automatic restarts using the ``monitor`` command.
 
 1. Ensure your target script writes a *success flag* file when it
    finishes successfully. The monitoring process watches for this file
@@ -47,15 +47,14 @@ automatic restarts using the built-in command-line interface.
    flag file:
 
 ```bash
-python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag
+monitor path/to/script.py -s /tmp/done.flag
 ```
 
 Additional options allow controlling restart behavior, for example:
 
 ```bash
-python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag \
-    -m 5 -d 3 -f 3600
+monitor path/to/script.py -s /tmp/done.flag -m 5 -d 3 -f 3600
 ```
 
-Run with `--help` to see all available arguments.
+Run ``monitor --help`` to see all available arguments.
 
