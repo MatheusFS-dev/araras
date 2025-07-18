@@ -82,7 +82,7 @@ class UTCFormatter(ColorFormatter):
         from datetime import datetime, timezone
         dt = datetime.fromtimestamp(record.created, tz=timezone.utc).astimezone()
         utc_offset = dt.strftime("%z")
-        utc_offset_formatted = int(utc_offset[:3])  # Extract and convert to integer (±HH)
+        utc_offset_formatted = utc_offset[:3]  # Extract ±HH
         return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {utc_offset_formatted}"
 
 logger_time = make_logger(
