@@ -13,7 +13,7 @@ from pathlib import Path
 from threading import Event, Thread
 
 # Local imports
-from araras.runtime.terminal import SimpleTerminalLauncher
+from araras.runtime.terminal import SimpleTerminalLauncher, TmuxTerminalLauncher
 
 # Path where resource usage logs will be written. If ``None`` no logging occurs
 RESOURCE_USAGE_LOG_FILE: Optional[str] = None
@@ -296,13 +296,23 @@ def print_process_resource_usage(pid: int) -> None:
         pass
 
 
-def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
+def start_monitor(
+    pid: int,
+    title: str,
+    supress_tf_warnings: bool = False,
+    tmux_split: bool = False,
+    tmux_session: Optional[str] = None,
+) -> Dict[str, Any]:
     """Start simplified crash monitor without email capabilities.
 
     Args:
         pid: Process ID to monitor
         title: Process title for alerts
-        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+        supress_tf_warnings: Suppress TensorFlow warnings.
+        tmux_split: Launch monitor in a tmux split pane instead of a new
+            terminal window.
+        tmux_session: Optional tmux session name when ``tmux_split`` is
+            ``True``.
 
     Returns:
         Monitor control info dictionary
@@ -344,12 +354,21 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
         os.chmod(script_path, 0o755)
 
     # Launch monitor in terminal
-    launcher = SimpleTerminalLauncher()
-    launcher.set_supress_tf_warnings(supress_tf_warnings)
+    if tmux_split:
+        launcher = TmuxTerminalLauncher(
+            session_name=tmux_session,
+            supress_tf_warnings=supress_tf_warnings,
+        )
+    else:
+        launcher = SimpleTerminalLauncher()
+        launcher.set_supress_tf_warnings(supress_tf_warnings)
+
     process = launcher.launch([sys.executable, script_path], os.getcwd())
+    pane_id = getattr(launcher, "pane_id", None)
+    session_name = getattr(launcher, "session_name", None)
 
     time.sleep(0.1)
-    if process.poll() is not None:  # Check if it died
+    if not tmux_split and process.poll() is not None:
         exit_code = process.returncode
         error_msg = f"Monitor failed to start (exit code: {exit_code})"
 
@@ -371,7 +390,10 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
 
         raise OSError(error_msg)
 
-    return {"process": process, **control_files}
+    monitor_info = {"process": process, **control_files}
+    if pane_id:
+        monitor_info.update({"pane_id": pane_id, "session_name": session_name})
+    return monitor_info
 
 
 def stop_monitor(monitor_info: Dict[str, Any]) -> None:
@@ -398,11 +420,22 @@ def stop_monitor(monitor_info: Dict[str, Any]) -> None:
 
     # Force terminate if needed
     process = monitor_info.get("process")
-    if process and process.poll() is None:
+    pane_id = monitor_info.get("pane_id")
+    if pane_id:
+        try:
+            import libtmux
+
+            server = libtmux.Server()
+            pane = server.find_where({"pane_id": pane_id})
+            if pane:
+                pane.cmd("kill-pane", "-t", pane_id)
+        except Exception:
+            pass
+    elif process and process.poll() is None:
         try:
             process.terminate()
             process.wait(timeout=2)
-        except:
+        except Exception:
             pass
 
     # Batch file cleanup (single loop for efficiency)
@@ -452,6 +485,8 @@ def run_auto_restart(
     retry_attempts: int = None,
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
+    tmux_split: bool = False,
+    tmux_session: Optional[str] = None,
 ) -> None:
     """Run a file with automatic restarts and optional email notifications.
 
@@ -478,6 +513,8 @@ def run_auto_restart(
         retry_attempts: Number of retry attempts before sending failure email
         supress_tf_warnings: Suppress TensorFlow warnings (default: False)
         resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
+        tmux_split: Launch monitor pane inside tmux rather than a new terminal window.
+        tmux_session: Name of the tmux session to split when ``tmux_split`` is ``True``.
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -534,6 +571,8 @@ def run_auto_restart(
                                     title=title,
                                     force_restart=force_restart,
                                     supress_tf_warnings=supress_tf_warnings,
+                                    tmux_split=tmux_split,
+                                    tmux_session=tmux_session,
                                 )
                                 finished[0] = True
                             except Exception:
@@ -582,6 +621,8 @@ def run_auto_restart(
                 title=title,
                 force_restart=force_restart,
                 supress_tf_warnings=supress_tf_warnings,
+                tmux_split=tmux_split,
+                tmux_session=tmux_session,
             )
 
     except (FileNotFoundError, ValueError, ImportError) as e:
@@ -692,6 +733,18 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         default=None,
         help="File to log process resource usage statistics",
     )
+    parser.add_argument(
+        "-x",
+        "--tmux-split",
+        action="store_true",
+        help="Launch monitor in a tmux split pane",
+    )
+    parser.add_argument(
+        "-p",
+        "--tmux-session",
+        default=None,
+        help="Target tmux session name when using --tmux-split",
+    )
 
     return parser.parse_args(argv)
 
@@ -732,6 +785,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         retry_attempts=args.retry_attempts,
         supress_tf_warnings=args.supress_tf_warnings,
         resource_usage_log_file=args.resource_usage_log_file,
+        tmux_split=args.tmux_split,
+        tmux_session=args.tmux_session,
     )
 
 

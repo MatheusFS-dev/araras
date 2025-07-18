@@ -99,6 +99,8 @@ class FlagBasedRestartManager:
         title: Optional[str] = None,
         force_restart: Optional[float] = None,
         supress_tf_warnings: bool = False,
+        tmux_split: bool = False,
+        tmux_session: Optional[str] = None,
     ) -> None:
         """Run file with flag-based restart logic and consolidated email notifications.
 
@@ -110,6 +112,8 @@ class FlagBasedRestartManager:
                 restarted regardless of crashes. This does not count
                 toward ``max_restarts``.
             supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+            tmux_split: Launch monitor pane inside tmux rather than a new terminal.
+            tmux_session: Name of the tmux session to split when ``tmux_split`` is ``True``.
 
         Raises:
             FileNotFoundError: If file doesn't exist
@@ -195,6 +199,8 @@ class FlagBasedRestartManager:
                         target_pid,
                         self.process_title,
                         supress_tf_warnings=supress_tf_warnings,
+                        tmux_split=tmux_split,
+                        tmux_session=tmux_session,
                     )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
