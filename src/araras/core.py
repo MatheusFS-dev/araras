@@ -96,16 +96,32 @@ from tqdm import tqdm
 
 
 def white_track(iterable, *, description: str, total: int):
-    """Iterate with a white progress bar showing ``done/total``.
+    """Iterate over ``iterable`` with a custom white progress bar.
+
+    This helper wraps ``iterable`` and yields each item while displaying a
+    progress bar using :class:`tqdm.tqdm`. The bar is rendered in white with an
+    arrow style (``=>``) to indicate progress and shows ``done/total`` along with
+    the remaining time.
 
     Args:
         iterable (Iterable): The iterable to wrap and iterate over.
-        description (str): A description to display alongside the progress bar.
-        total (int): The total number of iterations.
+        description (str): Description shown next to the progress bar.
+        total (int): Expected number of iterations.
 
     Yields:
-        Any: Items from the provided iterable, while displaying the progress bar.
+        Any: Items from ``iterable``.
+
+    Notes:
+        The progress bar uses ASCII characters to maximise compatibility across
+        different terminals. The ``=>`` symbol represents the current progress
+        pointer.
+
+    Warning:
+        The ``total`` parameter **must** accurately reflect the length of the
+        iterable; otherwise the progress bar will display incorrect percentages
+        and estimated remaining time.
     """
+
     bar_fmt = "{percentage:3.0f}% {bar} {n_fmt}/{total_fmt} in {remaining}"
     with tqdm(
         iterable,
@@ -114,6 +130,7 @@ def white_track(iterable, *, description: str, total: int):
         colour="white",
         ncols=50,
         bar_format=bar_fmt,
+        ascii="=>",
         unit="",  # remove default “it” label
     ) as pbar:
         for item in pbar:
