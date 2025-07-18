@@ -71,7 +71,7 @@ def make_logger(
 logger = make_logger("araras", fmt="[ARARAS %(levelname)s] %(message)s")
 
 # 2) Error-style logger with file/line info
-logger_error = make_logger("araras_error", fmt="[%(pathname)s:%(lineno)d %(levelname)s] %(message)s")
+logger_error = make_logger("araras_error", fmt="[ARARAS %(filename)s:%(lineno)d %(levelname)s] %(message)s")
 
 # 3) Timestamp logger
 class UTCFormatter(ColorFormatter):
@@ -90,7 +90,7 @@ logger_time = make_logger(
     fmt="[%(asctime)s %(levelname)s] %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
 )
-logger_time.handlers[0].setFormatter(UTCFormatter("[%(asctime)s %(levelname)s] %(message)s"))
+logger_time.handlers[0].setFormatter(UTCFormatter("[%(asctime)s] %(levelname)s: %(message)s"))
 
 # —————————————————————————————————— Errors —————————————————————————————————— #
 from rich.traceback import install
