@@ -74,7 +74,23 @@ logger = make_logger("araras", fmt="[ARARAS %(levelname)s] %(message)s")
 logger_error = make_logger("araras_error", fmt="[%(pathname)s:%(lineno)d %(levelname)s] %(message)s")
 
 # 3) Timestamp logger
-logger_time = make_logger("araras_time", fmt="[%(asctime)s] %(levelname)s] %(message)s", datefmt="%H:%M:%S")
+class UTCFormatter(ColorFormatter):
+    """Formatter that adds UTC offset to the log timestamp."""
+
+    def formatTime(self, record, datefmt=None):
+        """Format the time with UTC offset."""
+        from datetime import datetime, timezone
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc).astimezone()
+        utc_offset = dt.strftime("%z")
+        utc_offset_formatted = f"{utc_offset[:3]}:{utc_offset[3:]}"  # Format as ±HH:MM
+        return f"{dt.strftime('%Y-%m-%d %H:%M:%S')} {utc_offset_formatted}"
+
+logger_time = make_logger(
+    "araras_time",
+    fmt="[%(asctime)s %(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger_time.handlers[0].setFormatter(UTCFormatter("[%(asctime)s %(levelname)s] %(message)s"))
 
 # —————————————————————————————————— Errors —————————————————————————————————— #
 from rich.traceback import install

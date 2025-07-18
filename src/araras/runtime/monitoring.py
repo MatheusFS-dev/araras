@@ -190,7 +190,7 @@ def print_warning_message(message: str) -> None:
 
 def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
-    logger_time.info(f"SUCCESS: {message}")
+    logger_time.warning(f"SUCCESS: {message}")
 
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
