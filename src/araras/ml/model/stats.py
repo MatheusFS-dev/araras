@@ -124,7 +124,7 @@ def get_memory_and_time(
 
     @tf.function
     def infer(*args):
-        return model(list(args), training=False)
+        return model(*args, training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
