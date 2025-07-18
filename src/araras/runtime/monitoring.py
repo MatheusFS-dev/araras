@@ -210,6 +210,41 @@ def _cleanup_stale_monitor_files():
             pass
 
 
+def _prepare_monitored_script(source: Path, success_flag: str) -> Path:
+    """Create a temporary copy of ``source`` that writes ``success_flag`` on exit.
+
+    A copy of the provided Python script is saved to the system temporary
+    directory. A small snippet appending a success flag write operation is added
+    to the end of this copy. The resulting path should be executed in place of
+    the original so that successful completion is automatically signalled.
+
+    Args:
+        source: Path to the original Python script.
+        success_flag: File path that will store the success marker.
+
+    Returns:
+        Path to the newly created temporary script.
+
+    Raises:
+        OSError: If the temporary file cannot be written.
+    """
+
+    tmp_path = Path(tempfile.gettempdir()) / f"{source.stem}_monitored.py"
+    try:
+        with open(source, "r", encoding="utf-8") as src, open(
+            tmp_path, "w", encoding="utf-8"
+        ) as dst:
+            dst.write(src.read())
+            dst.write(
+                "\n\n# Write success flag for the auto restart script\n"
+                f"Path({repr(str(Path(success_flag).resolve()))}).write_text('SUCCESS')\n"
+            )
+    except OSError:
+        raise
+
+    return tmp_path
+
+
 def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
     """Return memory percentage, memory in GB, and CPU percentage for a process.
 
@@ -426,8 +461,9 @@ def run_auto_restart(
     automated monitoring.
 
     Note:
-        The executed script **must** create the ``success_flag_file`` to
-        signal successful completion.
+        The target file is copied to ``/tmp`` and a small snippet that writes
+        ``success_flag_file`` is appended. The temporary copy is executed and
+        cleaned up automatically.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
@@ -456,9 +492,18 @@ def run_auto_restart(
     try:
         # late import to avoid circular dependencies
         from .restart_manager import FlagBasedRestartManager
+        from araras.utils.misc import NotebookConverter
 
         # Clean up any existing success flag file before starting
         Path(success_flag_file).unlink(missing_ok=True)
+
+        original_path = Path(file_path).resolve()
+        converted_file: Optional[Path] = None
+        if original_path.suffix == ".ipynb":
+            converted_file = NotebookConverter.convert_notebook_to_python(original_path)
+            original_path = converted_file
+
+        patched_script = _prepare_monitored_script(original_path, success_flag_file)
 
         manager = FlagBasedRestartManager(
             max_restarts=max_restarts,
@@ -485,7 +530,7 @@ def run_auto_restart(
                         def run_and_flag():
                             try:
                                 manager.run_file_with_restart(
-                                    file_path=file_path,
+                                    file_path=str(patched_script),
                                     success_flag_file=success_flag_file,
                                     title=title,
                                     force_restart=force_restart,
@@ -533,7 +578,7 @@ def run_auto_restart(
         else:
             # Regular auto-restart logic
             manager.run_file_with_restart(
-                file_path=file_path,
+                file_path=str(patched_script),
                 success_flag_file=success_flag_file,
                 title=title,
                 force_restart=force_restart,
@@ -548,6 +593,18 @@ def run_auto_restart(
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
+    finally:
+        # Cleanup temporary files
+        try:
+            if patched_script and Path(patched_script).exists():
+                Path(patched_script).unlink()
+        except Exception:
+            pass
+        try:
+            if converted_file and converted_file.exists():
+                converted_file.unlink()
+        except Exception:
+            pass
 
 
 def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
