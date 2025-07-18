@@ -192,6 +192,7 @@ def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
     logger_time.info(f"SUCCESS: {message}")
 
+logger_error.error("NELSON: This is an error message that should not be printed in the final output.")
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
