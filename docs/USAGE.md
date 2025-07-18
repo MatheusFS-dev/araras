@@ -35,3 +35,10 @@ To install the package directly from the GitHub repository, use:
 ```bash
 pip install git+https://github.com/MatheusFS-dev/araras.git
 ```
+
+### Running the Monitoring CLI
+After installing **araras** via `pip`, you can execute a script with automatic restarts using the built-in command-line interface:
+```bash
+python -m araras.runtime.monitoring path/to/script.py --success-flag-file /tmp/done.flag
+```
+Use `--help` to see all available options.

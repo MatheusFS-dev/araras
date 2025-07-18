@@ -536,3 +536,120 @@ def run_auto_restart(
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
+
+
+def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Parse command line arguments for the monitoring CLI.
+
+    This function configures the argument parser used when invoking
+    ``python -m araras.runtime.monitoring`` from the command line.
+
+    Args:
+        argv: Optional list of arguments to parse instead of ``sys.argv``.
+
+    Returns:
+        Parsed CLI arguments.
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Run a Python script or notebook with automatic restarts",
+    )
+
+    parser.add_argument(
+        "file_path",
+        help="Path to the .py or .ipynb file to execute",
+    )
+    parser.add_argument(
+        "--success-flag-file",
+        default="/tmp/success.flag",
+        help="Path where the executed script writes a completion flag",
+    )
+    parser.add_argument(
+        "--title",
+        default=None,
+        help="Custom title for monitoring and email alerts",
+    )
+    parser.add_argument(
+        "--max-restarts",
+        type=int,
+        default=10,
+        help="Maximum number of restart attempts",
+    )
+    parser.add_argument(
+        "--restart-delay",
+        type=float,
+        default=3.0,
+        help="Delay between restarts in seconds",
+    )
+    parser.add_argument(
+        "--recipients-file",
+        default=None,
+        help="Path to JSON file containing email recipients",
+    )
+    parser.add_argument(
+        "--credentials-file",
+        default=None,
+        help="Path to JSON file with email credentials",
+    )
+    parser.add_argument(
+        "--restart-after-delay",
+        type=float,
+        default=None,
+        help="Restart the run after this many seconds regardless of status",
+    )
+    parser.add_argument(
+        "--retry-attempts",
+        type=int,
+        default=None,
+        help="Number of retry attempts before a failure email is sent",
+    )
+    parser.add_argument(
+        "--supress-tf-warnings",
+        action="store_true",
+        help="Suppress TensorFlow warnings",
+    )
+    parser.add_argument(
+        "--resource-usage-log-file",
+        default=None,
+        help="File to log process resource usage statistics",
+    )
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """CLI entry point for ``run_auto_restart``.
+
+    This wrapper parses command line arguments and delegates execution to
+    :func:`run_auto_restart`. It allows using the monitoring utilities without
+    writing a custom Python script.
+
+    Note:
+        The command line interface mirrors the arguments of
+        :func:`run_auto_restart` but uses long options for clarity.
+
+    Args:
+        argv: Optional list of arguments to parse instead of ``sys.argv``.
+
+    Returns:
+        None
+    """
+
+    args = _parse_args(argv)
+    run_auto_restart(
+        file_path=args.file_path,
+        success_flag_file=args.success_flag_file,
+        title=args.title,
+        max_restarts=args.max_restarts,
+        restart_delay=args.restart_delay,
+        recipients_file=args.recipients_file,
+        credentials_file=args.credentials_file,
+        restart_after_delay=args.restart_after_delay,
+        retry_attempts=args.retry_attempts,
+        supress_tf_warnings=args.supress_tf_warnings,
+        resource_usage_log_file=args.resource_usage_log_file,
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI execution
+    main()
