@@ -488,7 +488,7 @@ def run_auto_restart(
                                     file_path=file_path,
                                     success_flag_file=success_flag_file,
                                     title=title,
-                                    restart_after_delay=force_restart,
+                                    force_restart=force_restart,
                                     supress_tf_warnings=supress_tf_warnings,
                                 )
                                 finished[0] = True
@@ -536,6 +536,7 @@ def run_auto_restart(
                 file_path=file_path,
                 success_flag_file=success_flag_file,
                 title=title,
+                force_restart=force_restart,
                 supress_tf_warnings=supress_tf_warnings,
             )
 
@@ -643,9 +644,9 @@ def main(argv: Optional[List[str]] = None) -> None:
     """CLI entry point for ``run_auto_restart``.
 
     This wrapper parses command line arguments and delegates execution
-    to :func:`run_auto_restart`.  Use this module as ``python -m
-    araras.runtime.monitoring`` to execute a target script with
-    automatic restarts.
+    to :func:`run_auto_restart`.  You can either invoke this module with
+    ``python -m araras.runtime.monitoring`` or simply run the installed
+    ``monitor`` command after installing the package.
 
     Args:
         argv: Optional list of arguments to parse instead of ``sys.argv``.
