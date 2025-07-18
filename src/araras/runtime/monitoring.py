@@ -641,18 +641,26 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
 
 def main(argv: Optional[List[str]] = None) -> None:
-    """CLI entry point for ``run_auto_restart``.
+    """Entry point for the ``monitor`` command.
 
-    This wrapper parses command line arguments and delegates execution
-    to :func:`run_auto_restart`.  You can either invoke this module with
-    ``python -m araras.runtime.monitoring`` or simply run the installed
-    ``monitor`` command after installing the package.
+    This wrapper parses command line flags and forwards them to
+    :func:`run_auto_restart`. It is exposed as ``monitor`` via the
+    package's ``pyproject.toml`` entry point and can also be invoked with
+    ``python -m araras.runtime.monitoring``.
+
+    Note:
+        Execute this command from the **same directory** as the script or
+        notebook being monitored so that relative paths resolve correctly.
 
     Args:
         argv: Optional list of arguments to parse instead of ``sys.argv``.
 
     Returns:
-        None
+        ``None``
+
+    Raises:
+        SystemExit: If invalid options are supplied and argument parsing
+        fails.
     """
 
     args = _parse_args(argv)

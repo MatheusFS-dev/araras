@@ -1596,6 +1596,32 @@ Main function with notebook conversion, file cleanup, and consolidated email not
 - ValueError: If file type is unsupported
 - ImportError: If notebook dependencies missing for .ipynb files
 
+### monitor CLI
+
+The package exposes a console script named `monitor` through the entry
+point `monitor = "araras.runtime.monitoring:main"`. After installing the
+package you can execute:
+
+```bash
+monitor path/to/job.py [options]
+```
+
+| Flag | Type | Description |
+|------|------|-------------|
+| `-s, --success-flag-file` | `str` | Path where the monitored script writes a completion flag. Defaults to `/tmp/success.flag`. |
+| `-t, --title` | `str` | Custom title for monitoring and email alerts. |
+| `-m, --max-restarts` | `int` | Maximum number of restart attempts. Defaults to `10`. |
+| `-d, --restart-delay` | `float` | Delay between restarts in seconds. Defaults to `3.0`. |
+| `-r, --recipients-file` | `str` | Path to a JSON file listing email recipients. |
+| `-c, --credentials-file` | `str` | Path to a JSON file with email credentials. |
+| `-f, --force-restart` | `float` | Restart the job after this many seconds even if it has not crashed. |
+| `-a, --retry-attempts` | `int` | Number of retry attempts before a failure email is sent. |
+| `-w, --supress-tf-warnings` | `bool` | Suppress TensorFlow warnings. |
+| `-u, --resource-usage-log-file` | `str` | File to log process resource usage statistics. |
+
+> [!CAUTION]
+> Run the `monitor` command from the **same directory** as the file being monitored so that relative paths resolve correctly.
+
 ## utils
 
 Convenience imports for the `araras.utils` package. This initializer exposes
