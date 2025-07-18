@@ -12,6 +12,7 @@ from pathlib import Path
 from threading import Event, Thread
 
 # Local imports
+from araras.runtime.terminal import SimpleTerminalLauncher
 
 # Path where resource usage logs will be written. If ``None`` no logging occurs
 RESOURCE_USAGE_LOG_FILE: Optional[str] = None
@@ -260,26 +261,16 @@ def print_process_resource_usage(pid: int) -> None:
         pass
 
 
-def start_monitor(
-    pid: int,
-    title: str,
-    supress_tf_warnings: bool = False,
-    tmux_session: Optional["libtmux.Session"] = None,
-) -> Dict[str, Any]:
-    """Start simplified crash monitor inside a tmux pane.
-
-    The monitor script is executed in a new pane of the provided tmux session.
-    This allows the monitored process and the monitor output to be displayed side
-    by side in a single terminal window.
+def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Dict[str, Any]:
+    """Start simplified crash monitor without email capabilities.
 
     Args:
-        pid: Process ID to monitor.
-        title: Process title for alerts.
-        supress_tf_warnings: Suppress TensorFlow warnings.
-        tmux_session: Existing tmux session to attach the monitor pane to.
+        pid: Process ID to monitor
+        title: Process title for alerts
+        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
 
     Returns:
-        Monitor control info dictionary with pane and control file paths.
+        Monitor control info dictionary
 
     Raises:
         ValueError: If PID doesn't exist
@@ -317,44 +308,42 @@ def start_monitor(
     if os.name != "nt":
         os.chmod(script_path, 0o755)
 
-    import libtmux
-    import shlex
+    # Launch monitor in terminal
+    launcher = SimpleTerminalLauncher()
+    launcher.set_supress_tf_warnings(supress_tf_warnings)
+    process = launcher.launch([sys.executable, script_path], os.getcwd())
 
-    if tmux_session is None:
-        server = libtmux.Server()
-        tmux_session = server.new_session(
-            session_name=f"monitor_{pid}",
-            start_directory=os.getcwd(),
-            attach=False,
-        )
+    time.sleep(0.1)
+    if process.poll() is not None:  # Check if it died
+        exit_code = process.returncode
+        error_msg = f"Monitor failed to start (exit code: {exit_code})"
 
-    pane = tmux_session.split_window(attach=False)
+        # Try to get stderr output if available
+        try:
+            stdout, stderr = process.communicate(timeout=1)
+            if stderr:
+                error_msg += f". Error output: {stderr.decode().strip()}"
+            elif stdout:
+                error_msg += f". Output: {stdout.decode().strip()}"
+        except:
+            pass
 
-    cmd = f"{shlex.quote(sys.executable)} {shlex.quote(script_path)}"
-    if supress_tf_warnings:
-        cmd = f"{cmd} 2> >(awk '!/ptxas/')"
-    pane.send_keys(cmd, enter=True)
-
-    for _ in range(50):
-        if os.path.exists(control_files["pid_file"]):
-            break
-        time.sleep(0.1)
-
-    if not os.path.exists(control_files["pid_file"]):
+        # Cleanup the failed script file
         try:
             os.unlink(script_path)
-        except Exception:
+        except:
             pass
-        raise OSError("Monitor failed to start")
 
-    return {"tmux_pane": pane, **control_files}
+        raise OSError(error_msg)
+
+    return {"process": process, **control_files}
 
 
 def stop_monitor(monitor_info: Dict[str, Any]) -> None:
     """Stop monitor and cleanup files with optimized batch operations.
 
     Args:
-        monitor_info: Monitor control info from :func:`start_monitor`.
+        monitor_info: Monitor control info from start_monitor()
     """
     if not monitor_info:
         return
@@ -372,11 +361,13 @@ def stop_monitor(monitor_info: Dict[str, Any]) -> None:
             break
         time.sleep(0.1)
 
-    pane = monitor_info.get("tmux_pane")
-    if pane is not None:
+    # Force terminate if needed
+    process = monitor_info.get("process")
+    if process and process.poll() is None:
         try:
-            pane.send_keys("exit", enter=True)
-        except Exception:
+            process.terminate()
+            process.wait(timeout=2)
+        except:
             pass
 
     # Batch file cleanup (single loop for efficiency)

@@ -2,12 +2,12 @@ from araras.core import *
 
 import os
 import psutil
+import subprocess
 import time
-import tempfile
-import shlex
 from pathlib import Path
 
 from .cleanup import ChildProcessCleanup
+from .terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
 from .email_manager import ConsolidatedEmailManager
 from .file_handler import FileTypeHandler
@@ -26,6 +26,7 @@ class FlagBasedRestartManager:
         "restart_delay",
         "restart_count",
         "running",
+        "current_terminal_process",
         "current_target_pid",
         "monitor_info",
         "email_manager",
@@ -39,7 +40,6 @@ class FlagBasedRestartManager:
         "last_process_start_time",
         "_last_restart_file",
         "pid_history",
-        "tmux_session",
     )
 
     def __init__(
@@ -67,6 +67,7 @@ class FlagBasedRestartManager:
         self.last_process_start_time = None
 
         # Process tracking with minimal state
+        self.current_terminal_process: Optional[subprocess.Popen] = None
         self.current_target_pid: Optional[int] = None
         self.monitor_info: Optional[Dict[str, Any]] = None
         self._last_restart_file: Optional[str] = None
@@ -90,7 +91,6 @@ class FlagBasedRestartManager:
         # verify old instances are truly gone and to forcibly terminate them if
         # they linger after a forced restart.
         self.pid_history: List[int] = []
-        self.tmux_session = None
 
     def run_file_with_restart(
         self,
@@ -193,7 +193,6 @@ class FlagBasedRestartManager:
                         target_pid,
                         self.process_title,
                         supress_tf_warnings=supress_tf_warnings,
-                        tmux_session=self.tmux_session,
                     )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
@@ -307,42 +306,27 @@ class FlagBasedRestartManager:
         return False
 
     def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
-        """Launch the target process inside a new tmux session.
-
-        This function creates a dedicated tmux session for the target process, sends
-        the execution command to the session and waits for the PID to become
-        available. The session object is stored for later cleanup.
+        """Launch target process.
 
         Args:
-            file_path: Validated path to Python file.
-            working_dir: Working directory for the process.
-            success_flag_file: Success flag file path.
+            file_path: Validated path to Python file
+            working_dir: Working directory
+            success_flag_file: Success flag file path
 
         Returns:
-            PID of the launched process.
+            Target process PID
 
         Raises:
-            OSError: If the PID cannot be discovered.
+            OSError: If PID discovery fails
         """
         # Build command for Python file
         command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
 
-        import libtmux
-        import shlex
-        pid_file = tempfile.mktemp(suffix=".pid")
+        launcher = SimpleTerminalLauncher()
+        self.current_terminal_process = launcher.launch(command, working_dir)
 
-        server = libtmux.Server()
-        session_name = f"araras_{int(time.time())}"
-        self.tmux_session = server.new_session(
-            session_name=session_name,
-            start_directory=working_dir,
-            attach=False,
-        )
-
-        cmd_str = " ".join(shlex.quote(arg) for arg in command)
-        pane = self.tmux_session.attached_window.attached_pane
-        pane.send_keys(f"{cmd_str} & echo $! > {pid_file}; wait", enter=True)
-
+        # Efficient PID discovery with timeout
+        pid_file = self.current_terminal_process.pid_file
         target_pid = self._discover_target_pid(pid_file, timeout=5.0)
 
         if not target_pid:
@@ -488,15 +472,24 @@ class FlagBasedRestartManager:
         self._cleanup_all()
 
     def _cleanup_terminal(self) -> None:
-        """Cleanup tmux session with minimal overhead."""
-        if self.tmux_session is not None:
+        """Cleanup terminal process with minimal overhead."""
+        if self.current_terminal_process:
             try:
-                session_name = self.tmux_session.get("session_name")
-                self.tmux_session.kill_session()
-            except Exception:
+                self.current_terminal_process.terminate()
+                self.current_terminal_process.wait(timeout=2)
+            except:
                 pass
-            finally:
-                self.tmux_session = None
+
+            # Cleanup PID file if exists
+            try:
+                if hasattr(self.current_terminal_process, "pid_file"):
+                    pid_file = self.current_terminal_process.pid_file
+                    if os.path.exists(pid_file):
+                        os.unlink(pid_file)
+            except:
+                pass
+
+            self.current_terminal_process = None
 
     # ------------------------------------------------------------------
     # PID tracking helpers
