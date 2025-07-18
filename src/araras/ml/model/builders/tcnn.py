@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Temporal convolutional network components.
-"""
 from araras.core import *
 
 from tensorflow.keras import layers, initializers

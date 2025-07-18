@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Graph neural network layers and adjacency utilities.
-"""
 
 from araras.core import *
 

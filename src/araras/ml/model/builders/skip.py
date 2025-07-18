@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Skip connection utilities for neural networks.
-"""
 from araras.core import *
 
 import optuna

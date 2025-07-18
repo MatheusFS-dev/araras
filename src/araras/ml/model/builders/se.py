@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Squeeze-and-excitation building modules.
-"""
 from araras.core import *
 
 import optuna

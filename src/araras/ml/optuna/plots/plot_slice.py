@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Slice plot to inspect parameter effects.
-"""
 from araras.core import *
 
 import matplotlib.pyplot as plt

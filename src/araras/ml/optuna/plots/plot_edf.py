@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Plot empirical distribution functions.
-"""
 from araras.core import *
 
 import matplotlib.pyplot as plt

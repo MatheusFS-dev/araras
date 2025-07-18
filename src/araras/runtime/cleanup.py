@@ -1,8 +1,3 @@
-"""
-Last Edited: 14 July 2025
-Description:
-    Terminate and clean up child processes.
-"""
 from araras.core import *
 
 import os
