@@ -170,20 +170,11 @@ class FlagBasedRestartManager:
 
                 try:
                     if self.monitor_info:
-                        if "session_name" in self.monitor_info:
-                            _mon.stop_tmux_monitor(self.monitor_info)
-                        else:
-                            _mon.stop_monitor(self.monitor_info)
+                        _mon.stop_monitor(self.monitor_info)
                         self.monitor_info = None
 
-                    # Launch process and start monitor inside tmux
-                    self.monitor_info = self._launch_process(
-                        validated_path,
-                        working_dir,
-                        success_flag_file,
-                        supress_tf_warnings=supress_tf_warnings,
-                    )
-                    target_pid = self.monitor_info["target_pid"]
+                    # Launch process
+                    target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
                     _mon.print_process_status("\033[92mProcess started\033[0m", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
@@ -197,6 +188,12 @@ class FlagBasedRestartManager:
                             runtime,
                         )
 
+                    # Start crash monitor with simplified monitoring
+                    self.monitor_info = _mon.start_monitor(
+                        target_pid,
+                        self.process_title,
+                        supress_tf_warnings=supress_tf_warnings,
+                    )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
                     # Wait for completion or crash with optimized polling
@@ -308,47 +305,83 @@ class FlagBasedRestartManager:
 
         return False
 
-    def _launch_process(
-        self,
-        file_path: Path,
-        working_dir: str,
-        success_flag_file: str,
-        supress_tf_warnings: bool = False,
-    ) -> Dict[str, Any]:
-        """Launch target process inside ``tmux`` and start monitoring.
+    def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
+        """Launch target process.
 
         Args:
-            file_path: Validated path to Python file.
-            working_dir: Working directory used for execution.
-            success_flag_file: Success flag file path.
-            supress_tf_warnings: If ``True``, suppress TensorFlow warnings in the
-                ``tmux`` panes.
+            file_path: Validated path to Python file
+            working_dir: Working directory
+            success_flag_file: Success flag file path
 
         Returns:
-            Dictionary with monitor information and ``target_pid``.
+            Target process PID
 
         Raises:
-            OSError: If the ``tmux`` session fails to start or the PID cannot be
-                determined.
+            OSError: If PID discovery fails
         """
         # Build command for Python file
-        command, _ = FileTypeHandler.build_execution_command(file_path, success_flag_file)
+        command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
 
-        session_name = f"araras_{int(time.time())}"
-        monitor_info = _mon.run_with_tmux_monitor(
-            command,
-            self.process_title,
-            session_name=session_name,
-            orientation="vertical",
-            supress_tf_warnings=supress_tf_warnings,
-        )
+        launcher = SimpleTerminalLauncher()
+        self.current_terminal_process = launcher.launch(command, working_dir)
 
-        target_pid = monitor_info["target_pid"]
+        # Efficient PID discovery with timeout
+        pid_file = self.current_terminal_process.pid_file
+        target_pid = self._discover_target_pid(pid_file, timeout=5.0)
+
+        if not target_pid:
+            self._cleanup_terminal()
+            raise OSError("Failed to get target process PID")
+
         self.current_target_pid = target_pid
+        # Record the pid so we can later ensure it has terminated
         self.pid_history.append(target_pid)
-        self.current_terminal_process = None
 
-        return monitor_info
+        # Cleanup PID file immediately (no longer needed)
+        try:
+            os.unlink(pid_file)
+        except:
+            pass
+
+        return target_pid
+
+    def _discover_target_pid(self, pid_file: str, timeout: float) -> Optional[int]:
+        """Discover target PID with optimized polling strategy.
+
+        Args:
+            pid_file: Path to PID file
+            timeout: Discovery timeout in seconds
+
+        Returns:
+            Target PID if found, None otherwise
+        """
+        end_time = time.time() + timeout
+        check_count = 0
+
+        # Adaptive polling: start fast, slow down for efficiency
+        while time.time() < end_time:
+            check_count += 1
+
+            try:
+                if os.path.exists(pid_file):
+                    with open(pid_file) as f:
+                        pid_str = f.read().strip()
+                        if pid_str.isdigit():
+                            pid = int(pid_str)
+                            if psutil.pid_exists(pid):
+                                return pid
+            except:
+                pass
+
+            # Progressive delay for efficiency optimization
+            if check_count < 10:
+                time.sleep(0.05)  # Fast initial checks
+            elif check_count < 30:
+                time.sleep(0.1)  # Medium frequency
+            else:
+                time.sleep(0.2)  # Stable frequency
+
+        return None
 
     def _wait_for_completion(self, flag_path: Path) -> str:
         """Wait for process completion with optimized polling strategy.
@@ -396,10 +429,7 @@ class FlagBasedRestartManager:
         """Cleanup all resources with optimized order for reliability."""
         # Stop monitor first (most critical for clean shutdown)
         if self.monitor_info:
-            if "session_name" in self.monitor_info:
-                _mon.stop_tmux_monitor(self.monitor_info)
-            else:
-                _mon.stop_monitor(self.monitor_info)
+            _mon.stop_monitor(self.monitor_info)
             self.monitor_info = None
 
         # now delete its restart_file if it still exists
