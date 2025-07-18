@@ -113,6 +113,7 @@ def white_track(iterable, *, description: str, total: int):
         desc=description,
         colour="white",
         ncols=50,
+        ascii=" =>",
         bar_format=bar_fmt,
         unit="",  # remove default “it” label
     ) as pbar:
