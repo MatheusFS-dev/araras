@@ -123,7 +123,7 @@ def print_monitoring_config_summary(
     max_restarts: int,
     email_enabled: bool,
     title: str,
-    restart_after_delay: Optional[float] = None,
+    force_restart: Optional[float] = None,
 ) -> None:
     """Print a summary of monitoring configuration only once."""
     global ONCE_PRINT
@@ -144,8 +144,8 @@ def print_monitoring_config_summary(
     else:
         print(f"Email Alerts: {RED}Disabled{RESET}")
     print(f"Max Restarts: {max_restarts}")
-    if restart_after_delay is not None:
-        print(f"Run will force restart after: {restart_after_delay} seconds")
+    if force_restart is not None:
+        print(f"Run will force restart after: {force_restart} seconds")
     print("=" * 70)
     print()
 
@@ -413,12 +413,20 @@ def run_auto_restart(
     restart_delay: float = 3.0,
     recipients_file: Optional[str] = None,
     credentials_file: Optional[str] = None,
-    restart_after_delay: Optional[float] = None,
+    force_restart: Optional[float] = None,
     retry_attempts: int = None,
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
 ) -> None:
-    """Main function with notebook conversion, file cleanup, and consolidated email notification support.
+    """Run a file with automatic restarts and optional email notifications.
+
+    This helper converts notebooks to Python when necessary and wraps
+    ``FlagBasedRestartManager`` to provide a simple entry point for
+    automated monitoring.
+
+    Note:
+        The executed script **must** create the ``success_flag_file`` to
+        signal successful completion.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
@@ -428,7 +436,9 @@ def run_auto_restart(
         restart_delay: Delay between restarts in seconds
         recipients_file: Path to recipients JSON file (defaults to ./json/recipients.json)
         credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
-        restart_after_delay: restart the run after a delay in seconds
+        force_restart: Restart the run after this many seconds, even if the
+            process did not crash. This does not count towards
+            ``max_restarts``.
         retry_attempts: Number of retry attempts before sending failure email
         supress_tf_warnings: Suppress TensorFlow warnings (default: False)
         resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
@@ -457,7 +467,7 @@ def run_auto_restart(
             retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
         )
 
-        if restart_after_delay is not None and restart_after_delay > 0:
+        if force_restart is not None and force_restart > 0:
             # Wrapping logic for forced restart not counting as crash/max_restarts
             # This will run in a loop, restarting after each interval, until success_flag is found.
 
@@ -477,7 +487,7 @@ def run_auto_restart(
                                     file_path=file_path,
                                     success_flag_file=success_flag_file,
                                     title=title,
-                                    restart_after_delay=restart_after_delay,
+                                    force_restart=force_restart,
                                     supress_tf_warnings=supress_tf_warnings,
                                 )
                                 finished[0] = True
@@ -486,10 +496,10 @@ def run_auto_restart(
 
                         thread = Thread(target=run_and_flag)
                         thread.start()
-                        thread.join(timeout=restart_after_delay)
+                        thread.join(timeout=force_restart)
                         if thread.is_alive():
                             print_process_status(
-                                f"Forcing restart after {restart_after_delay} seconds (not a crash)"
+                                f"Forcing restart after {force_restart} seconds (not a crash)"
                             )
                             manager.force_stop()
                             # Ensure the worker thread finishes cleanly before continuing
@@ -502,7 +512,7 @@ def run_auto_restart(
                                 stop_event.set()
                             else:
                                 print_process_status(
-                                    "Process ended before restart_after_delay, restarting..."
+                                    "Process ended before force_restart delay, restarting..."
                                 )
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
@@ -525,6 +535,7 @@ def run_auto_restart(
                 file_path=file_path,
                 success_flag_file=success_flag_file,
                 title=title,
+                force_restart=force_restart,
                 supress_tf_warnings=supress_tf_warnings,
             )
 
@@ -536,3 +547,128 @@ def run_auto_restart(
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
+
+
+def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    """Parse command line arguments for the monitoring CLI.
+
+    This helper assembles the ``argparse`` parser used by the CLI
+    entry point. Most options provide both short and long forms for
+    convenience.
+
+    Args:
+        argv: Optional list of arguments to parse instead of ``sys.argv``.
+
+    Returns:
+        Parsed CLI arguments.
+    """
+
+    parser = argparse.ArgumentParser(
+        description="Run a Python script or notebook with automatic restarts",
+    )
+
+    parser.add_argument(
+        "file_path",
+        help="Path to the .py or .ipynb file to execute",
+    )
+    parser.add_argument(
+        "-s",
+        "--success-flag-file",
+        default="/tmp/success.flag",
+        help="Path where the executed script writes a completion flag",
+    )
+    parser.add_argument(
+        "-t",
+        "--title",
+        default=None,
+        help="Custom title for monitoring and email alerts",
+    )
+    parser.add_argument(
+        "-m",
+        "--max-restarts",
+        type=int,
+        default=10,
+        help="Maximum number of restart attempts",
+    )
+    parser.add_argument(
+        "-d",
+        "--restart-delay",
+        type=float,
+        default=3.0,
+        help="Delay between restarts in seconds",
+    )
+    parser.add_argument(
+        "-r",
+        "--recipients-file",
+        default=None,
+        help="Path to JSON file containing email recipients",
+    )
+    parser.add_argument(
+        "-c",
+        "--credentials-file",
+        default=None,
+        help="Path to JSON file with email credentials",
+    )
+    parser.add_argument(
+        "-f",
+        "--force-restart",
+        type=float,
+        default=None,
+        help="Force a restart after this many seconds regardless of status",
+    )
+    parser.add_argument(
+        "-a",
+        "--retry-attempts",
+        type=int,
+        default=None,
+        help="Number of retry attempts before a failure email is sent",
+    )
+    parser.add_argument(
+        "-w",
+        "--supress-tf-warnings",
+        action="store_true",
+        help="Suppress TensorFlow warnings",
+    )
+    parser.add_argument(
+        "-u",
+        "--resource-usage-log-file",
+        default=None,
+        help="File to log process resource usage statistics",
+    )
+
+    return parser.parse_args(argv)
+
+
+def main(argv: Optional[List[str]] = None) -> None:
+    """CLI entry point for ``run_auto_restart``.
+
+    This wrapper parses command line arguments and delegates execution
+    to :func:`run_auto_restart`.  You can either invoke this module with
+    ``python -m araras.runtime.monitoring`` or simply run the installed
+    ``monitor`` command after installing the package.
+
+    Args:
+        argv: Optional list of arguments to parse instead of ``sys.argv``.
+
+    Returns:
+        None
+    """
+
+    args = _parse_args(argv)
+    run_auto_restart(
+        file_path=args.file_path,
+        success_flag_file=args.success_flag_file,
+        title=args.title,
+        max_restarts=args.max_restarts,
+        restart_delay=args.restart_delay,
+        recipients_file=args.recipients_file,
+        credentials_file=args.credentials_file,
+        force_restart=args.force_restart,
+        retry_attempts=args.retry_attempts,
+        supress_tf_warnings=args.supress_tf_warnings,
+        resource_usage_log_file=args.resource_usage_log_file,
+    )
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI execution
+    main()
