@@ -6,7 +6,7 @@ from tensorflow.keras import callbacks
 import tensorflow as tf
 
 
-def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras.callbacks.Callback]:
+def get_callbacks_model(backup_dir: str, tensorboard_logs: str = None) -> List[tf.keras.callbacks.Callback]:
     """
     Constructs and returns a list of Keras callbacks for model training.
 
@@ -17,7 +17,7 @@ def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras
 
     Args:
         backup_dir (str): Directory where the backup files will be stored.
-        tensorboard_logs (str): Directory where TensorBoard logs will be stored.
+        tensorboard_logs (str): Directory where TensorBoard logs will be stored. If None, TensorBoard callback will not be created.
 
     Returns:
         List[tf.keras.callbacks.Callback]: A list of callbacks to pass into `model.fit()`.
@@ -49,8 +49,9 @@ def get_callbacks_model(backup_dir: str, tensorboard_logs: str) -> List[tf.keras
         save_weights_only=True,
     )
 
-    tensorboard_cb = callbacks.TensorBoard(
-        log_dir=tensorboard_logs, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
-    )
-
-    return [early_stopping, reduce_lr, checkpoint, tensorboard_cb]
+    if tensorboard_logs is not None:
+        tensorboard_cb = callbacks.TensorBoard(
+            log_dir=tensorboard_logs, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
+        )
+        return [early_stopping, reduce_lr, checkpoint, tensorboard_cb]
+    return [early_stopping, reduce_lr, checkpoint]

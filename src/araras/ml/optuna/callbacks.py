@@ -245,12 +245,6 @@ def get_callbacks_study(
         verbose=0,
     )
 
-    if tensorboard_logs is not None:
-        trial_log_dir = os.path.join(tensorboard_logs, f"trial_{trial.number}")
-        tensorboard_cb = callbacks.TensorBoard(
-            log_dir=trial_log_dir, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
-        )
-
     #! ——————— WARNING: the callbacks below do not work with multi-objective —————— !#
     # Custom callback to prune trial if NaN loss is encountered
     # nan_pruner_callback = callbacks.TerminateOnNaN()
@@ -261,6 +255,9 @@ def get_callbacks_study(
     #! ———————————————————————————————————————————————————————————————————————————— !#
 
     if tensorboard_logs is not None:
+        trial_log_dir = os.path.join(tensorboard_logs, f"trial_{trial.number}")
+        tensorboard_cb = callbacks.TensorBoard(
+            log_dir=trial_log_dir, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
+        )
         return [early_stopping, reduce_lr, nan_loss_pruner_callback, pruning_callback, tensorboard_cb]
-    else:
-        return [early_stopping, reduce_lr, nan_loss_pruner_callback, pruning_callback]
+    return [early_stopping, reduce_lr, nan_loss_pruner_callback, pruning_callback]
