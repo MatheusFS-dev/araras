@@ -122,7 +122,7 @@ def white_track(iterable, *, description: str, total: int):
         and estimated remaining time.
     """
 
-    bar_fmt = "{percentage:3.0f}% {bar} {n_fmt}/{total_fmt} in {remaining}"
+    bar_fmt = "{percentage:3.0f}% [{bar}] {n_fmt}/{total_fmt} in {remaining}"
     with tqdm(
         iterable,
         total=total,
