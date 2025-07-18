@@ -192,7 +192,6 @@ def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
     logger_time.info(f"SUCCESS: {message}")
 
-logger_error.error("NELSON: This is an error message that should not be printed in the final output.")
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
@@ -232,9 +231,7 @@ def _prepare_monitored_script(source: Path, success_flag: str) -> Path:
 
     tmp_path = Path(tempfile.gettempdir()) / f"{source.stem}_monitored.py"
     try:
-        with open(source, "r", encoding="utf-8") as src, open(
-            tmp_path, "w", encoding="utf-8"
-        ) as dst:
+        with open(source, "r", encoding="utf-8") as src, open(tmp_path, "w", encoding="utf-8") as dst:
             dst.write(src.read())
             dst.write(
                 "\n\n# Write success flag for the auto restart script\n"
