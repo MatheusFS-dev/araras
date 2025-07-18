@@ -57,5 +57,14 @@ python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag \
     -m 5 -d 3 -f 3600
 ```
 
+To keep everything contained in your current tmux session use the
+``--tmux-split`` option. This spawns both the target process and crash
+monitor in new panes:
+
+```bash
+python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag \
+    --tmux-split --tmux-session mysession
+```
+
 Run with `--help` to see all available arguments.
 

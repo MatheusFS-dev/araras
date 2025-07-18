@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from .cleanup import ChildProcessCleanup
-from .terminal import SimpleTerminalLauncher
+from .terminal import SimpleTerminalLauncher, TmuxTerminalLauncher
 from araras.utils.misc import NotebookConverter
 from .email_manager import ConsolidatedEmailManager
 from .file_handler import FileTypeHandler
@@ -99,6 +99,8 @@ class FlagBasedRestartManager:
         title: Optional[str] = None,
         force_restart: Optional[float] = None,
         supress_tf_warnings: bool = False,
+        tmux_split: bool = False,
+        tmux_session: Optional[str] = None,
     ) -> None:
         """Run file with flag-based restart logic and consolidated email notifications.
 
@@ -110,6 +112,10 @@ class FlagBasedRestartManager:
                 restarted regardless of crashes. This does not count
                 toward ``max_restarts``.
             supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+        tmux_split: Launch the process and monitor inside tmux panes rather than
+            new terminal windows.
+        tmux_session: Name of the tmux session to split when ``tmux_split`` is
+            ``True``.
 
         Raises:
             FileNotFoundError: If file doesn't exist
@@ -176,7 +182,13 @@ class FlagBasedRestartManager:
                         self.monitor_info = None
 
                     # Launch process
-                    target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
+                    target_pid = self._launch_process(
+                        validated_path,
+                        working_dir,
+                        success_flag_file,
+                        tmux_split=tmux_split,
+                        tmux_session=tmux_session,
+                    )
                     _mon.print_process_status("\033[92mProcess started\033[0m", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
@@ -195,6 +207,8 @@ class FlagBasedRestartManager:
                         target_pid,
                         self.process_title,
                         supress_tf_warnings=supress_tf_warnings,
+                        tmux_split=tmux_split,
+                        tmux_session=tmux_session,
                     )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
@@ -307,24 +321,41 @@ class FlagBasedRestartManager:
 
         return False
 
-    def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
-        """Launch target process.
+    def _launch_process(
+        self,
+        file_path: Path,
+        working_dir: str,
+        success_flag_file: str,
+        tmux_split: bool = False,
+        tmux_session: Optional[str] = None,
+    ) -> int:
+        """Launch target process in a new terminal or tmux pane.
 
         Args:
-            file_path: Validated path to Python file
-            working_dir: Working directory
-            success_flag_file: Success flag file path
+            file_path: Validated path to Python file.
+            working_dir: Directory where the command should run.
+            success_flag_file: Path to the success flag file.
+            tmux_split: If ``True``, launch the process in a tmux split pane.
+            tmux_session: Optional tmux session name to target when ``tmux_split``
+                is ``True``.
 
         Returns:
-            Target process PID
+            PID of the launched target process.
 
         Raises:
-            OSError: If PID discovery fails
+            OSError: If the PID cannot be discovered.
         """
         # Build command for Python file
-        command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
+        command, execution_type = FileTypeHandler.build_execution_command(
+            file_path, success_flag_file
+        )
 
-        launcher = SimpleTerminalLauncher()
+        if tmux_split:
+            launcher = TmuxTerminalLauncher(
+                session_name=tmux_session, supress_tf_warnings=False
+            )
+        else:
+            launcher = SimpleTerminalLauncher()
         self.current_terminal_process = launcher.launch(command, working_dir)
 
         # Efficient PID discovery with timeout
@@ -480,6 +511,18 @@ class FlagBasedRestartManager:
                 self.current_terminal_process.terminate()
                 self.current_terminal_process.wait(timeout=2)
             except:
+                pass
+
+            try:
+                pane_id = getattr(self.current_terminal_process, "pane_id", None)
+                if pane_id:
+                    import libtmux
+
+                    server = libtmux.Server()
+                    pane = server.find_where({"pane_id": pane_id})
+                    if pane:
+                        pane.cmd("kill-pane", "-t", pane_id)
+            except Exception:
                 pass
 
             # Cleanup PID file if exists
