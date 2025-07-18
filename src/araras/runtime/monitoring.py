@@ -230,6 +230,7 @@ def _prepare_monitored_script(source: Path, success_flag: str) -> Path:
     """
 
     tmp_path = Path(tempfile.gettempdir()) / f"{source.stem}_monitored.py"
+    tmp_path = f"{source.stem}_monitored.py"
     try:
         with open(source, "r", encoding="utf-8") as src, open(
             tmp_path, "w", encoding="utf-8"
