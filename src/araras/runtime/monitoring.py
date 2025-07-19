@@ -513,6 +513,7 @@ def run_auto_restart(
                     )
                     manager.force_stop()
                     manager._cleanup_converted_file()
+                    manager._cleanup_monitored_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
                 print(f"\n{GREEN}Process done!{RESET}")
