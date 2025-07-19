@@ -1,6 +1,7 @@
 from araras.core import *
 
 import os
+import shutil
 import psutil
 import subprocess
 import time
@@ -35,6 +36,7 @@ class FlagBasedRestartManager:
         "credentials_file",
         "child_cleanup",
         "converted_python_file",
+        "monitored_file",
         "original_was_notebook",
         "start_time",
         "last_process_start_time",
@@ -74,6 +76,7 @@ class FlagBasedRestartManager:
 
         # File cleanup tracking
         self.converted_python_file: Optional[Path] = None
+        self.monitored_file: Optional[Path] = None
         self.original_was_notebook: bool = False
 
         # Email configuration with consolidated manager
@@ -100,18 +103,25 @@ class FlagBasedRestartManager:
         restart_after_delay: Optional[float] = None,
         supress_tf_warnings: bool = False,
     ) -> None:
-        """Run file with flag-based restart logic and consolidated email notifications.
+        """Execute a Python file with automatic restart logic.
+
+        The specified file (or a notebook converted to Python) is copied into
+        the same directory with the prefix ``temp_monitor_``. The copy appends a
+        short snippet that writes the configured success flag before exiting.
+        After the monitored run finishes, the temporary file is removed.
 
         Args:
-            file_path: Path to Python or Jupyter notebook file
-            success_flag_file: Path where target process writes completion flag
-            title: Custom title for monitoring
-            restart_after_delay: Optional delay after which the run will be restarted
-            supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+            file_path: Path to the Python or Jupyter notebook file to run.
+            success_flag_file: Location where the monitored file should write a
+                ``SUCCESS`` flag when it completes.
+            title: Optional custom title displayed in monitoring output.
+            restart_after_delay: Optional delay in seconds after which the run
+                should automatically restart.
+            supress_tf_warnings: Whether to suppress TensorFlow warnings.
 
         Raises:
-            FileNotFoundError: If file doesn't exist
-            ValueError: If file type is unsupported
+            FileNotFoundError: If ``file_path`` does not exist.
+            ValueError: If ``file_path`` has an unsupported extension.
         """
         self.start_time = time.time()
 
@@ -131,8 +141,15 @@ class FlagBasedRestartManager:
                 _mon.print_error_message("CONVERSION", f"Notebook conversion failed: {e}")
                 raise
 
+        # Determine working directory and process title before creating the
+        # temporary monitored copy so relative paths resolve correctly and the
+        # title reflects the original file name.
         working_dir = str(validated_path.parent)
         self.process_title = title or validated_path.stem
+
+        # Create monitored copy with success flag handling
+        self.monitored_file = self._create_monitored_copy(validated_path, success_flag_file)
+        validated_path = self.monitored_file
         flag_path = Path(success_flag_file).resolve()
 
         # Print configuration summary
@@ -265,6 +282,7 @@ class FlagBasedRestartManager:
             self.running = False
             self._cleanup_all()
             self._cleanup_converted_file()
+            self._cleanup_monitored_file()
             total_runtime = time.time() - self.start_time if self.start_time else None
             print_completion_summary(self.restart_count, total_runtime)
 
@@ -545,6 +563,62 @@ class FlagBasedRestartManager:
             finally:
                 self.converted_python_file = None
                 self.original_was_notebook = False
+
+    def _create_monitored_copy(self, file_path: Path, success_flag: str) -> Path:
+        """Create a temporary monitored copy of a Python file.
+
+        The copy is placed alongside ``file_path`` with the name
+        ``temp_monitor_<original>.py`` and includes a small code snippet that
+        writes the provided success flag when execution completes.
+
+        Args:
+            file_path: Source Python file to be monitored.
+            success_flag: Location where the success flag should be written.
+
+        Returns:
+            Path to the generated monitored file.
+
+        Raises:
+            OSError: If the file cannot be created or written.
+        """
+        monitored_name = f"temp_monitor_{file_path.name}"
+        monitored_path = file_path.parent / monitored_name
+
+        try:
+            content = file_path.read_text()
+            success_flag_path = Path(success_flag).resolve()
+            append_lines = (
+                "\n\n# Write success flag for the auto restart script\n"
+                "from pathlib import Path\n"
+                f"Path({repr(str(success_flag_path))}).write_text('SUCCESS')\n"
+            )
+            monitored_path.write_text(content + append_lines)
+        except Exception as e:
+            raise OSError(
+                f"Failed to create monitored file {monitored_path}: {e}"
+            )
+
+        return monitored_path
+
+    def _cleanup_monitored_file(self) -> None:
+        """Remove the temporary monitored script.
+
+        This method is safe to call multiple times. Any errors encountered
+        during deletion are reported but do not raise exceptions.
+        """
+        if self.monitored_file and self.monitored_file.exists():
+            try:
+                self.monitored_file.unlink()
+                _mon.print_process_status(
+                    f"Cleaned up monitored file: {self.monitored_file}"
+                )
+            except Exception as e:
+                _mon.print_warning_message(
+                    f"Failed to cleanup monitored file {self.monitored_file}: {e}"
+                )
+            finally:
+                self.monitored_file = None
+
 
     def _sleep(self, duration: float) -> None:
         """Interruptible sleep with minimal CPU usage.
