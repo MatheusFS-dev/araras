@@ -1,10 +1,10 @@
 from araras.core import *
 
 import os
+import shutil
 import psutil
 import subprocess
 import time
-import tempfile
 from pathlib import Path
 
 from .cleanup import ChildProcessCleanup
@@ -103,24 +103,25 @@ class FlagBasedRestartManager:
         restart_after_delay: Optional[float] = None,
         supress_tf_warnings: bool = False,
     ) -> None:
-        """Run file with automatic restart logic.
+        """Execute a Python file with automatic restart logic.
 
-        The target Python file (or converted notebook) is copied to the system
-        temporary directory with ``_monitored`` appended to its name. A small
-        code snippet that writes the success flag is appended to this copy. The
-        monitoring system executes this temporary file and cleans it up once the
-        run finishes.
+        The specified file (or a notebook converted to Python) is copied into
+        the same directory with the prefix ``temp_monitor_``. The copy appends a
+        short snippet that writes the configured success flag before exiting.
+        After the monitored run finishes, the temporary file is removed.
 
         Args:
-            file_path: Path to Python or Jupyter notebook file.
-            success_flag_file: Path where the success flag should be written.
-            title: Custom title for monitoring.
-            restart_after_delay: Optional delay after which the run will be restarted.
-            supress_tf_warnings: Suppress TensorFlow warnings (default: False).
+            file_path: Path to the Python or Jupyter notebook file to run.
+            success_flag_file: Location where the monitored file should write a
+                ``SUCCESS`` flag when it completes.
+            title: Optional custom title displayed in monitoring output.
+            restart_after_delay: Optional delay in seconds after which the run
+                should automatically restart.
+            supress_tf_warnings: Whether to suppress TensorFlow warnings.
 
         Raises:
             FileNotFoundError: If ``file_path`` does not exist.
-            ValueError: If the file type is unsupported.
+            ValueError: If ``file_path`` has an unsupported extension.
         """
         self.start_time = time.time()
 
@@ -566,24 +567,22 @@ class FlagBasedRestartManager:
     def _create_monitored_copy(self, file_path: Path, success_flag: str) -> Path:
         """Create a temporary monitored copy of a Python file.
 
-        The copy is stored in the system temporary directory and has
-        ``_monitored`` appended to the original file name. At the end of the
-        copy, code is inserted to write the provided success flag when the
-        script finishes executing.
+        The copy is placed alongside ``file_path`` with the name
+        ``temp_monitor_<original>.py`` and includes a small code snippet that
+        writes the provided success flag when execution completes.
 
         Args:
-            file_path: Source Python file.
-            success_flag: Path to the success flag file that will be written.
+            file_path: Source Python file to be monitored.
+            success_flag: Location where the success flag should be written.
 
         Returns:
             Path to the generated monitored file.
 
         Raises:
-            OSError: If creating or writing the file fails.
+            OSError: If the file cannot be created or written.
         """
-        tmpdir = Path(tempfile.gettempdir())
-        monitored_name = f"{file_path.stem}_monitored{file_path.suffix}"
-        monitored_path = tmpdir / monitored_name
+        monitored_name = f"temp_monitor_{file_path.name}"
+        monitored_path = file_path.parent / monitored_name
 
         try:
             content = file_path.read_text()
@@ -600,21 +599,19 @@ class FlagBasedRestartManager:
         return monitored_path
 
     def _cleanup_monitored_file(self) -> None:
-        """Delete the temporary monitored file if it exists."""
-        if self.monitored_file:
+        """Remove the temporary monitored script.
+
+        This method is safe to call multiple times. Any errors encountered
+        during deletion are reported but do not raise exceptions.
+        """
+        if self.monitored_file and self.monitored_file.exists():
             try:
-                if self.monitored_file.exists():
-                    self.monitored_file.unlink()
-                    _mon.print_process_status(
-                        f"Cleaned up monitored file: {self.monitored_file}"
-                    )
+                self.monitored_file.unlink()
+                _mon.print_process_status(f"Cleaned up monitored file: {self.monitored_file}")
             except Exception as e:
-                _mon.print_warning_message(
-                    f"Failed to cleanup monitored file {self.monitored_file}: {e}"
-                )
+                _mon.print_warning_message(f"Failed to cleanup monitored file {self.monitored_file}: {e}")
             finally:
                 self.monitored_file = None
-
 
     def _sleep(self, duration: float) -> None:
         """Interruptible sleep with minimal CPU usage.

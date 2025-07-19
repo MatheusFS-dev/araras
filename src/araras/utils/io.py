@@ -1,6 +1,10 @@
 from araras.core import *
 
 import os
+import ipynbname
+import inspect
+import sys
+from pathlib import Path
 
 
 def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
@@ -9,13 +13,6 @@ def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
 
     The directory name is generated using the given prefix followed by the next available number.
     For example, if directories "run1", "run2", and "run3" exist, calling with prefix="run" will create "run4".
-
-    Logic:
-        -> Ensure base_dir exists
-        -> List existing directories with matching prefix and numeric suffix
-        -> Parse suffix numbers and find the next available integer
-        -> Construct full path using prefix + next number
-        -> Create the new run directory and return its path
 
     Args:
         prefix (str): Prefix to be used in the name of each run directory (e.g., "run").
@@ -49,3 +46,51 @@ def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
 
     # Return the full path to the created directory
     return run_dir
+
+
+def get_caller_stem():
+    """
+    Attempts to determine the stem name of the script or notebook that called this function.
+    
+    Args:
+        None
+        
+    Returns:
+        str: The stem name of the calling script or notebook.
+    
+    Raises:
+        RuntimeError: If the stem name cannot be determined.
+
+    """
+    # inspect the caller’s globals
+    caller_globals = inspect.currentframe().f_back.f_globals
+
+    # 1. VS Code notebook: __vsc_ipynb_file__ is set automatically
+    vsc_path = caller_globals.get("__vsc_ipynb_file__")
+    if vsc_path:
+        return Path(vsc_path).stem
+
+    # 2. Normal .py script: __file__ is defined
+    file_path = caller_globals.get("__file__")
+    if file_path:
+        return Path(file_path).stem
+
+    # 3. (Optional) pure notebook via ipynbname, if you have it installed
+    try:
+        ipynbname_stem = Path(ipynbname.path()).stem
+        if ipynbname_stem:
+            return ipynbname_stem
+    except Exception:
+        pass
+
+    # 4. Fallback to sys.argv[0], skipping the ipykernel launcher stub
+    name = Path(sys.argv[0] or "").stem
+    if name and "ipykernel_launcher" not in name:
+        return name
+    
+    # If all else fails, raise an error
+    raise RuntimeError(
+        "Could not determine the caller's stem name."
+    )
+
+    
