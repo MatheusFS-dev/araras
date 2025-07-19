@@ -47,4 +47,4 @@ where = ["src"]
 include = ["araras*"]
 
 [project.scripts]
-monitor = "araras.runtime.monitoring:main"
+monitor = "araras.runtime._monitor_script:main"

@@ -7,7 +7,6 @@ import json
 import glob
 import psutil
 import tempfile
-import argparse
 from pathlib import Path
 
 from threading import Event, Thread
@@ -124,7 +123,7 @@ def print_monitoring_config_summary(
     max_restarts: int,
     email_enabled: bool,
     title: str,
-    force_restart: Optional[float] = None,
+    restart_after_delay: Optional[float] = None,
 ) -> None:
     """Print a summary of monitoring configuration only once."""
     global ONCE_PRINT
@@ -145,8 +144,8 @@ def print_monitoring_config_summary(
     else:
         print(f"Email Alerts: {RED}Disabled{RESET}")
     print(f"Max Restarts: {max_restarts}")
-    if force_restart is not None:
-        print(f"Run will force restart after: {force_restart} seconds")
+    if restart_after_delay is not None:
+        print(f"Run will force restart after: {restart_after_delay} seconds")
     print("=" * 70)
     print()
 
@@ -208,40 +207,6 @@ def _cleanup_stale_monitor_files():
             os.unlink(path)
         except OSError:
             pass
-
-
-def _prepare_monitored_script(source: Path, success_flag: str) -> Path:
-    """Create a temporary copy of ``source`` that writes ``success_flag`` on exit.
-
-    A copy of the provided Python script is saved to the system temporary
-    directory. A small snippet appending a success flag write operation is added
-    to the end of this copy. The resulting path should be executed in place of
-    the original so that successful completion is automatically signalled.
-
-    Args:
-        source: Path to the original Python script.
-        success_flag: File path that will store the success marker.
-
-    Returns:
-        Path to the newly created temporary script.
-
-    Raises:
-        OSError: If the temporary file cannot be written.
-    """
-
-    tmp_path = Path(tempfile.gettempdir()) / f"{source.stem}_monitored.py"
-    try:
-        with open(source, "r", encoding="utf-8") as src, open(tmp_path, "w", encoding="utf-8") as dst:
-            dst.write(src.read())
-            dst.write(
-                "\n\n# Write success flag for the auto restart script\n"
-                "from pathlib import Path\n"
-                f"Path({repr(str(Path(success_flag).resolve()))}).write_text('SUCCESS')\n"
-            )
-    except OSError:
-        raise
-
-    return tmp_path
 
 
 def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
@@ -453,16 +418,7 @@ def run_auto_restart(
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
 ) -> None:
-    """Run a file with automatic restarts and optional email notifications.
-
-    This helper converts notebooks to Python when necessary and wraps
-    ``FlagBasedRestartManager`` to provide a simple entry point for
-    automated monitoring.
-
-    Note:
-        The target file is copied to ``/tmp`` and a small snippet that writes
-        ``success_flag_file`` is appended. The temporary copy is executed and
-        cleaned up automatically.
+    """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
     Args:
         file_path: Path to .py or .ipynb file to execute
@@ -472,9 +428,7 @@ def run_auto_restart(
         restart_delay: Delay between restarts in seconds
         recipients_file: Path to recipients JSON file (defaults to ./json/recipients.json)
         credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
-        force_restart: Restart the run after this many seconds, even if the
-            process did not crash. This does not count towards
-            ``max_restarts``.
+        force_restart: restart the run after a delay in seconds
         retry_attempts: Number of retry attempts before sending failure email
         supress_tf_warnings: Suppress TensorFlow warnings (default: False)
         resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
@@ -491,18 +445,9 @@ def run_auto_restart(
     try:
         # late import to avoid circular dependencies
         from .restart_manager import FlagBasedRestartManager
-        from araras.utils.misc import NotebookConverter
 
         # Clean up any existing success flag file before starting
         Path(success_flag_file).unlink(missing_ok=True)
-
-        original_path = Path(file_path).resolve()
-        converted_file: Optional[Path] = None
-        if original_path.suffix == ".ipynb":
-            converted_file = NotebookConverter.convert_notebook_to_python(original_path)
-            original_path = converted_file
-
-        patched_script = _prepare_monitored_script(original_path, success_flag_file)
 
         manager = FlagBasedRestartManager(
             max_restarts=max_restarts,
@@ -529,10 +474,10 @@ def run_auto_restart(
                         def run_and_flag():
                             try:
                                 manager.run_file_with_restart(
-                                    file_path=str(patched_script),
+                                    file_path=file_path,
                                     success_flag_file=success_flag_file,
                                     title=title,
-                                    force_restart=force_restart,
+                                    restart_after_delay=force_restart,
                                     supress_tf_warnings=supress_tf_warnings,
                                 )
                                 finished[0] = True
@@ -557,7 +502,7 @@ def run_auto_restart(
                                 stop_event.set()
                             else:
                                 print_process_status(
-                                    "Process ended before force_restart delay, restarting..."
+                                    "Process ended before restart_after_delay, restarting..."
                                 )
                 except KeyboardInterrupt:
                     # Handle CTRL+C in the restart loop
@@ -577,10 +522,9 @@ def run_auto_restart(
         else:
             # Regular auto-restart logic
             manager.run_file_with_restart(
-                file_path=str(patched_script),
+                file_path=file_path,
                 success_flag_file=success_flag_file,
                 title=title,
-                force_restart=force_restart,
                 supress_tf_warnings=supress_tf_warnings,
             )
 
@@ -592,148 +536,3 @@ def run_auto_restart(
     except Exception as e:
         print_error_message("FATAL", str(e))
         raise
-    finally:
-        # Cleanup temporary files
-        try:
-            if patched_script and Path(patched_script).exists():
-                Path(patched_script).unlink()
-        except Exception:
-            pass
-        try:
-            if converted_file and converted_file.exists():
-                converted_file.unlink()
-        except Exception:
-            pass
-
-
-def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
-    """Parse command line arguments for the monitoring CLI.
-
-    This helper assembles the ``argparse`` parser used by the CLI
-    entry point. Most options provide both short and long forms for
-    convenience.
-
-    Args:
-        argv: Optional list of arguments to parse instead of ``sys.argv``.
-
-    Returns:
-        Parsed CLI arguments.
-    """
-
-    parser = argparse.ArgumentParser(
-        description="Run a Python script or notebook with automatic restarts",
-    )
-
-    parser.add_argument(
-        "file_path",
-        help="Path to the .py or .ipynb file to execute",
-    )
-    parser.add_argument(
-        "-s",
-        "--success-flag-file",
-        default="/tmp/success.flag",
-        help="Path where the executed script writes a completion flag",
-    )
-    parser.add_argument(
-        "-t",
-        "--title",
-        default=None,
-        help="Custom title for monitoring and email alerts",
-    )
-    parser.add_argument(
-        "-m",
-        "--max-restarts",
-        type=int,
-        default=10,
-        help="Maximum number of restart attempts",
-    )
-    parser.add_argument(
-        "-d",
-        "--restart-delay",
-        type=float,
-        default=3.0,
-        help="Delay between restarts in seconds",
-    )
-    parser.add_argument(
-        "-r",
-        "--recipients-file",
-        default=None,
-        help="Path to JSON file containing email recipients",
-    )
-    parser.add_argument(
-        "-c",
-        "--credentials-file",
-        default=None,
-        help="Path to JSON file with email credentials",
-    )
-    parser.add_argument(
-        "-f",
-        "--force-restart",
-        type=float,
-        default=None,
-        help="Force a restart after this many seconds regardless of status",
-    )
-    parser.add_argument(
-        "-a",
-        "--retry-attempts",
-        type=int,
-        default=None,
-        help="Number of retry attempts before a failure email is sent",
-    )
-    parser.add_argument(
-        "-w",
-        "--supress-tf-warnings",
-        action="store_true",
-        help="Suppress TensorFlow warnings",
-    )
-    parser.add_argument(
-        "-u",
-        "--resource-usage-log-file",
-        default=None,
-        help="File to log process resource usage statistics",
-    )
-
-    return parser.parse_args(argv)
-
-
-def main(argv: Optional[List[str]] = None) -> None:
-    """Entry point for the ``monitor`` command.
-
-    This wrapper parses command line flags and forwards them to
-    :func:`run_auto_restart`. It is exposed as ``monitor`` via the
-    package's ``pyproject.toml`` entry point and can also be invoked with
-    ``python -m araras.runtime.monitoring``.
-
-    Note:
-        Execute this command from the **same directory** as the script or
-        notebook being monitored so that relative paths resolve correctly.
-
-    Args:
-        argv: Optional list of arguments to parse instead of ``sys.argv``.
-
-    Returns:
-        ``None``
-
-    Raises:
-        SystemExit: If invalid options are supplied and argument parsing
-        fails.
-    """
-
-    args = _parse_args(argv)
-    run_auto_restart(
-        file_path=args.file_path,
-        success_flag_file=args.success_flag_file,
-        title=args.title,
-        max_restarts=args.max_restarts,
-        restart_delay=args.restart_delay,
-        recipients_file=args.recipients_file,
-        credentials_file=args.credentials_file,
-        force_restart=args.force_restart,
-        retry_attempts=args.retry_attempts,
-        supress_tf_warnings=args.supress_tf_warnings,
-        resource_usage_log_file=args.resource_usage_log_file,
-    )
-
-
-if __name__ == "__main__":  # pragma: no cover - CLI execution
-    main()
