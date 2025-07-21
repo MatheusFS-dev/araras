@@ -1,6 +1,7 @@
 from araras.core import *
 
 import time
+import warnings
 import tensorflow as tf
 import psutil
 
@@ -103,6 +104,11 @@ def get_memory_and_time(
     report zero memory, the function returns ``0`` for the peak usage and emits a
     warning in red.
 
+    Notes:
+        The Keras Functional API may emit a ``UserWarning`` when the provided
+        input structure does not exactly match the model's expected structure.
+        This function suppresses that warning to keep console output tidy.
+
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
@@ -124,7 +130,13 @@ def get_memory_and_time(
 
     @tf.function
     def infer(*args):
-        return model(list(args), training=False)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="The structure of `inputs`",
+                category=UserWarning,
+            )
+            return model(list(args), training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
@@ -236,6 +248,12 @@ def get_model_usage_stats(
     Also, you MUST run this on a linux system with Intel CPUs!!!!!
     And run the python script with SUDO to access RAPL files.
 
+    Notes:
+        When a ``tf.keras.Model`` is provided, Keras may issue a ``UserWarning``
+        about mismatched input structure if the dummy inputs do not precisely
+        reflect the model's expected format. The warning is suppressed within
+        this function.
+
     Args:
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
             a .keras model file, or a Keras Model instance.
@@ -304,7 +322,13 @@ def get_model_usage_stats(
         dummy_inputs = tensors[0] if len(tensors) == 1 else tensors
 
         def infer():
-            return keras_model(dummy_inputs, training=False)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The structure of `inputs`",
+                    category=UserWarning,
+                )
+                return keras_model(dummy_inputs, training=False)
 
     else:
         # Load the SavedModel and obtain the serving_default signature for inference
@@ -319,7 +343,13 @@ def get_model_usage_stats(
         dummy_inputs = inputs
 
         def infer():
-            return signature(**dummy_inputs)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The structure of `inputs`",
+                    category=UserWarning,
+                )
+                return signature(**dummy_inputs)
 
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
