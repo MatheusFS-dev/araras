@@ -48,49 +48,50 @@ def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
     return run_dir
 
 
-def get_caller_stem():
+def get_caller_stem(remove: Optional[str] = "temp_monitor_") -> str:
     """
-    Attempts to determine the stem name of the script or notebook that called this function.
-    
+    Attempts to determine the stem name of the script or notebook that called this function,
+    optionally removing a specified substring from the result.
+
     Args:
-        None
-        
+        remove (Optional[str]): A substring to remove from the detected stem. If None, no removal is done.
+
     Returns:
-        str: The stem name of the calling script or notebook.
-    
+        str: The (possibly cleaned) stem name of the calling script or notebook.
+
     Raises:
         RuntimeError: If the stem name cannot be determined.
-
     """
+
+    def clean(stem: str) -> str:
+        """Helper to strip out the `remove` substring if requested."""
+        return stem.replace(remove, "") if remove else stem
+
     # inspect the caller’s globals
     caller_globals = inspect.currentframe().f_back.f_globals
 
-    # 1. VS Code notebook: __vsc_ipynb_file__ is set automatically
+    # 1. VS Code notebook: __vsc_ipynb_file__ is set automatically
     vsc_path = caller_globals.get("__vsc_ipynb_file__")
     if vsc_path:
-        return Path(vsc_path).stem
+        return clean(Path(vsc_path).stem)
 
     # 2. Normal .py script: __file__ is defined
     file_path = caller_globals.get("__file__")
     if file_path:
-        return Path(file_path).stem
+        return clean(Path(file_path).stem)
 
-    # 3. (Optional) pure notebook via ipynbname, if you have it installed
+    # 3. (Optional) pure notebook via ipynbname, if installed
     try:
         ipynbname_stem = Path(ipynbname.path()).stem
         if ipynbname_stem:
-            return ipynbname_stem
+            return clean(ipynbname_stem)
     except Exception:
         pass
 
-    # 4. Fallback to sys.argv[0], skipping the ipykernel launcher stub
+    # 4. Fallback to sys.argv[0], skipping ipykernel launcher stub
     name = Path(sys.argv[0] or "").stem
     if name and "ipykernel_launcher" not in name:
-        return name
-    
-    # If all else fails, raise an error
-    raise RuntimeError(
-        "Could not determine the caller's stem name."
-    )
+        return clean(name)
 
-    
+    # If all else fails, raise an error
+    raise RuntimeError("Could not determine the caller's stem name.")
