@@ -105,19 +105,26 @@ class FlagBasedRestartManager:
     ) -> None:
         """Execute a Python file with automatic restart logic.
 
-        The provided file is copied into the same directory with the prefix
-        ``temp_monitor_``.  When a notebook is supplied it is converted and the
-        monitoring snippet appended in a single step.  After the monitored run
-        finishes, the temporary file is removed.
+        The target file is copied or converted into a monitored version and
+        executed. Restarts occur automatically when the process crashes or
+        fails to create the expected success flag until the maximum restart
+        count is reached. Temporary files created during monitoring are removed
+        after execution completes.
 
         Args:
-            file_path: Path to the Python or Jupyter notebook file to run.
-            success_flag_file: Location where the monitored file should write a
-                ``SUCCESS`` flag when it completes.
-            title: Optional custom title displayed in monitoring output.
-            restart_after_delay: Optional delay in seconds after which the run
-                should automatically restart.
-            supress_tf_warnings: Whether to suppress TensorFlow warnings.
+            file_path: Path to the Python script or Jupyter notebook to run.
+            success_flag_file: Path where the monitored file writes the
+                ``SUCCESS`` flag upon completion.
+            title: Optional custom title displayed in status messages. If not
+                provided, the original file name is used for display purposes.
+            restart_after_delay: Optional delay in seconds that forces a restart
+                even if the process is still running.
+            supress_tf_warnings: When ``True``, TensorFlow warnings are
+                suppressed in the child process.
+
+        Notes:
+            Only the information printed to the user changes; the monitored
+            process itself continues to run using the converted or copied file.
 
         Raises:
             FileNotFoundError: If ``file_path`` does not exist.
@@ -128,6 +135,8 @@ class FlagBasedRestartManager:
         # Validate file with early exit pattern for performance
         validated_path = FileTypeHandler.validate_file(file_path)
         file_type = FileTypeHandler.get_file_type(validated_path)
+
+        original_path = validated_path
 
         if file_type == "notebook":
             try:
@@ -148,14 +157,16 @@ class FlagBasedRestartManager:
         self.process_title = title or validated_path.stem
         flag_path = Path(success_flag_file).resolve()
 
+        display_title = title or original_path.stem
+
         # Print configuration summary
         _mon.print_monitoring_config_summary(
-            file_path=str(validated_path),
+            file_path=str(original_path),
             file_type=file_type,
             success_flag_file=str(flag_path),
             max_restarts=self.max_restarts,
             email_enabled=self.email_manager.email_enabled,
-            title=self.process_title,
+            title=display_title,
             restart_after_delay=restart_after_delay,
         )
 
