@@ -4,6 +4,7 @@ import psutil
 import subprocess
 from datetime import datetime
 from threading import Thread
+from typing import Optional
 
 import tensorflow as tf
 
@@ -275,7 +276,7 @@ def gpu_summary() -> None:
     print("|  No running processes found                                                 |")
     print("+" + "-" * 88 + "+")
 
-def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
+def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **kwargs) -> None:
     """Periodically record selected system metrics to CSV files.
 
     This helper spawns background threads that poll system resources using
@@ -287,8 +288,10 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
     Args:
         log_dir: Directory where log files will be written.
         interval: Seconds between two consecutive samplings.
+        pid: Process ID whose CPU usage should also be logged. Defaults to the
+            current process ID.
         **kwargs: Flags indicating which resources should be logged. Supported
-            flags are ``"cpu"``, ``"ram"``, ``"gpu"``, ``"cuda"``, and
+            flags are ``"cpu"``, ``"ram"``, ``"gpu"``, ``"cuda"`` and
             ``"tensorflow"``.
 
     Returns:
@@ -298,38 +301,51 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
         None
 
     Example:
-        log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)
+        log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)
 
     Note:
         Ensure that ``log_dir`` has sufficient disk space available since the
-        files are appended indefinitely.
+        files are appended indefinitely.  CPU usage logged for ``pid`` represents
+        the sum across all CPU cores and may exceed ``100``.
     """
     # Ensure the logging directory exists
     os.makedirs(log_dir, exist_ok=True)
 
     def log_cpu():
-        """Logs total and per-core CPU usage to a CSV file."""
+        """Log system and process CPU usage to a CSV file.
+
+        Notes:
+            The process CPU utilisation is aggregated across all cores and can
+            therefore be greater than ``100`` on multi-core systems.
+        """
         log_path = os.path.join(log_dir, "cpu_usage_log.csv")
+        proc = psutil.Process(pid or os.getpid())
+        proc.cpu_percent()
         with open(log_path, "w") as f:
-            f.write("Timestamp,CPU_Usage(%),Per-Core_Usage(%)\n")
+            f.write(
+                "Timestamp,System_CPU_Usage(%),Process_CPU_Usage(%),Per-Core_Usage(%)\n"
+            )
             while True:
                 try:
-                    # Get timestamp and CPU usage
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
-                    cpu_usage = psutil.cpu_percent()
+                    system_cpu = psutil.cpu_percent()
+                    process_cpu = proc.cpu_percent()
                     per_core_usage = psutil.cpu_percent(percpu=True)
-
-                    # Write CPU usage stats to file
-                    f.write(f"{timestamp},{cpu_usage},{','.join(map(str, per_core_usage))}\n")
+                    f.write(
+                        f"{timestamp},{system_cpu},{process_cpu},{','.join(map(str, per_core_usage))}\n"
+                    )
                     f.flush()
                     time.sleep(interval)
                 except Exception as e:
-                    # Write error and stop logging on failure
                     f.write(f"Error: {e}\n")
                     break
 
     def log_ram():
-        """Logs RAM usage (total, used, free) to a CSV file."""
+        """Log total, used and free system RAM to a CSV file.
+
+        Warning:
+            The output file grows without bound while the logger is running.
+        """
         log_path = os.path.join(log_dir, "ram_usage_log.csv")
         with open(log_path, "w") as f:
             f.write("Timestamp,Total(MB),Used(MB),Free(MB)\n")
@@ -351,11 +367,15 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
                     break
 
     def log_gpu():
-        """Record GPU memory, utilization and temperature statistics.
+        """Record GPU memory, utilisation and temperature statistics.
 
         Notes:
             This function relies on the ``nvidia-smi`` CLI tool being
             available in the system ``PATH``.
+
+        Warning:
+            The log file increases in size continuously while this thread is
+            running.
 
         Returns:
             None
@@ -395,7 +415,11 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
                     break
 
     def log_cuda():
-        """Logs CUDA memory usage by compute applications."""
+        """Log CUDA memory usage by compute applications.
+
+        Warning:
+            The output file grows over time as new entries are appended.
+        """
         log_path = os.path.join(log_dir, "cuda_usage_log.csv")
         with open(log_path, "w") as f:
             f.write("Timestamp,Process_Memory_Used(MB)\n")
@@ -421,7 +445,11 @@ def log_resources(log_dir: str, interval: int = 5, **kwargs) -> None:
                     break
 
     def log_tensorflow():
-        """Logs TensorFlow GPU memory usage."""
+        """Log TensorFlow GPU memory usage to a CSV file.
+
+        Warning:
+            Continuous logging may produce very large files over time.
+        """
         log_path = os.path.join(log_dir, "tensorflow_usage_log.csv")
         os.makedirs(log_dir, exist_ok=True)
         with open(log_path, "w") as f:

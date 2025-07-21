@@ -1835,19 +1835,21 @@ This function does not accept any arguments.
 log_resources(
     log_dir,
     interval,
+    pid=None,
 )
 ```
-Logs selected system and ML resources (CPU, RAM, GPU with temperatures, CUDA, TensorFlow) at regular time intervals.
+Logs selected system and ML resources (CPU, RAM, GPU with temperatures, CUDA, TensorFlow) at regular time intervals. If ``pid`` is provided, CPU usage for that process is also logged.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
 | log_dir | `str` | Directory where log files will be stored. |
 | interval | `int` | Time interval between consecutive logs in seconds. Defaults to 5. |
+| pid | `int \| None` | Process ID to monitor CPU usage for. Defaults to the current process. |
 | kwargs | `bool` flags | Set a flag to ``True`` to log a given resource. Supported flags: "cpu", "ram", "gpu", "cuda", "tensorflow". |
 
 **Returns**
-` None Example: log_resources("logs", interval=10, cpu=True, ram=True, gpu=True)`
+` None Example: log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)`
 
 **Raises**
 - None
