@@ -790,6 +790,8 @@ Constructs conditional skip connections between layers based on Optuna trial cho
 get_callbacks_model(
     backup_dir,
     tensorboard_logs,
+    early_stopping_patience,
+    reduce_lr_patience,
 )
 ```
 Constructs and returns a list of Keras callbacks for model training.
@@ -803,6 +805,8 @@ Constructs and returns a list of Keras callbacks for model training.
 |------|------|-------------|
 | backup_dir | `str` | Directory where the backup files will be stored. |
 | tensorboard_logs | `str` | Directory where TensorBoard logs will be stored. |
+| early_stopping_patience | `int, optional` | Epochs to wait before stopping training. Set to `None` to disable `EarlyStopping`. |
+| reduce_lr_patience | `int, optional` | Epochs to wait before reducing the learning rate. Set to `None` to disable `ReduceLROnPlateau`. |
 
 **Returns**
 ` List[tf.keras.callbacks.Callback]: A list of callbacks to pass into `model.fit()`.`
@@ -1188,6 +1192,9 @@ get_callbacks_study(
     trial,
     tensorboard_logs,
     monitor,
+    early_stopping_patience,
+    reduce_lr_patience,
+    pruning_interval,
 )
 ```
 Constructs and returns a list of Keras callbacks tailored for Optuna trials.
@@ -1202,6 +1209,9 @@ Constructs and returns a list of Keras callbacks tailored for Optuna trials.
 | trial | `optuna.Trial` | The current Optuna trial object. |
 | tensorboard_logs | `str` | Directory where TensorBoard logs will be stored. |
 | monitor | `str` | The metric to monitor for early stopping and learning rate reduction. |
+| early_stopping_patience | `int, optional` | Epochs to wait before stopping training. Set to `None` to disable `EarlyStopping`. |
+| reduce_lr_patience | `int, optional` | Epochs to wait before reducing the learning rate. Set to `None` to disable `ReduceLROnPlateau`. |
+| pruning_interval | `int, optional` | Frequency in epochs to check metric improvement for pruning. Set to `None` to disable pruning. |
 
 **Returns**
 ` List[tf.keras.callbacks.Callback]: A list of callbacks to pass into `model.fit()`.`

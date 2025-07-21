@@ -209,41 +209,70 @@ class NanLossPrunerOptuna(callbacks.Callback):
 
 
 def get_callbacks_study(
-    trial: optuna.Trial, tensorboard_logs: str = None, monitor: str = "val_loss", 
+    trial: optuna.Trial,
+    tensorboard_logs: str | None = None,
+    monitor: str = "val_loss",
+    early_stopping_patience: int | None = 5,
+    reduce_lr_patience: int | None = 2,
+    pruning_interval: int | None = 3,
 ) -> List[tf.keras.callbacks.Callback]:
-    """
-    Constructs and returns a list of Keras callbacks tailored for Optuna trials.
+    """Return Optuna-specific training callbacks.
+
+    This helper generates a list of callbacks tailored for Optuna trials. In
+    addition to common Keras callbacks, it adds pruning utilities that work with
+    :mod:`optuna`. ``EarlyStopping`` and ``ReduceLROnPlateau`` are optional and
+    can be disabled by passing ``None`` for their patience values. The interval
+    at which the :class:`KerasPruningCallback` evaluates the monitored metric can
+    also be customised or disabled entirely.
 
     Warning:
-        TensorBoard callback can cause high memory usage!
-        The 'write_graph' option in TensorBoard callback is set to False. It causes absurdly high memory usage,
-        especially with large models.
+        TensorBoard callback can cause high memory usage. The ``write_graph``
+        option is set to ``False`` because enabling it drastically increases
+        memory consumption.
 
     Args:
-        trial (optuna.Trial): The current Optuna trial object.
-        tensorboard_logs (str): Directory where TensorBoard logs will be stored.
-        monitor (str): The metric to monitor for early stopping and learning rate reduction.
+        trial: The current Optuna trial object.
+        tensorboard_logs: Directory where TensorBoard logs will be stored. If
+            ``None``, the TensorBoard callback is omitted.
+        monitor: The metric to monitor for early stopping and learning rate
+            reduction.
+        early_stopping_patience: Number of epochs with no improvement after
+            which training will be stopped. Set to ``None`` to disable the
+            ``EarlyStopping`` callback. Defaults to ``5``.
+        reduce_lr_patience: Number of epochs with no improvement before the
+            learning rate is reduced. Set to ``None`` to disable the
+            ``ReduceLROnPlateau`` callback. Defaults to ``2``.
+        pruning_interval: Frequency (in epochs) at which the
+            ``KerasPruningCallback`` checks the monitored metric. Set to ``None``
+            to disable pruning. Defaults to ``3``.
 
     Returns:
-        List[tf.keras.callbacks.Callback]: A list of callbacks to pass into `model.fit()`.
+        A list of callbacks to pass into ``model.fit``.
+
+    Raises:
+        None.
     """
 
-    # Stop training early if no improvement in validation loss for N epochs
-    early_stopping = callbacks.EarlyStopping(
-        monitor=monitor,
-        patience=5,
-        restore_best_weights=True,
-        verbose=0,
-    )
+    callbacks_list: List[tf.keras.callbacks.Callback] = []
 
-    # Reduce learning rate if validation loss plateaus
-    reduce_lr = callbacks.ReduceLROnPlateau(
-        monitor=monitor,
-        patience=2,
-        factor=0.2,  # reduce LR by this factor
-        min_lr=1e-10,  # don't reduce below this
-        verbose=0,
-    )
+    if early_stopping_patience is not None:
+        early_stopping = callbacks.EarlyStopping(
+            monitor=monitor,
+            patience=early_stopping_patience,
+            restore_best_weights=True,
+            verbose=0,
+        )
+        callbacks_list.append(early_stopping)
+
+    if reduce_lr_patience is not None:
+        reduce_lr = callbacks.ReduceLROnPlateau(
+            monitor=monitor,
+            patience=reduce_lr_patience,
+            factor=0.2,
+            min_lr=1e-10,
+            verbose=0,
+        )
+        callbacks_list.append(reduce_lr)
 
     #! ——————— WARNING: the callbacks below do not work with multi-objective —————— !#
     # Custom callback to prune trial if NaN loss is encountered
@@ -251,13 +280,26 @@ def get_callbacks_study(
     nan_loss_pruner_callback = NanLossPrunerOptuna(trial=trial)
 
     # Optuna's built-in pruning callback for early trial termination
-    pruning_callback = KerasPruningCallback(trial, monitor, interval=3)
+    pruning_callback: Optional[callbacks.Callback] = None
+    if pruning_interval is not None:
+        pruning_callback = KerasPruningCallback(
+            trial, monitor, interval=pruning_interval
+        )
     #! ———————————————————————————————————————————————————————————————————————————— !#
+
+    callbacks_list.append(nan_loss_pruner_callback)
+    if pruning_callback is not None:
+        callbacks_list.append(pruning_callback)
 
     if tensorboard_logs is not None:
         trial_log_dir = os.path.join(tensorboard_logs, f"trial_{trial.number}")
         tensorboard_cb = callbacks.TensorBoard(
-            log_dir=trial_log_dir, histogram_freq=1, write_graph=False, write_images=True, update_freq="epoch"
+            log_dir=trial_log_dir,
+            histogram_freq=1,
+            write_graph=False,
+            write_images=True,
+            update_freq="epoch",
         )
-        return [early_stopping, reduce_lr, nan_loss_pruner_callback, pruning_callback, tensorboard_cb]
-    return [early_stopping, reduce_lr, nan_loss_pruner_callback, pruning_callback]
+        callbacks_list.append(tensorboard_cb)
+
+    return callbacks_list
