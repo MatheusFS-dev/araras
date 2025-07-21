@@ -124,7 +124,7 @@ def get_memory_and_time(
 
     @tf.function
     def infer(*args):
-        return model(*args, training=False)
+        return model(list(args), training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
@@ -259,7 +259,6 @@ def get_model_usage_stats(
             - avg_energy (float): Average energy consumed per inference in joules. This
               will also be ``0`` if ``avg_power`` could not be measured correctly.
     """
-
     # Decide how we will run inference
     is_keras_model = False
     keras_model: Optional[tf.keras.Model] = None
@@ -442,8 +441,12 @@ def write_model_stats_to_file(
         file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
         file.write(f"Peak memory usage: {format_bytes(model_stats['peak_memory_usage'])}\n")
         file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
-        file.write(f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n")
-        file.write(f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n")
+        file.write(
+            f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n"
+        )
+        file.write(
+            f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n"
+        )
 
         # Write extra attributes
         for attr, value in extra_attrs.items():
