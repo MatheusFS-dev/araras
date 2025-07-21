@@ -125,7 +125,24 @@ def print_monitoring_config_summary(
     title: str,
     restart_after_delay: Optional[float] = None,
 ) -> None:
-    """Print a summary of monitoring configuration only once."""
+    """Print a summary of monitoring configuration only once.
+
+    This function outputs a one-time overview of the monitoring setup for a
+    target file. Subsequent calls are ignored to avoid repeated messages.
+
+    Args:
+        file_path: Path of the file displayed in the summary.
+        file_type: Detected type of the monitored file.
+        success_flag_file: Location where the SUCCESS flag is expected.
+        max_restarts: Maximum restart attempts allowed.
+        email_enabled: Whether email notifications are enabled.
+        title: Title shown for the monitored process.
+        restart_after_delay: Optional forced restart delay in seconds.
+
+    Notes:
+        This function only prints configuration information and does not alter
+        monitoring behavior.
+    """
     global ONCE_PRINT
     if ONCE_PRINT:
         return
