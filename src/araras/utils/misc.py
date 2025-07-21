@@ -4,6 +4,7 @@ import os
 import math
 import time
 from pathlib import Path
+from typing import List, Optional
 from IPython.display import clear_output
 
 
@@ -179,29 +180,40 @@ def format_number_commas(number, precision=2):
 
 # ——————————————————————————— Notebook Converter ———————————————————————————— #
 class NotebookConverter:
-    """Notebook to Python conversion."""
+    """Utility class for Jupyter notebook conversions."""
 
     @staticmethod
-    def convert_notebook_to_python(notebook_path: Path) -> Path:
-        """Convert Jupyter notebook to Python file with same name.
+    def convert_notebook_to_python(
+        notebook_path: Path,
+        output_path: Optional[Path] = None,
+        append_lines: Optional[List[str]] = None,
+    ) -> Path:
+        """Convert a Jupyter notebook to a Python script.
+
+        By default, the script is written alongside ``notebook_path`` with a
+        ``.py`` extension. Optionally, a custom ``output_path`` may be provided
+        and additional ``append_lines`` can be written at the end of the
+        generated file. This is useful when preparing notebooks for monitoring
+        where extra code must be appended.
 
         Args:
-            notebook_path: Path to .ipynb file
+            notebook_path: Path to the ``.ipynb`` file.
+            output_path: Optional custom destination for the converted script.
+            append_lines: Optional lines to append to the resulting Python file.
 
         Returns:
-            Path to generated .py file
+            Path to the created ``.py`` file.
 
         Raises:
-            ImportError: If notebook dependencies missing
-            ValueError: If notebook conversion fails
+            ImportError: If the ``nbformat`` dependency is missing.
+            ValueError: If the notebook fails to convert or write to disk.
         """
         try:
             import nbformat
         except ImportError as e:
             raise ImportError("Missing notebook dependencies. " "Please install: pip install nbformat") from e
 
-        # Target Python file path (same directory, same name, .py extension)
-        python_path = notebook_path.with_suffix(".py")
+        python_path = output_path or notebook_path.with_suffix(".py")
 
         try:
             # Load notebook with minimal memory footprint
@@ -228,6 +240,9 @@ class NotebookConverter:
                     python_lines.extend(source_lines)
                     python_lines.append("")  # Empty line between cells
 
+            if append_lines:
+                python_lines.extend(append_lines)
+
             # Write to Python file atomically
             temp_path = python_path.with_suffix(".py.tmp")
             try:
@@ -247,3 +262,41 @@ class NotebookConverter:
 
         except Exception as e:
             raise ValueError(f"Failed to convert notebook {notebook_path}: {e}") from e
+
+    @staticmethod
+    def convert_notebook_to_monitored_python(
+        notebook_path: Path,
+        success_flag: str,
+    ) -> Path:
+        """Convert a notebook to a monitored Python script.
+
+        The resulting file is written next to ``notebook_path`` with the prefix
+        ``temp_monitor_`` and includes a small snippet that writes the provided
+        success flag when execution finishes.
+
+        Args:
+            notebook_path: Path to the ``.ipynb`` file.
+            success_flag: Path where the monitored script should write the
+                ``SUCCESS`` flag upon completion.
+
+        Returns:
+            Path to the generated monitored Python script.
+
+        Raises:
+            ImportError: If the ``nbformat`` dependency is missing.
+            ValueError: If the notebook fails to convert or write to disk.
+        """
+        success_path = Path(success_flag).resolve()
+        output_path = notebook_path.parent / f"temp_monitor_{notebook_path.stem}.py"
+        append_lines = [
+            "",  # newline before appended code
+            "# Write success flag for the auto restart script",
+            "from pathlib import Path",
+            f"Path({repr(str(success_path))}).write_text('SUCCESS')",
+            "",
+        ]
+        return NotebookConverter.convert_notebook_to_python(
+            notebook_path,
+            output_path=output_path,
+            append_lines=append_lines,
+        )
