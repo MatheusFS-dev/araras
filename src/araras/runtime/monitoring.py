@@ -227,13 +227,19 @@ def _cleanup_stale_monitor_files():
 
 
 def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
-    """Return memory percentage, memory in GB, and CPU percentage for a process.
+    """Return memory percentage, memory in GB and CPU percentage for a process.
+
+    This helper queries ``psutil`` for the resource consumption of a single
+    process.  The CPU value reflects the sum across all available CPU cores and
+    therefore may exceed ``100`` when the process utilises more than one core.
 
     Args:
         pid: Process ID of the process to query.
 
     Returns:
-        Tuple containing memory percentage, memory usage in GB and CPU percentage.
+        Tuple[float, float, float]:
+            The memory usage percentage, memory usage in gigabytes and CPU
+            percentage for the given process.
 
     Raises:
         psutil.NoSuchProcess: If the PID does not exist.
