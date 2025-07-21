@@ -105,10 +105,10 @@ class FlagBasedRestartManager:
     ) -> None:
         """Execute a Python file with automatic restart logic.
 
-        The specified file (or a notebook converted to Python) is copied into
-        the same directory with the prefix ``temp_monitor_``. The copy appends a
-        short snippet that writes the configured success flag before exiting.
-        After the monitored run finishes, the temporary file is removed.
+        The provided file is copied into the same directory with the prefix
+        ``temp_monitor_``.  When a notebook is supplied it is converted and the
+        monitoring snippet appended in a single step.  After the monitored run
+        finishes, the temporary file is removed.
 
         Args:
             file_path: Path to the Python or Jupyter notebook file to run.
@@ -129,27 +129,23 @@ class FlagBasedRestartManager:
         validated_path = FileTypeHandler.validate_file(file_path)
         file_type = FileTypeHandler.get_file_type(validated_path)
 
-        # Convert notebook to Python if needed
         if file_type == "notebook":
-            # _mon.print_process_status(f"Converting notebook to Python: {validated_path.name}")
             try:
-                self.converted_python_file = NotebookConverter.convert_notebook_to_python(validated_path)
+                self.monitored_file = NotebookConverter.convert_notebook_to_monitored_python(
+                    validated_path, success_flag_file
+                )
                 self.original_was_notebook = True
-                validated_path = self.converted_python_file
+                validated_path = self.monitored_file
                 file_type = "python"
             except Exception as e:
                 _mon.print_error_message("CONVERSION", f"Notebook conversion failed: {e}")
                 raise
+        else:
+            self.monitored_file = self._create_monitored_copy(validated_path, success_flag_file)
+            validated_path = self.monitored_file
 
-        # Determine working directory and process title before creating the
-        # temporary monitored copy so relative paths resolve correctly and the
-        # title reflects the original file name.
         working_dir = str(validated_path.parent)
         self.process_title = title or validated_path.stem
-
-        # Create monitored copy with success flag handling
-        self.monitored_file = self._create_monitored_copy(validated_path, success_flag_file)
-        validated_path = self.monitored_file
         flag_path = Path(success_flag_file).resolve()
 
         # Print configuration summary
