@@ -47,13 +47,13 @@ automatic restarts using the built-in command-line interface.
    flag file:
 
 ```bash
-python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag
+python -m araras.runtime.monitoring path/to/script.py another.ipynb -s /tmp/done.flag
 ```
 
 Additional options allow controlling restart behavior, for example:
 
 ```bash
-python -m araras.runtime.monitoring path/to/script.py -s /tmp/done.flag \
+python -m araras.runtime.monitoring path/to/script.py another.ipynb -s /tmp/done.flag \
     -m 5 -d 3 -f 3600
 ```
 

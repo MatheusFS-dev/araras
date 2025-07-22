@@ -30,7 +30,8 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 
     This helper assembles the ``argparse`` parser used by the CLI
     entry point. Most options provide both short and long forms for
-    convenience.
+    convenience. It also accepts multiple target files which are
+    monitored sequentially.
 
     Args:
         argv: Optional list of arguments to parse instead of ``sys.argv``.
@@ -44,8 +45,9 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "file_path",
-        help="Path to the .py or .ipynb file to execute",
+        "file_paths",
+        nargs="+",
+        help="Path(s) to the .py or .ipynb files to execute sequentially",
     )
     parser.add_argument(
         "-s",
@@ -121,7 +123,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     This wrapper parses command line flags and forwards them to
     :func:`run_auto_restart`. It is exposed as ``monitor`` via the
     package's ``pyproject.toml`` entry point and can also be invoked with
-    ``python -m araras.runtime.monitoring``.
+    ``python -m araras.runtime.monitoring``. When multiple ``file_paths``
+    are provided they are executed sequentially.
 
     Note:
         Execute this command from the **same directory** as the script or
@@ -139,19 +142,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     """
 
     args = _parse_args(argv)
-    run_auto_restart(
-        file_path=args.file_path,
-        success_flag_file=args.success_flag_file,
-        title=args.title,
-        max_restarts=args.max_restarts,
-        restart_delay=args.restart_delay,
-        recipients_file=args.recipients_file,
-        credentials_file=args.credentials_file,
-        force_restart=args.force_restart,
-        retry_attempts=args.retry_attempts,
-        supress_tf_warnings=args.supress_tf_warnings,
-        resource_usage_log_file=args.resource_usage_log_file,
-    )
+    for target in args.file_paths:
+        run_auto_restart(
+            file_path=target,
+            success_flag_file=args.success_flag_file,
+            title=args.title,
+            max_restarts=args.max_restarts,
+            restart_delay=args.restart_delay,
+            recipients_file=args.recipients_file,
+            credentials_file=args.credentials_file,
+            force_restart=args.force_restart,
+            retry_attempts=args.retry_attempts,
+            supress_tf_warnings=args.supress_tf_warnings,
+            resource_usage_log_file=args.resource_usage_log_file,
+        )
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI execution

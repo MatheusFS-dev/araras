@@ -1614,7 +1614,7 @@ point `monitor = "araras.runtime.monitoring:main"`. After installing the
 package you can execute:
 
 ```bash
-monitor path/to/job.py [options]
+monitor path/to/job.py [another_job.ipynb ...] [options]
 ```
 
 | Flag | Type | Description |
