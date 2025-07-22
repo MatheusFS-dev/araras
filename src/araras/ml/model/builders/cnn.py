@@ -189,7 +189,7 @@ def build_dense_as_conv1d(
     )
 
 
-def generate_conv_pool_table(
+def generate_conv1d_pool_table(
     L0: int = 4000,
     n_layers: int = 4,
     kernel_sizes: Sequence[int] = range(2, 13, 2),
