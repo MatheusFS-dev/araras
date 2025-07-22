@@ -2,6 +2,10 @@ from araras.core import *
 
 from tensorflow.keras import layers, initializers
 from araras.ml.model.hyperparams import KParams
+import math
+import csv
+from itertools import product
+import pandas as pd
 
 
 def build_cnn1d(
@@ -183,6 +187,98 @@ def build_dense_as_conv1d(
         trial_bias_reg=trial_bias_reg,
         trial_activity_reg=trial_activity_reg,
     )
+
+
+def generate_conv_pool_table(
+    L0: int = 4000,
+    n_layers: int = 4,
+    kernel_sizes: Sequence[int] = range(2, 13, 2),
+    pool_sizes: Sequence[int] = range(2, 9),
+    filters: Sequence[int] = (64, 128, 256, 512),
+    conv_stride: int = 1,
+    conv_dilation: int = 1,
+    pool_stride: Optional[int] = None,
+    csv_path: Optional[str] = None,
+) -> Optional[pd.DataFrame]:
+    """Generate a table with all combinations of Conv1D/MaxPooling1D hyperparameters and resulting shapes.
+
+    Padding is fixed to "same" for both Conv1D and MaxPooling1D. Each layer block is:
+    Conv1D(kernel_size=k, stride=conv_stride, dilation=conv_dilation, padding="same") →
+    MaxPooling1D(pool_size=p, stride=pool_stride or p, padding="same").
+
+    The function iterates over the Cartesian product of (kernel_sizes × pool_sizes × filters) for each layer.
+
+    Args:
+        L0: Initial temporal length before the first Conv1D.
+        n_layers: Number of Conv1D + MaxPooling1D blocks.
+        kernel_sizes: Allowed kernel sizes for Conv1D.
+        pool_sizes: Allowed pool sizes for MaxPooling1D.
+        filters: Allowed filter counts for Conv1D.
+        conv_stride: Stride for all Conv1D layers.
+        conv_dilation: Dilation rate for all Conv1D layers.
+        pool_stride: Stride for all MaxPooling1D layers. If None, uses pool_size.
+        csv_path: If provided, results are streamed to this CSV and the function returns None. If None, a pandas
+            DataFrame is returned (use only if the total number of combinations fits in memory).
+
+    Returns:
+        pandas.DataFrame or None:
+            - DataFrame with one row per combination when csv_path is None.
+            - None when csv_path is provided.
+
+    Notes:
+        - Total rows = (len(kernel_sizes)*len(pool_sizes)*len(filters))**n_layers.
+        - The final column "flatten_features" equals last_temporal_length * last_filters.
+    """
+
+    def conv1d_len(L: int, k: int, stride: int, dilation: int) -> int:
+        # padding="same"
+        return math.ceil(L / stride)
+
+    def pool1d_len(L: int, pool_size: int, stride: Optional[int]) -> int:
+        # padding="same"
+        if stride is None:
+            stride = pool_size
+        return math.ceil(L / stride)
+
+    header = ["L0"]
+    for i in range(n_layers):
+        header += [f"kernel_{i}", f"pool_{i}", f"filters_{i}", f"L_after_conv_{i}", f"L_after_pool_{i}"]
+    header.append("flatten_features")
+
+    # Generator over flat tuples of length 3*n_layers
+    combo_iter = product(kernel_sizes, pool_sizes, filters, repeat=n_layers)
+
+    if csv_path:
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow(header)
+            for flat in combo_iter:
+                row = [L0]
+                L = L0
+                for i in range(n_layers):
+                    k, p, flt = flat[3 * i : 3 * i + 3]
+                    Lc = conv1d_len(L, k, conv_stride, conv_dilation)
+                    Lp = pool1d_len(Lc, p, pool_stride)
+                    row += [k, p, flt, Lc, Lp]
+                    L = Lp
+                row.append(L * flat[-1])
+                writer.writerow(row)
+        return None
+
+    rows = []
+    for flat in combo_iter:
+        row = [L0]
+        L = L0
+        for i in range(n_layers):
+            k, p, flt = flat[3 * i : 3 * i + 3]
+            Lc = conv1d_len(L, k, conv_stride, conv_dilation)
+            Lp = pool1d_len(Lc, p, pool_stride)
+            row += [k, p, flt, Lc, Lp]
+            L = Lp
+        row.append(L * flat[-1])
+        rows.append(row)
+
+    return pd.DataFrame(rows, columns=header)
 
 
 def build_cnn2d(
