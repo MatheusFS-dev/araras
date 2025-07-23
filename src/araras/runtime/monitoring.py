@@ -13,6 +13,7 @@ from threading import Event, Thread
 
 # Local imports
 from araras.runtime.terminal import SimpleTerminalLauncher
+from .file_handler import FileTypeHandler
 
 # Path where resource usage logs will be written. If ``None`` no logging occurs
 RESOURCE_USAGE_LOG_FILE: Optional[str] = None
@@ -443,6 +444,10 @@ def run_auto_restart(
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
+    The function validates the existence of ``file_path`` before allocating
+    monitoring resources. If the path does not point to a valid file a
+    ``FileNotFoundError`` is raised immediately.
+
     Args:
         file_path: Path to .py or .ipynb file to execute
         success_flag_file: Path to success flag file
@@ -464,6 +469,9 @@ def run_auto_restart(
 
     global RESOURCE_USAGE_LOG_FILE
     RESOURCE_USAGE_LOG_FILE = resource_usage_log_file
+
+    # Validate that the requested file exists before initializing monitoring
+    FileTypeHandler.validate_file(file_path)
 
     try:
         # late import to avoid circular dependencies

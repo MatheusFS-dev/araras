@@ -1599,6 +1599,8 @@ run_auto_restart(
 )
 ```
 Main function with notebook conversion, file cleanup, and consolidated email notification support.
+The function validates that the provided ``file_path`` exists before any
+monitoring resources are created and raises ``FileNotFoundError`` if not.
 > [!CAUTION]
 > The target script is executed repeatedly until a success flag is detected or the maximum number of restarts is reached.
 
