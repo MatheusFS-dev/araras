@@ -11,6 +11,7 @@ This document provides an overview of the API functions available in the ARARAS 
   - [ml.model.builders.cnn](#mlmodelbuilderscnn)
     - [build\_cnn1d](#build_cnn1d)
     - [build\_dense\_as\_conv1d](#build_dense_as_conv1d)
+    - [generate\_conv1d\_pool\_table](#generate_conv1d_pool_table)
     - [build\_cnn2d](#build_cnn2d)
     - [build\_dense\_as\_conv2d](#build_dense_as_conv2d)
     - [build\_cnn3d](#build_cnn3d)
@@ -20,6 +21,7 @@ This document provides an overview of the API functions available in the ARARAS 
   - [ml.model.builders.gnn](#mlmodelbuildersgnn)
     - [build\_grid\_adjacency](#build_grid_adjacency)
     - [build\_knn\_adjacency](#build_knn_adjacency)
+    - [check\_gpu\_limit](#check_gpu_limit)
     - [build\_gcn](#build_gcn)
     - [build\_gat](#build_gat)
     - [build\_cheb](#build_cheb)
@@ -66,6 +68,7 @@ This document provides an overview of the API functions available in the ARARAS 
     - [save\_trial\_params\_to\_file](#save_trial_params_to_file)
     - [save\_top\_k\_trials](#save_top_k_trials)
     - [init\_study\_dirs](#init_study_dirs)
+    - [log\_trial\_error](#log_trial_error)
   - [notifications.email](#notificationsemail)
     - [send\_email](#send_email)
   - [runtime.monitoring](#runtimemonitoring)
@@ -74,6 +77,7 @@ This document provides an overview of the API functions available in the ARARAS 
   - [utils](#utils)
   - [utils.io](#utilsio)
     - [create\_run\_directory](#create_run_directory)
+    - [get\_caller\_stem](#get_caller_stem)
   - [utils.misc](#utilsmisc)
     - [clear](#clear)
     - [format\_number](#format_number)
@@ -110,6 +114,8 @@ Suppress Optuna experimental warnings. This helper inspects Optuna for
 
 **Raises**
 - None
+
+
 
 ## ml.model.builders.cnn
 
@@ -214,6 +220,54 @@ Simulate a Dense layer using a Conv1D with kernel_size=1. This function builds a
 
 **Returns**
 ` layers.Layer: A Keras layer with output shape (batch_size, 1, units), equivalent to Dense(units). References: https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer https://www.educative.io/answers/are-1-x-1-convolutions-the-same-as-fully-connected-layers https://stackoverflow.com/questions/39366271/for-what-reason-convolution-1x1-is-used-in-deep-neural-networks`
+
+**Raises**
+- None
+
+### generate_conv1d_pool_table
+
+```python
+generate_conv1d_pool_table(
+    L0,
+    n_layers,
+    kernel_sizes,
+    pool_sizes,
+    filters,
+    conv_stride=1,
+    conv_dilation=1,
+    pool_stride=None,
+    csv_path=None,
+    verbose=True,
+    plot=False,
+    plot_dir=None,
+)
+```
+Generate pooling length combinations for stacked ``Conv1D`` blocks.
+
+Each block applies ``Conv1D`` followed by ``MaxPooling1D`` using ``same`` padding.
+The Cartesian product of ``kernel_sizes``, ``pool_sizes`` and ``filters`` is
+enumerated ``n_layers`` times and the resulting temporal length after each
+pooling operation is computed. Optionally, the table is streamed to ``csv_path``
+and histograms of final lengths are saved.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| L0 | `int` | Initial temporal length before the first block. |
+| n_layers | `int` | Number of ``Conv1D`` + ``MaxPooling1D`` blocks. |
+| kernel_sizes | `Sequence[int]` | Allowed kernel sizes for ``Conv1D``. |
+| pool_sizes | `Sequence[int]` | Allowed pool sizes for ``MaxPooling1D``. |
+| filters | `Sequence[int]` | Allowed filter counts for ``Conv1D``. |
+| conv_stride | `int` | Stride for all ``Conv1D`` layers. |
+| conv_dilation | `int` | Dilation rate for all ``Conv1D`` layers. |
+| pool_stride | `Optional[int]` | Stride for ``MaxPooling1D`` layers. Uses ``pool_size`` when ``None``. |
+| csv_path | `Optional[str]` | Stream the table to this CSV file if provided. |
+| verbose | `bool` | Display a progress bar while generating combinations. |
+| plot | `bool` | Whether to generate histograms for each layer's final length. |
+| plot_dir | `Optional[str]` | Directory to save histogram images. |
+
+**Returns**
+` pandas.DataFrame: Table of parameter combinations and resulting lengths.`
 
 **Raises**
 - None
@@ -524,6 +578,39 @@ Construct a k-nearest neighbour adjacency matrix on a 2-D grid. Nodes correspond
 
 **Raises**
 - None
+
+### check_gpu_limit
+
+```python
+check_gpu_limit(
+    knn_list,
+    K_list,
+    units_list,
+    n=20 * 200,
+    save_path=None,
+)
+```
+Evaluate TensorFlow's GPU sparse--dense multiplication limit.
+
+For each combination of ``knn_k`` (neighbour count), Chebyshev order ``K`` and
+output ``units`` this utility estimates whether ``output_channels * nnz(support)``
+exceeds ``2^31 - 1``. Results are shown in a :class:`pandas.DataFrame` and may be
+written to ``save_path``.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| knn_list | `list[int]` | List of ``k`` values for the kNN graph. |
+| K_list | `list[int]` | Chebyshev orders to test. |
+| units_list | `list[int]` | Candidate output channel counts. |
+| n | `int` | Number of nodes in the graph. |
+| save_path | `str, optional` | Path to save the resulting table as CSV. |
+
+**Returns**
+` pandas.DataFrame: Table summarising safe and failing unit counts.`
+
+**Raises**
+- OSError: If writing the CSV file fails.
 
 ### build_gcn
 
@@ -1545,6 +1632,39 @@ Create and return study directory structure for experiments.
 **Raises**
 - None
 
+### log_trial_error
+
+```python
+log_trial_error(
+    trial,
+    exc,
+    logs_dir,
+    prune_on=None,
+    propagate=None,
+)
+```
+Log a JSON file for a failed trial and decide whether to prune.
+
+Exceptions listed in ``prune_on`` cause the trial to be pruned after logging.
+Those in ``propagate`` are immediately re-raised. All others are saved to
+``logs_dir`` for later inspection.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| trial | `optuna.Trial` | The current Optuna trial. |
+| exc | `Exception` | The exception that occurred. |
+| logs_dir | `str` | Directory where the log file is written. |
+| prune_on | `Iterable[Exception], optional` | Exception types that trigger pruning. |
+| propagate | `Iterable[Exception], optional` | Exception types that are simply re-raised. |
+
+**Returns**
+` None`
+
+**Raises**
+- optuna.TrialPruned: If pruning is triggered.
+- Exception: Re-raised when listed in ``propagate``.
+
 ## notifications.email
 
 ### send_email
@@ -1691,6 +1811,30 @@ Creates a new run directory with an incremented numeric suffix and returns its f
 
 **Raises**
 - None
+
+### get_caller_stem
+
+```python
+get_caller_stem(
+    remove='temp_monitor_',
+)
+```
+Return the stem of the calling script or notebook.
+
+The helper inspects different execution contexts (VS Code notebooks, Python
+scripts or pure notebooks via ``ipynbname``) to infer the file stem. The optional
+``remove`` substring is stripped from the detected stem when present.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| remove | `Optional[str]` | Substring to remove from the detected stem. |
+
+**Returns**
+` str: The cleaned stem name of the caller.`
+
+**Raises**
+- RuntimeError: If the stem name cannot be determined.
 
 ## utils.misc
 
