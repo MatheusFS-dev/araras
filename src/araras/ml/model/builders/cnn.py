@@ -6,6 +6,8 @@ import math
 import csv
 from itertools import product
 import pandas as pd
+import matplotlib.pyplot as plt
+import os
 
 
 def build_cnn1d(
@@ -200,6 +202,8 @@ def generate_conv1d_pool_table(
     pool_stride: Optional[int] = None,
     csv_path: Optional[str] = None,
     verbose: bool = True,
+    plot: bool = False,
+    plot_dir: Optional[str] = None,
 ) -> pd.DataFrame:
     """Generate pooling length combinations for stacked ``Conv1D`` blocks.
 
@@ -208,9 +212,10 @@ def generate_conv1d_pool_table(
     ``filters`` is enumerated ``n_layers`` times. For every combination the
     temporal length after each pooling operation is computed.
 
-    The resulting table contains the initial length, the length after every
-    block and a ``valid`` column indicating whether the final length equals
-    ``1``.
+    The resulting table contains the parameters chosen for each layer and the
+    resulting temporal length after each pooling operation.
+    Optionally, histograms of the final lengths for each layer can be saved to
+    disk.
 
     Args:
         L0: Initial temporal length before the first block.
@@ -225,10 +230,14 @@ def generate_conv1d_pool_table(
         csv_path: Optional path to stream the table to CSV. When ``None`` the
             table is returned as a :class:`pandas.DataFrame`.
         verbose: Display a progress bar while generating combinations.
+        plot: Whether to generate histograms for each layer's final length.
+        plot_dir: Directory in which to save the histogram PNG files. If ``None``
+            the plots are saved in the current working directory with default
+            names.
 
     Returns:
-        :class:`pandas.DataFrame`: A table with the initial length, lengths
-        after each block and a ``valid`` column.
+        :class:`pandas.DataFrame`: A table describing each parameter
+        combination and the resulting lengths after every block.
 
     Raises:
         None
@@ -241,54 +250,74 @@ def generate_conv1d_pool_table(
         generation times.
     """
 
-    def conv1d_len(L: int, k: int, stride: int, dilation: int) -> int:
+    def conv1d_len(L: float, k: int, stride: int, dilation: int) -> float:
         # padding="same"
-        return math.ceil(L / stride)
+        return L / stride
 
-    def pool1d_len(L: int, pool_size: int, stride: Optional[int]) -> int:
+    def pool1d_len(L: float, pool_size: int, stride: Optional[int]) -> float:
         # padding="same"
         if stride is None:
             stride = pool_size
-        return math.ceil(L / stride)
+        return L / stride
 
-    header = ["L0"]
+    header = []
+    for i in range(n_layers):
+        header.extend([f"K{i + 1}", f"P{i + 1}", f"F{i + 1}"])
+    header.append("L0")
     for i in range(n_layers):
         header.append(f"L{i + 1}")
-    header.append("valid")
 
     total = (len(kernel_sizes) * len(pool_sizes) * len(filters)) ** n_layers
     combo_iter = product(kernel_sizes, pool_sizes, filters, repeat=n_layers)
     iterator = white_track(combo_iter, description="Combos", total=total) if verbose else combo_iter
 
-    rows = [] if csv_path is None else None
+    rows = []
 
     if csv_path:
         with open(csv_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(header)
             for flat in iterator:
-                row = [L0]
-                L = L0
+                row = list(flat)
+                row.append(float(L0))
+                L = float(L0)
                 for i in range(n_layers):
-                    k, p, flt = flat[3 * i : 3 * i + 3]
+                    k, p, _flt = flat[3 * i : 3 * i + 3]
                     L = conv1d_len(L, k, conv_stride, conv_dilation)
                     L = pool1d_len(L, p, pool_stride)
                     row.append(L)
-                row.append(L == 1)
                 writer.writerow(row)
+                rows.append(row)
 
-    for flat in iterator:
-        row = [L0]
-        L = L0
-        for i in range(n_layers):
-            k, p, flt = flat[3 * i : 3 * i + 3]
-            L = conv1d_len(L, k, conv_stride, conv_dilation)
-            L = pool1d_len(L, p, pool_stride)
-            row.append(L)
-        row.append(L == 1)
-        rows.append(row)
+    else:
+        for flat in iterator:
+            row = list(flat)
+            row.append(float(L0))
+            L = float(L0)
+            for i in range(n_layers):
+                k, p, _flt = flat[3 * i : 3 * i + 3]
+                L = conv1d_len(L, k, conv_stride, conv_dilation)
+                L = pool1d_len(L, p, pool_stride)
+                row.append(L)
+            rows.append(row)
 
-    return pd.DataFrame(rows, columns=header)
+    df = pd.DataFrame(rows, columns=header)
+
+    if plot:
+        for i in range(1, n_layers + 1):
+            df[f"L{i}"].hist()
+            plt.title(f"Length after layer {i}")
+            plt.xlabel("Length")
+            plt.ylabel("Frequency")
+            fname = (
+                f"layer_{i}.png"
+                if plot_dir is None
+                else os.path.join(plot_dir, f"layer_{i}.png")
+            )
+            plt.savefig(fname)
+            plt.close()
+
+    return df
 
 
 def build_cnn2d(
