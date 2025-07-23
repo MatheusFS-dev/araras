@@ -190,44 +190,56 @@ def build_dense_as_conv1d(
 
 
 def generate_conv1d_pool_table(
-    L0: int = 4000,
-    n_layers: int = 4,
-    kernel_sizes: Sequence[int] = range(2, 13, 2),
-    pool_sizes: Sequence[int] = range(2, 9),
-    filters: Sequence[int] = (64, 128, 256, 512),
+    L0: int,
+    n_layers: int,
+    kernel_sizes: Sequence[int],
+    pool_sizes: Sequence[int],
+    filters: Sequence[int],
     conv_stride: int = 1,
     conv_dilation: int = 1,
     pool_stride: Optional[int] = None,
     csv_path: Optional[str] = None,
+    verbose: bool = True,
 ) -> Optional[pd.DataFrame]:
-    """Generate a table with all combinations of Conv1D/MaxPooling1D hyperparameters and resulting shapes.
+    """Generate pooling length combinations for stacked ``Conv1D`` blocks.
 
-    Padding is fixed to "same" for both Conv1D and MaxPooling1D. Each layer block is:
-    Conv1D(kernel_size=k, stride=conv_stride, dilation=conv_dilation, padding="same") →
-    MaxPooling1D(pool_size=p, stride=pool_stride or p, padding="same").
+    Each block applies ``Conv1D`` followed by ``MaxPooling1D`` using ``same``
+    padding. The Cartesian product of ``kernel_sizes``, ``pool_sizes`` and
+    ``filters`` is enumerated ``n_layers`` times. For every combination the
+    temporal length after each pooling operation is computed.
 
-    The function iterates over the Cartesian product of (kernel_sizes × pool_sizes × filters) for each layer.
+    The resulting table contains the initial length, the length after every
+    block and a ``valid`` column indicating whether the final length equals
+    ``1``.
 
     Args:
-        L0: Initial temporal length before the first Conv1D.
-        n_layers: Number of Conv1D + MaxPooling1D blocks.
-        kernel_sizes: Allowed kernel sizes for Conv1D.
-        pool_sizes: Allowed pool sizes for MaxPooling1D.
-        filters: Allowed filter counts for Conv1D.
-        conv_stride: Stride for all Conv1D layers.
-        conv_dilation: Dilation rate for all Conv1D layers.
-        pool_stride: Stride for all MaxPooling1D layers. If None, uses pool_size.
-        csv_path: If provided, results are streamed to this CSV and the function returns None. If None, a pandas
-            DataFrame is returned (use only if the total number of combinations fits in memory).
+        L0: Initial temporal length before the first block.
+        n_layers: Number of ``Conv1D`` + ``MaxPooling1D`` blocks.
+        kernel_sizes: Allowed kernel sizes for ``Conv1D``.
+        pool_sizes: Allowed pool sizes for ``MaxPooling1D``.
+        filters: Allowed filter counts for ``Conv1D``.
+        conv_stride: Stride for all ``Conv1D`` layers.
+        conv_dilation: Dilation rate for all ``Conv1D`` layers.
+        pool_stride: Stride for all ``MaxPooling1D`` layers. If ``None``, uses
+            ``pool_size``.
+        csv_path: Optional path to stream the table to CSV. When ``None`` the
+            table is returned as a :class:`pandas.DataFrame`.
+        verbose: Display a progress bar while generating combinations.
 
     Returns:
-        pandas.DataFrame or None:
-            - DataFrame with one row per combination when csv_path is None.
-            - None when csv_path is provided.
+        Optional[pandas.DataFrame]:
+            The resulting table when ``csv_path`` is ``None``, otherwise
+            ``None``.
+
+    Raises:
+        None
 
     Notes:
-        - Total rows = (len(kernel_sizes)*len(pool_sizes)*len(filters))**n_layers.
-        - The final column "flatten_features" equals last_temporal_length * last_filters.
+        Total rows = ``(len(kernel_sizes) * len(pool_sizes) * len(filters))**n_layers``.
+
+    Warning:
+        Large search spaces may lead to extremely big tables and long
+        generation times.
     """
 
     def conv1d_len(L: int, k: int, stride: int, dilation: int) -> int:
@@ -242,40 +254,40 @@ def generate_conv1d_pool_table(
 
     header = ["L0"]
     for i in range(n_layers):
-        header += [f"kernel_{i}", f"pool_{i}", f"filters_{i}", f"L_after_conv_{i}", f"L_after_pool_{i}"]
-    header.append("flatten_features")
+        header.append(f"L{i + 1}")
+    header.append("valid")
 
-    # Generator over flat tuples of length 3*n_layers
+    total = (len(kernel_sizes) * len(pool_sizes) * len(filters)) ** n_layers
     combo_iter = product(kernel_sizes, pool_sizes, filters, repeat=n_layers)
+    iterator = white_track(combo_iter, description="Combos", total=total) if verbose else combo_iter
+
+    rows = [] if csv_path is None else None
 
     if csv_path:
         with open(csv_path, "w", newline="") as f:
             writer = csv.writer(f)
             writer.writerow(header)
-            for flat in combo_iter:
+            for flat in iterator:
                 row = [L0]
                 L = L0
                 for i in range(n_layers):
                     k, p, flt = flat[3 * i : 3 * i + 3]
-                    Lc = conv1d_len(L, k, conv_stride, conv_dilation)
-                    Lp = pool1d_len(Lc, p, pool_stride)
-                    row += [k, p, flt, Lc, Lp]
-                    L = Lp
-                row.append(L * flat[-1])
+                    L = conv1d_len(L, k, conv_stride, conv_dilation)
+                    L = pool1d_len(L, p, pool_stride)
+                    row.append(L)
+                row.append(L == 1)
                 writer.writerow(row)
         return None
 
-    rows = []
-    for flat in combo_iter:
+    for flat in iterator:
         row = [L0]
         L = L0
         for i in range(n_layers):
             k, p, flt = flat[3 * i : 3 * i + 3]
-            Lc = conv1d_len(L, k, conv_stride, conv_dilation)
-            Lp = pool1d_len(Lc, p, pool_stride)
-            row += [k, p, flt, Lc, Lp]
-            L = Lp
-        row.append(L * flat[-1])
+            L = conv1d_len(L, k, conv_stride, conv_dilation)
+            L = pool1d_len(L, p, pool_stride)
+            row.append(L)
+        row.append(L == 1)
         rows.append(row)
 
     return pd.DataFrame(rows, columns=header)
