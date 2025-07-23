@@ -11,7 +11,7 @@ class SimpleTerminalLauncher:
 
     __slots__ = ("system", "supress_tf_warnings")
 
-    def __init__(self, supress_tf_warnings: bool = True):
+    def __init__(self, supress_tf_warnings: bool = False):
         """Initialize launcher with OS detection."""
         self.system = platform.system().lower()
         self.supress_tf_warnings = supress_tf_warnings
