@@ -313,5 +313,8 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
     path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
 
     if isinstance(exc, prune_on):
+        logger.warning(
+            f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}: {exc}. Pruning the trial.{RESET}"ht01pc01
+        )
         raise optuna.TrialPruned() from exc
     raise exc
