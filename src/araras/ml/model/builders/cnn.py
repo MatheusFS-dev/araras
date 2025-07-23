@@ -200,7 +200,7 @@ def generate_conv1d_pool_table(
     pool_stride: Optional[int] = None,
     csv_path: Optional[str] = None,
     verbose: bool = True,
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame:
     """Generate pooling length combinations for stacked ``Conv1D`` blocks.
 
     Each block applies ``Conv1D`` followed by ``MaxPooling1D`` using ``same``
@@ -227,9 +227,8 @@ def generate_conv1d_pool_table(
         verbose: Display a progress bar while generating combinations.
 
     Returns:
-        Optional[pandas.DataFrame]:
-            The resulting table when ``csv_path`` is ``None``, otherwise
-            ``None``.
+        :class:`pandas.DataFrame`: A table with the initial length, lengths
+        after each block and a ``valid`` column.
 
     Raises:
         None
@@ -277,7 +276,6 @@ def generate_conv1d_pool_table(
                     row.append(L)
                 row.append(L == 1)
                 writer.writerow(row)
-        return None
 
     for flat in iterator:
         row = [L0]
