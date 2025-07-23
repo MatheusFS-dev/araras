@@ -2,31 +2,39 @@ from araras.core import *
 
 import time
 import tensorflow as tf
+import pynvml
 import psutil
-
+from inspect import signature
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
-from inspect import signature
-
-import pynvml
-
 from araras.ml.model.utils import capture_model_summary
-from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
+from araras.utils.misc import (
+    format_number,
+    format_bytes,
+    format_scientific,
+    format_number_commas,
+)
 
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     """
-    Calculates the total number of floating-point operations (FLOPs) needed
-    to perform a single forward pass of the given Keras model.
+    Returns the total number of floating point operations (FLOPs).
+
+    The model is traced with dummy inputs matching ``batch_size`` and the
+    resulting graph is profiled using TensorFlow's V1 profiler API.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        batch_size (int, optional): The batch size to simulate for input. Defaults to 1.
+        model: Keras model to inspect.
+        batch_size: Batch size used for the dummy input. ``1`` by default.
 
     Returns:
-        int: The total number of floating-point operations (FLOPs) for one forward pass.
+        The FLOP count for a single forward pass.
+
+    Notes:
+        TensorFlow's profiler uses graph mode under the hood; therefore the
+        model is executed once to build a concrete function before profiling.
     """
 
     # Supress API deprecation warnings
@@ -80,7 +88,9 @@ def get_memory_and_time(
 ) -> Tuple[int, float]:
     """
     Measures the peak memory usage and average inference time of a Keras model
-    on GPU or CPU.
+    on GPU or CPU. The model is first warmed up to account for graph tracing and kernel
+    compilation. Subsequent runs are timed while monitoring either the GPU
+    memory statistics or the CPU resident set size.
 
     Observations:
         Warmup runs exclude one-time initialization costs from your measurements. On GPU
@@ -98,12 +108,7 @@ def get_memory_and_time(
     The CPU memory probe occasionally reports zero usage. When this happens, the
     measurement is retried up to two additional times. If all attempts still
     report zero memory, the function returns ``0`` for the peak usage and emits a
-    warning in red.
-
-    Notes:
-        The Keras Functional API may emit a ``UserWarning`` when the provided
-        input structure does not exactly match the model's expected structure.
-        This function suppresses that warning to keep console output tidy.
+    warning.
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -223,23 +228,23 @@ def get_model_usage_stats(
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
     """
-    Estimate average power draw and energy usage.
-    Careful with the RAPL path; it may vary by system.
-    The RAPL interface is typically found at:
-        $ ls /sys/class/powercap
-        intel-rapl
-        $ ls /sys/class/powercap/intel-rapl
-        intel-rapl:0       intel-rapl:0:0    intel-rapl:1    …
-        $ ls /sys/class/powercap/intel-rapl/intel-rapl:0
-        energy_uj  max_energy_range_uj  name
-    Also, you MUST run this on a linux system with Intel CPUs!!!!!
-    And run the python script with SUDO to access RAPL files.
+    Estimate average power draw and per-inference energy consumption.
 
-    Notes:
-        When a ``tf.keras.Model`` is provided, Keras may issue a ``UserWarning``
-        about mismatched input structure if the dummy inputs do not precisely
-        reflect the model's expected format. The warning is suppressed within
-        this function.
+    Power measurements come from NVML when ``device`` is a GPU index or from the
+    Intel RAPL interface when ``device`` is ``-1``.  The model is executed
+    ``n_trials`` times and instantaneous power readings are averaged.
+    
+    Warning:
+        Careful with the RAPL path; it may vary by system.
+        The RAPL interface is typically found at:
+            $ ls /sys/class/powercap
+            intel-rapl
+            $ ls /sys/class/powercap/intel-rapl
+            intel-rapl:0       intel-rapl:0:0    intel-rapl:1    …
+            $ ls /sys/class/powercap/intel-rapl/intel-rapl:0
+            energy_uj  max_energy_range_uj  name
+        Also, you MUST run this on a linux system with Intel CPUs!!!!!
+        And run the python script with SUDO to access RAPL files.
 
     Args:
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
@@ -414,6 +419,16 @@ def write_model_stats_to_file(
 ) -> None:
     """
     Write model statistics to a file.
+    
+    Statistics include:
+        - Number of parameters
+        - Model size in bits
+        - FLOPs (Floating Point Operations)
+        - MACs (Multiply-Accumulate operations)
+        - Peak memory usage
+        - Inference time
+        - Average power consumption
+        - Average energy consumption
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.

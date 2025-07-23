@@ -272,6 +272,17 @@ def set_user_attr_model_stats(
 ) -> Dict[str, float]:
     """
     Extract and return model statistics from the given Optuna trial.
+    
+    Statistics include:
+        - Number of parameters
+        - Model size in bits
+        - FLOPs (floating-point operations)
+        - MACs (multiply-accumulate operations)
+        - Model summary
+        - Peak memory usage during inference
+        - Inference time
+        - Average power consumption
+        - Average energy consumption
 
     Args:
         trial (optuna.Trial): The Optuna trial object
