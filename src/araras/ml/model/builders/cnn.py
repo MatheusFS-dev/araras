@@ -135,6 +135,9 @@ def build_dense_as_conv1d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    data_format: str = "channels_last",
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
     name_prefix: str = "dense_as_conv1d",
 ) -> layers.Layer:
     """
@@ -161,10 +164,16 @@ def build_dense_as_conv1d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        data_format (str): Data format, either 'channels_last' or 'channels_first'.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias.
         name_prefix (str): Prefix for layer names.
 
     Returns:
         layers.Layer: A Keras layer with output shape (batch_size, 1, units), equivalent to Dense(units).
+
+    Raises:
+        None
 
     References:
         https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer
@@ -182,6 +191,9 @@ def build_dense_as_conv1d(
         kernel_size_range=1,
         strides=1,
         padding=padding,
+        data_format=data_format,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
         use_bias=True,
         use_batch_norm=False,
         name_prefix=name_prefix,
@@ -448,6 +460,9 @@ def build_dense_as_conv2d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    data_format: str = "channels_last",
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
     name_prefix: str = "dense_as_conv2d",
 ) -> layers.Layer:
     """
@@ -474,10 +489,16 @@ def build_dense_as_conv2d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        data_format (str): Data format, either 'channels_last' or 'channels_first'.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias.
         name_prefix (str): Prefix for layer names.
 
     Returns:
         layers.Layer: A Keras layer with output shape (batch_size, height, width, units), equivalent to Dense(units).
+
+    Raises:
+        None
 
     References:
         https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer
@@ -495,6 +516,9 @@ def build_dense_as_conv2d(
         kernel_size_range=(1, 1),
         strides=(1, 1),
         padding=padding,
+        data_format=data_format,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
         use_bias=True,
         use_batch_norm=False,
         name_prefix=name_prefix,
@@ -638,6 +662,9 @@ def build_dense_as_conv3d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    data_format: str = "channels_last",
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
     name_prefix: str = "dense_as_conv3d",
 ) -> layers.Layer:
     """
@@ -664,10 +691,16 @@ def build_dense_as_conv3d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        data_format (str): Data format, either 'channels_last' or 'channels_first'.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias.
         name_prefix (str): Prefix for layer names.
 
     Returns:
         layers.Layer: A Keras layer with output shape (batch_size, depth, height, width, units), equivalent to Dense(units).
+
+    Raises:
+        None
 
     References:
         https://datascience.stackexchange.com/questions/12830 how-are-1x1-convolutions-the-same-as-a-fully-connected-layer
@@ -685,6 +718,9 @@ def build_dense_as_conv3d(
         kernel_size_range=(1, 1, 1),
         strides=(1, 1, 1),
         padding=padding,
+        data_format=data_format,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
         use_bias=True,
         use_batch_norm=False,
         name_prefix=name_prefix,
