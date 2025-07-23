@@ -305,6 +305,7 @@ def generate_conv1d_pool_table(
 
     if plot:
         for i in range(1, n_layers + 1):
+            print(f"    Generating histogram for layer {i}...")
             df[f"L{i}"].hist()
             plt.title(f"Length after layer {i}")
             plt.xlabel("Length")
