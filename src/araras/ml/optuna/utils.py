@@ -61,7 +61,7 @@ def cleanup_non_top_trials(
         for base_dir, filename_template in cleanup_paths:
             try:
                 file_path = os.path.join(base_dir, filename_template.format(trial_id=trial_id))
-                
+
                 # Check if it is a directory or file
                 if os.path.isdir(file_path):
                     # Remove directory and all its contents
@@ -220,8 +220,12 @@ def save_top_k_trials(
             file.write(f"MACs: {format_number(trial_macs)}MACs\n")
             file.write(f"Peak memory usage: {format_bytes(trial_mem_usage)}\n")
             file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)} s\n")
-            file.write(f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n")
-            file.write(f"Average energy consumption: {format_scientific(trial_avg_energy, max_precision=4)} J\n")
+            file.write(
+                f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n"
+            )
+            file.write(
+                f"Average energy consumption: {format_scientific(trial_avg_energy, max_precision=4)} J\n"
+            )
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
 
             # Write extra attributes
@@ -267,7 +271,7 @@ def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
     return study_dir, *subdirectory_paths
 
 
-def log_trial_error(trial, exc, logs_dir, prune_on=None):
+def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
     """
     Log a single JSON file for this trial and decide whether to prune.
 
@@ -277,6 +281,9 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None):
         logs_dir: str or Path
         prune_on: iterable of Exception classes that should trigger pruning.
                   Defaults to common TF runtime errors: ResourceExhaustedError, InternalError, UnavailableError.
+        propagate: iterable of Exception classes that should be just propagated without doing anything.
+                  Defaults to optuna.exceptions.TrialPruned.
+
     """
     if prune_on is None:
         prune_on = (
@@ -284,6 +291,14 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None):
             tf.errors.InternalError,
             tf.errors.UnavailableError,
         )
+
+    if propagate is None:
+        propagate = (optuna.exceptions.TrialPruned,)
+        
+        
+    if isinstance(exc, propagate):
+        # If the exception is in the propagate list, we just re-raise it
+        raise exc    
 
     path = os.path.join(logs_dir, f"trial_{trial.number}.log")
     payload = {
