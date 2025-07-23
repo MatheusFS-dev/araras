@@ -11,7 +11,7 @@ class SimpleTerminalLauncher:
 
     __slots__ = ("system", "supress_tf_warnings")
 
-    def __init__(self, supress_tf_warnings: bool = False):
+    def __init__(self, supress_tf_warnings: bool = True):
         """Initialize launcher with OS detection."""
         self.system = platform.system().lower()
         self.supress_tf_warnings = supress_tf_warnings
@@ -42,7 +42,7 @@ class SimpleTerminalLauncher:
 
         if self.supress_tf_warnings:
             # (case-insensitive, filters both stdout and stderr)
-            cmd_str = f"{{ {cmd_str}; }} 2>&1 | awk -v IGNORECASE=1 '!/ptxas warning/'"
+            cmd_str = f"{{ {cmd_str}; }} |& awk -v IGNORECASE=1 '!/ptxas warning/'"
 
         # Simple PID capture without exit code complexity
         full_cmd = f"({cmd_str}) & echo $! > '{pid_file}'; wait"
