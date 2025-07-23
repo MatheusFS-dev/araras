@@ -5,6 +5,7 @@ import math
 import optuna
 import tensorflow as tf
 import json
+from pathlib import Path
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
 
 
@@ -300,7 +301,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
         # If the exception is in the propagate list, we just re-raise it
         raise exc    
 
-    path = os.path.join(logs_dir, f"trial_{trial.number}.log")
+    path = Path(logs_dir) / f"trial_{trial.number}.log"
     payload = {
         "trial": trial.number,
         "params": trial.params,
