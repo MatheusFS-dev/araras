@@ -32,150 +32,196 @@ def clear():
 
 
 def format_number(number, precision=2):
-    """
-    Format a number using scientific suffixes.
+    """Format ``number`` using metric suffixes.
+
+    The value is scaled by powers of one thousand and annotated with the
+    appropriate SI prefix (``K``, ``M`` and so on). Values below ``1`` use the
+    milli/micro prefixes. Negative numbers retain their sign.
 
     Args:
-        number (int, float): The number to format
-        precision (int): Number of decimal places to show (default: 2)
+        number (int | float): Value to format.
+        precision (int): Number of decimal places to display. Defaults to ``2``.
 
     Returns:
-        str: Formatted number with appropriate suffix
+        str: Formatted number with the corresponding prefix or ``"Invalid input: <number>"``.
+
+    Raises:
+        ValueError: If ``precision`` is negative.
+
+    Notes:
+        The value ``0`` is returned as ``"0"`` without a suffix.
     """
-    if number == 0:
-        return "0"
 
-    # Handle negative numbers
-    is_negative = number < 0
-    number = abs(number)
+    original_value = number
+    try:
+        if precision < 0:
+            raise ValueError("precision must be non-negative")
 
-    suffixes = ["", "K", "M", "G", "T", "P", "E", "Z", "Y"]
-    small_suffixes = ["", "m", "μ", "n", "p", "f", "a", "z", "y"]
+        if number == 0:
+            return "0"
 
-    # For very small numbers (< 1), use different approach
-    if number < 1:
-        suffix_index = 0
+        is_negative = number < 0
+        number = abs(number)
 
-        while number < 1 and suffix_index < len(small_suffixes) - 1:
-            number *= 1000
-            suffix_index += 1
+        suffixes = ["", "K", "M", "G", "T", "P", "E", "Z", "Y"]
+        small_suffixes = ["", "m", "μ", "n", "p", "f", "a", "z", "y"]
 
-        formatted = f"{number:.{precision}f} {small_suffixes[suffix_index]}"
-    else:
-        # For numbers >= 1
-        suffix_index = 0
+        if number < 1:
+            suffix_index = 0
+            while number < 1 and suffix_index < len(small_suffixes) - 1:
+                number *= 1000
+                suffix_index += 1
+            formatted = f"{number:.{precision}f} {small_suffixes[suffix_index]}"
+        else:
+            suffix_index = 0
+            while number >= 1000 and suffix_index < len(suffixes) - 1:
+                number /= 1000
+                suffix_index += 1
+            formatted = f"{number:.{precision}f} {suffixes[suffix_index]}"
 
-        while number >= 1000 and suffix_index < len(suffixes) - 1:
-            number /= 1000
-            suffix_index += 1
+        if "." in formatted:
+            formatted = formatted.rstrip("0").rstrip(".")
 
-        formatted = f"{number:.{precision}f} {suffixes[suffix_index]}"
-
-    # Remove trailing zeros and decimal point if not needed
-    if "." in formatted:
-        formatted = formatted.rstrip("0").rstrip(".")
-
-    return f"-{formatted}" if is_negative else formatted
+        return f"-{formatted}" if is_negative else formatted
+    except Exception as e:
+        logger_error.error(f"{RED}Error formatting number: {e}{RESET}")
+        return f"Invalid input: {original_value}"
 
 
 def format_bytes(bytes_value, precision=2):
-    """
-    Format bytes using binary suffixes (B, KB, MB, GB, etc.).
+    """Format a byte value with binary suffixes.
+
+    The value is successively divided by ``1024`` and labelled with the
+    appropriate binary prefix (``KB``, ``MB`` and so on). Negative inputs are
+    supported and keep their sign.
 
     Args:
-        bytes_value (int, float): The number of bytes
-        precision (int): Number of decimal places to show (default: 2)
+        bytes_value (int | float): Number of bytes to format.
+        precision (int): Number of decimal places for the mantissa. Defaults to ``2``.
 
     Returns:
-        str: Formatted bytes with appropriate suffix
+        str: Human readable string or ``"Invalid input: <bytes_value>"``.
+
+    Raises:
+        ValueError: If ``precision`` is negative.
+
+    Warning:
+        Inputs of ``0`` result in ``"0 B"``.
     """
-    if bytes_value == 0:
-        return "0 B"
 
+    original_value = bytes_value
     try:
+        if precision < 0:
+            raise ValueError("precision must be non-negative")
+
+        if bytes_value == 0:
+            return "0 B"
+
         is_negative = bytes_value < 0
+        bytes_value = abs(bytes_value)
+
+        suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+        suffix_index = 0
+
+        while bytes_value >= 1024 and suffix_index < len(suffixes) - 1:
+            bytes_value /= 1024
+            suffix_index += 1
+
+        formatted = f"{bytes_value:.{precision}f} {suffixes[suffix_index]}"
+
+        if "." in formatted.split()[0]:
+            number_part = formatted.split()[0].rstrip("0").rstrip(".")
+            formatted = f"{number_part} {suffixes[suffix_index]}"
+
+        return f"-{formatted}" if is_negative else formatted
     except Exception as e:
-        return "Invalid input: " + str(e)
-    bytes_value = abs(bytes_value)
-
-    suffixes = ["B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
-    suffix_index = 0
-
-    while bytes_value >= 1024 and suffix_index < len(suffixes) - 1:
-        bytes_value /= 1024
-        suffix_index += 1
-
-    formatted = f"{bytes_value:.{precision}f} {suffixes[suffix_index]}"
-
-    # Remove trailing zeros
-    if "." in formatted.split()[0]:
-        number_part = formatted.split()[0].rstrip("0").rstrip(".")
-        formatted = f"{number_part} {suffixes[suffix_index]}"
-
-    return f"-{formatted}" if is_negative else formatted
+        logger_error.error(f"{RED}Error formatting bytes: {e}{RESET}")
+        return f"Invalid input: {original_value}"
 
 
 def format_scientific(number, max_precision=2):
-    """
-    Format to scientific notation with automatic precision based on number magnitude.
+    """Return ``number`` in scientific notation.
+
+    The mantissa precision is automatically reduced to remove trailing zeros.
+    Special floating point values such as ``nan`` and ``inf`` are returned
+    unchanged. Negative values preserve their sign.
 
     Args:
-        number (int, float): The number to format
-        max_precision (int): Maximum number of decimal places (default: 2)
+        number (int | float): Value to format.
+        max_precision (int): Maximum decimal places allowed in the mantissa. Defaults to ``2``.
 
     Returns:
-        str: Number formatted in scientific notation
-    """
-    if number == 0:
-        return "0"
+        str: The formatted number or ``"Invalid input: <number>"``.
 
+    Raises:
+        ValueError: If ``max_precision`` is negative.
+    """
+
+    original_value = number
     try:
+        if max_precision < 0:
+            raise ValueError("max_precision must be non-negative")
+
+        if number == 0:
+            return "0"
+
         if math.isnan(number) or math.isinf(number):
             return str(number)
+
+        exponent = math.floor(math.log10(abs(number)))
+        mantissa = number / (10**exponent)
+
+        if abs(mantissa) >= 10:
+            mantissa /= 10
+            exponent += 1
+
+        precision = max_precision
+        for p in range(max_precision + 1):
+            test_mantissa = round(mantissa, p)
+            if abs(test_mantissa - mantissa) < 1e-10:
+                precision = p
+                break
+
+        mantissa_str = f"{mantissa:.{precision}f}".rstrip("0").rstrip(".")
+        if exponent == 0:
+            return mantissa_str
+        return f"{mantissa_str}×10^{exponent}"
     except Exception as e:
-        return "Invalid input: " + str(e)
-
-    # Calculate exponent
-    exponent = math.floor(math.log10(abs(number)))
-    mantissa = number / (10**exponent)
-
-    # Determine precision based on mantissa
-    if abs(mantissa) >= 10:
-        mantissa /= 10
-        exponent += 1
-
-    # Auto-adjust precision to avoid trailing zeros
-    precision = max_precision
-    for p in range(max_precision + 1):
-        test_mantissa = round(mantissa, p)
-        if abs(test_mantissa - mantissa) < 1e-10:
-            precision = p
-            break
-
-    mantissa_str = f"{mantissa:.{precision}f}".rstrip("0").rstrip(".")
-    if exponent == 0:
-        return mantissa_str
-    return f"{mantissa_str}×10^{exponent}"
+        logger_error.error(f"{RED}Error formatting scientific number: {e}{RESET}")
+        return f"Invalid input: {original_value}"
 
 
 def format_number_commas(number, precision=2):
-    """
-    Format a number with commas as thousands separators.
+    """Format ``number`` with comma separators.
+
+    Integers are displayed without a decimal part while floats include the
+    specified precision. Invalid inputs result in an informative message.
 
     Args:
-        number (int, float): The number to format
-        precision (int): Number of decimal places to show (default: 2)
+        number (int | float): Value to format.
+        precision (int): Number of decimal places for floats. Defaults to ``2``.
 
     Returns:
-        str: Number formatted with commas
+        str: Number formatted with commas or ``"Invalid input: <number>"``.
+
+    Raises:
+        ValueError: If ``precision`` is negative.
     """
-    if isinstance(number, int):
-        return f"{number:,}"
-    elif isinstance(number, float):
-        return f"{number:,.{precision}f}"
-    else:
-        logger_error.error(f"{RED}Invalid input type: {type(number)}. Must be int or float.{RESET}")
-        return "Invalid input: " + str(number)
+
+    original_value = number
+    try:
+        if precision < 0:
+            raise ValueError("precision must be non-negative")
+
+        if isinstance(number, int):
+            return f"{number:,}"
+        if isinstance(number, float):
+            return f"{number:,.{precision}f}"
+
+        raise TypeError(f"Invalid input type: {type(number)}. Must be int or float.")
+    except Exception as e:
+        logger_error.error(f"{RED}Error formatting number with commas: {e}{RESET}")
+        return f"Invalid input: {original_value}"
 
 
 # ——————————————————————————— Notebook Converter ———————————————————————————— #
@@ -211,7 +257,9 @@ class NotebookConverter:
         try:
             import nbformat
         except ImportError as e:
-            raise ImportError("Missing notebook dependencies. " "Please install: pip install nbformat") from e
+            raise ImportError(
+                "Missing notebook dependencies. " "Please install: pip install nbformat"
+            ) from e
 
         python_path = output_path or notebook_path.with_suffix(".py")
 
