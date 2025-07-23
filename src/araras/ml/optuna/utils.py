@@ -3,6 +3,8 @@ from araras.core import *
 import os, shutil
 import math
 import optuna
+import tensorflow as tf
+import json
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
 
 
@@ -263,3 +265,37 @@ def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
     subdirectory_paths = [dirs[k] for k in subdirs]
 
     return study_dir, *subdirectory_paths
+
+
+def log_trial_error(trial, exc, logs_dir, prune_on=None):
+    """
+    Log a single JSON file for this trial and decide whether to prune.
+
+    Args:
+        trial: optuna.Trial
+        exc: Exception instance
+        logs_dir: str or Path
+        prune_on: iterable of Exception classes that should trigger pruning.
+                  Defaults to common TF runtime errors: ResourceExhaustedError, InternalError, UnavailableError.
+    """
+    if prune_on is None:
+        prune_on = (
+            tf.errors.ResourceExhaustedError,
+            tf.errors.InternalError,
+            tf.errors.UnavailableError,
+        )
+
+    path = os.path.join(logs_dir, f"trial_{trial.number}.log")
+    payload = {
+        "trial": trial.number,
+        "params": trial.params,
+        "user_attrs": trial.user_attrs,
+        "exception_type": type(exc).__name__,
+        "exception_msg": str(exc),
+        "traceback": traceback.format_exc(),
+    }
+    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    if isinstance(exc, prune_on):
+        raise optuna.TrialPruned() from exc
+    raise exc
