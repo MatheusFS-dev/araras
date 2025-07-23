@@ -4,8 +4,6 @@ import os, shutil
 import math
 import optuna
 import tensorflow as tf
-import json
-from pathlib import Path
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
 
 
@@ -301,20 +299,19 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
         # If the exception is in the propagate list, we just re-raise it
         raise exc    
 
-    path = Path(logs_dir) / f"trial_{trial.number}.log"
-    payload = {
-        "trial": trial.number,
-        "params": trial.params,
-        "user_attrs": trial.user_attrs,
-        "exception_type": type(exc).__name__,
-        "exception_msg": str(exc),
-        "traceback": traceback.format_exc(),
-    }
-    path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    path = os.path.join(logs_dir, f"trial_{trial.number}.log")
+    with open(str(path), "w", encoding="utf-8") as log_file:
+        log_file.write(f"Trial: {trial.number}\n")
+        log_file.write(f"Params: {trial.params}\n")
+        log_file.write(f"User Attributes: {trial.user_attrs}\n")
+        log_file.write(f"Exception Type: {type(exc).__name__}\n")
+        log_file.write(f"Exception Message: {str(exc)}\n")
+        log_file.write("Traceback:\n")
+        log_file.write(traceback.format_exc())
 
     if isinstance(exc, prune_on):
         logger.warning(
-            f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}: {exc}. Pruning the trial.{RESET}"
+            f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}. Pruning the trial.{RESET}"
         )
         raise optuna.TrialPruned() from exc
     raise exc
