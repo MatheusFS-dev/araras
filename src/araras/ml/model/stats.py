@@ -1,7 +1,6 @@
 from araras.core import *
 
 import time
-import warnings
 import tensorflow as tf
 import psutil
 
@@ -130,13 +129,7 @@ def get_memory_and_time(
 
     @tf.function
     def infer(*args):
-        with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="The structure of `inputs`",
-                category=UserWarning,
-            )
-            return model(list(args), training=False)
+        return model(list(args), training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
@@ -322,13 +315,7 @@ def get_model_usage_stats(
         dummy_inputs = tensors[0] if len(tensors) == 1 else tensors
 
         def infer():
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="The structure of `inputs`",
-                    category=UserWarning,
-                )
-                return keras_model(dummy_inputs, training=False)
+            return keras_model(dummy_inputs, training=False)
 
     else:
         # Load the SavedModel and obtain the serving_default signature for inference
@@ -343,13 +330,7 @@ def get_model_usage_stats(
         dummy_inputs = inputs
 
         def infer():
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="The structure of `inputs`",
-                    category=UserWarning,
-                )
-                return signature(**dummy_inputs)
+            return signature(**dummy_inputs)
 
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
