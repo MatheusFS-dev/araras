@@ -119,8 +119,8 @@ class FlagBasedRestartManager:
                 provided, the original file name is used for display purposes.
             restart_after_delay: Optional delay in seconds that forces a restart
                 even if the process is still running.
-            supress_tf_warnings: When ``True``, TensorFlow warnings are
-                suppressed in the child process.
+            supress_tf_warnings: When ``True``, TensorFlow warnings emitted by
+                the target script are filtered out in the terminal.
 
         Notes:
             Only the information printed to the user changes; the monitored
@@ -198,7 +198,12 @@ class FlagBasedRestartManager:
                         self.monitor_info = None
 
                     # Launch process
-                    target_pid = self._launch_process(validated_path, working_dir, success_flag_file)
+                    target_pid = self._launch_process(
+                        validated_path,
+                        working_dir,
+                        success_flag_file,
+                        supress_tf_warnings=supress_tf_warnings,
+                    )
                     _mon.print_process_status("\033[92mProcess started\033[0m", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
@@ -330,24 +335,33 @@ class FlagBasedRestartManager:
 
         return False
 
-    def _launch_process(self, file_path: Path, working_dir: str, success_flag_file: str) -> int:
-        """Launch target process.
+    def _launch_process(
+        self,
+        file_path: Path,
+        working_dir: str,
+        success_flag_file: str,
+        supress_tf_warnings: bool = False,
+    ) -> int:
+        """Launch the monitored process in a new terminal.
 
         Args:
-            file_path: Validated path to Python file
-            working_dir: Working directory
-            success_flag_file: Success flag file path
+            file_path: Validated path to the Python file.
+            working_dir: Directory where the command should be executed.
+            success_flag_file: Path to the success flag written by the process.
+            supress_tf_warnings: When ``True``, filter out TensorFlow warnings
+                printed to the terminal.
 
         Returns:
-            Target process PID
+            The PID of the launched process.
 
         Raises:
-            OSError: If PID discovery fails
+            OSError: If the process fails to start or the PID cannot be
+                discovered.
         """
         # Build command for Python file
         command, execution_type = FileTypeHandler.build_execution_command(file_path, success_flag_file)
 
-        launcher = SimpleTerminalLauncher()
+        launcher = SimpleTerminalLauncher(supress_tf_warnings=supress_tf_warnings)
         self.current_terminal_process = launcher.launch(command, working_dir)
 
         # Efficient PID discovery with timeout
