@@ -29,6 +29,11 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
         int: The total number of floating-point operations (FLOPs) for one forward pass.
     """
 
+    # Supress API deprecation warnings
+    logging.getLogger("tensorflow").addFilter(
+        lambda r: "tensor_shape_from_node_def_name" not in r.getMessage()
+    )
+
     # 1) Use the *original* structure
     target_structure = model.input  # tensor if single-input, list/tuple/dict otherwise
     flat_tensors = tf.nest.flatten(target_structure)
