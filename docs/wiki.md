@@ -184,6 +184,9 @@ build_dense_as_conv1d(
     trial_kernel_reg,
     trial_bias_reg,
     trial_activity_reg,
+    data_format,
+    kernel_initializer,
+    bias_initializer,
     name_prefix,
 )
 ```
@@ -204,6 +207,9 @@ Simulate a Dense layer using a Conv1D with kernel_size=1. This function builds a
 | trial_kernel_reg | `bool` | Whether to tune and apply kernel regularization. |
 | trial_bias_reg | `bool` | Whether to tune and apply bias regularization. |
 | trial_activity_reg | `bool` | Whether to tune and apply activity regularization. |
+| data_format | `str` | Data format, either 'channels_last' or 'channels_first'. |
+| kernel_initializer | `initializers.Initializer` | Initializer for kernel weights. |
+| bias_initializer | `initializers.Initializer` | Initializer for bias. |
 | name_prefix | `str` | Prefix for layer names. |
 
 **Returns**
@@ -283,6 +289,9 @@ build_dense_as_conv2d(
     trial_kernel_reg,
     trial_bias_reg,
     trial_activity_reg,
+    data_format,
+    kernel_initializer,
+    bias_initializer,
     name_prefix,
 )
 ```
@@ -303,6 +312,9 @@ Simulate a Dense layer using a Conv2D with kernel_size=(1, 1). This function bui
 | trial_kernel_reg | `bool` | Whether to tune and apply kernel regularization. |
 | trial_bias_reg | `bool` | Whether to tune and apply bias regularization. |
 | trial_activity_reg | `bool` | Whether to tune and apply activity regularization. |
+| data_format | `str` | Data format, either 'channels_last' or 'channels_first'. |
+| kernel_initializer | `initializers.Initializer` | Initializer for kernel weights. |
+| bias_initializer | `initializers.Initializer` | Initializer for bias. |
 | name_prefix | `str` | Prefix for layer names. |
 
 **Returns**
@@ -381,6 +393,9 @@ build_dense_as_conv3d(
     trial_kernel_reg,
     trial_bias_reg,
     trial_activity_reg,
+    data_format,
+    kernel_initializer,
+    bias_initializer,
     name_prefix,
 )
 ```
@@ -401,6 +416,9 @@ Simulate a Dense layer using a Conv3D with kernel_size=(1, 1, 1). This function 
 | trial_kernel_reg | `bool` | Whether to tune and apply kernel regularization. |
 | trial_bias_reg | `bool` | Whether to tune and apply bias regularization. |
 | trial_activity_reg | `bool` | Whether to tune and apply activity regularization. |
+| data_format | `str` | Data format, either 'channels_last' or 'channels_first'. |
+| kernel_initializer | `initializers.Initializer` | Initializer for kernel weights. |
+| bias_initializer | `initializers.Initializer` | Initializer for bias. |
 | name_prefix | `str` | Prefix for layer names. |
 
 **Returns**
