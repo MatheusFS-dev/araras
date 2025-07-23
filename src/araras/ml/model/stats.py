@@ -1,48 +1,66 @@
-from araras.core import *
+"""Helpers for measuring Keras model resource usage.
 
+This module gathers statistics such as FLOPs, MACs, peak memory usage, and
+average inference latency. The utilities are intended for use with small tests
+and benchmarks and do not alter model behaviour.
+"""
+
+from __future__ import annotations
+
+import logging
 import time
-import tensorflow as tf
-import psutil
+from inspect import signature
+from typing import Callable, List, Optional, Tuple
+import warnings
 
+import psutil
+import pynvml
+import tensorflow as tf
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
-from inspect import signature
-
-import pynvml
-
+from araras.core import *
 from araras.ml.model.utils import capture_model_summary
-from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
-
+from araras.utils.misc import (
+    format_bytes,
+    format_number,
+    format_number_commas,
+    format_scientific,
+)
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
-    """
-    Calculates the total number of floating-point operations (FLOPs) needed
-    to perform a single forward pass of the given Keras model.
+    """Return the total number of floating point operations (FLOPs).
+
+    The model is traced with dummy inputs matching ``batch_size`` and the
+    resulting graph is profiled using TensorFlow's V1 profiler API.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        batch_size (int, optional): The batch size to simulate for input. Defaults to 1.
+        model: Keras model to inspect.
+        batch_size: Batch size used for the dummy input. ``1`` by default.
 
     Returns:
-        int: The total number of floating-point operations (FLOPs) for one forward pass.
+        The FLOP count for a single forward pass.
+
+    Notes:
+        TensorFlow's profiler uses graph mode under the hood; therefore the
+        model is executed once to build a concrete function before profiling.
     """
 
-    # Supress API deprecation warnings
+    # Suppress noisy shape warnings emitted by TensorFlow
     logging.getLogger("tensorflow").addFilter(
         lambda r: "tensor_shape_from_node_def_name" not in r.getMessage()
     )
 
-    # 1) Use the *original* structure
+    # 1) Start from the original input structure
     target_structure = model.input  # tensor if single-input, list/tuple/dict otherwise
     flat_tensors = tf.nest.flatten(target_structure)
 
-    # 2) Build specs with same shapes and dtypes
+    # 2) Build TensorSpecs preserving shapes and dtypes
     flat_specs = [tf.TensorSpec([batch_size, *K.int_shape(t)[1:]], dtype=t.dtype) for t in flat_tensors]
     spec_struct = tf.nest.pack_sequence_as(target_structure, flat_specs)
 
-    # 3) Trace with a single positional arg that carries the whole structure
+    # 3) Trace with a single positional arg containing the full structure
     @tf.function(input_signature=[spec_struct])
     def _forward_fn(x):
         return model(x, training=False)
@@ -55,16 +73,16 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
 
 
 def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
-    """
-    Estimates the number of Multiply-Accumulate operations (MACs) required
-    for a single forward pass of the model. Assumes 1 MAC = 2 FLOPs.
+    """Return an estimate of the required multiply-accumulate operations.
+
+    The estimation assumes that a single MAC is equivalent to two FLOPs.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        batch_size (int, optional): The batch size to simulate for input. Defaults to 1.
+        model: Keras model to inspect.
+        batch_size: Batch size used for the dummy input.
 
     Returns:
-        int: The estimated number of MACs for one forward pass.
+        The estimated number of MACs for one forward pass.
     """
 
     return get_flops(model, batch_size) // 2
@@ -78,47 +96,32 @@ def get_memory_and_time(
     test_runs: int = 50,
     verbose: bool = True,
 ) -> Tuple[int, float]:
-    """
-    Measures the peak memory usage and average inference time of a Keras model
-    on GPU or CPU.
+    """Measure peak memory usage and average inference latency.
 
-    Observations:
-        Warmup runs exclude one-time initialization costs from your measurements. On GPU
-        the very first inference will trigger things like driver wake-up, context setup,
-        PTX→BIN compilation and power-state switching, and cache fills. By running a few
-        warmup inferences you force all of that work to happen before timing, so your
-        measured latencies reflect true steady-state performance rather than setup overhead.
-
-        Under @tf.function the first call also traces and builds the execution graph,
-        applies optimizations and allocates buffers. Those activities inflate both time
-        and memory on the “cold” run. Warmup runs let TensorFlow complete tracing and
-        graph compilation once, so your timed loop measures only the optimized graph
-        execution path.
-
-    The CPU memory probe occasionally reports zero usage. When this happens, the
-    measurement is retried up to two additional times. If all attempts still
-    report zero memory, the function returns ``0`` for the peak usage and emits a
-    warning in red.
-
-    Notes:
-        The Keras Functional API may emit a ``UserWarning`` when the provided
-        input structure does not exactly match the model's expected structure.
-        This function suppresses that warning to keep console output tidy.
+    The model is first warmed up to account for graph tracing and kernel
+    compilation. Subsequent runs are timed while monitoring either the GPU
+    memory statistics or the CPU resident set size.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        batch_size (int): The batch size to simulate for input. Defaults to 1.
-            Measure with batch_size=1 to get base per-sample latency.
-        device (int): GPU index to run the model on. Use ``-1`` to run on CPU.
-        warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
-        test_runs (int): Number of runs to measure average inference time. Defaults to 50.
-        verbose (bool): If True, displays a progress bar during test runs.
+        model: Keras model to benchmark.
+        batch_size: Batch size used for the dummy input.
+        device: GPU index or ``-1`` for CPU execution.
+        warmup_runs: Number of warm-up iterations run before measurement.
+        test_runs: Number of timed runs used to compute the average latency.
+        verbose: If ``True``, display a progress bar during measurement.
 
     Returns:
         Tuple[int, float]:
-            - peak memory usage in bytes (0 if CPU measurement fails after
-              several attempts)
-            - average inference time in seconds
+            Peak memory usage in bytes and the average inference time in
+            seconds.
+
+    Notes:
+        Warm-up runs prevent one-time initialisation from skewing the results.
+        When running on CPU the memory probe can occasionally report ``0``. In
+        such cases the measurement is retried twice before giving up.
+
+    Warning:
+        CPU memory reporting may fail and return ``0`` even after retries.
     """
 
     def _zeros_like_model_inputs(model: tf.keras.Model, batch_size: int):
@@ -153,7 +156,7 @@ def get_memory_and_time(
 
         tf.config.experimental.reset_memory_stats(device_str)
 
-        # Warm-up (first call traces)
+        # Warm-up so that graph tracing and kernel compilation are excluded
         _ = infer(dummy_inputs)
         for _ in range(warmup_runs - 1):
             _ = infer(dummy_inputs)
@@ -173,7 +176,7 @@ def get_memory_and_time(
         peak_mem = tf.config.experimental.get_memory_info(device_str)["peak"]
         return peak_mem, avg_time
 
-    # CPU path
+    # ----- CPU execution path -----
     if not tf.config.list_physical_devices("CPU"):
         raise RuntimeError("No CPU device found")
 
@@ -222,47 +225,33 @@ def get_model_usage_stats(
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
-    """
-    Estimate average power draw and energy usage.
-    Careful with the RAPL path; it may vary by system.
-    The RAPL interface is typically found at:
-        $ ls /sys/class/powercap
-        intel-rapl
-        $ ls /sys/class/powercap/intel-rapl
-        intel-rapl:0       intel-rapl:0:0    intel-rapl:1    …
-        $ ls /sys/class/powercap/intel-rapl/intel-rapl:0
-        energy_uj  max_energy_range_uj  name
-    Also, you MUST run this on a linux system with Intel CPUs!!!!!
-    And run the python script with SUDO to access RAPL files.
+    """Estimate average power draw and per-inference energy consumption.
 
-    Notes:
-        When a ``tf.keras.Model`` is provided, Keras may issue a ``UserWarning``
-        about mismatched input structure if the dummy inputs do not precisely
-        reflect the model's expected format. The warning is suppressed within
-        this function.
+    Power measurements come from NVML when ``device`` is a GPU index or from the
+    Intel RAPL interface when ``device`` is ``-1``.  The model is executed
+    ``n_trials`` times and instantaneous power readings are averaged.
 
     Args:
-        saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
-            a .keras model file, or a Keras Model instance.
-        n_trials (int): Number of inference trials to perform. Defaults to 100000.
-        device (int): GPU index for power measurement, or ``-1`` to use the CPU.
-        rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
-        verbose (bool): If True, displays a progress bar during the trials.
-
-    Raises:
-        RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
-        ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
+        saved_model: Path to a SavedModel directory, a ``.keras`` file, or an
+            already loaded ``tf.keras.Model``.
+        n_trials: Number of inference trials to run.
+        device: GPU index to query via NVML or ``-1`` for CPU measurements.
+        rapl_path: Path to the RAPL energy counter used for CPU power readings.
+        verbose: If ``True``, display a progress bar during the trials.
 
     Returns:
         Tuple[float, float, float]:
-            - per_run_time (float):
-                Average run time in seconds. Measures a mix of tracing, initialization,
-                asynchronous queuing, Python overhead, and power-reading delays,
-                so its “average” can be dominated by non-inference costs.
-            - avg_power (float): Average power draw in watts. If a negative value is
-              measured repeatedly, the function returns 0 after two retries.
-            - avg_energy (float): Average energy consumed per inference in joules. This
-              will also be ``0`` if ``avg_power`` could not be measured correctly.
+            Average runtime per inference, average power in watts and average
+            energy consumed per inference in joules.
+
+    Raises:
+        RuntimeError: If NVML initialisation fails when measuring GPU power.
+        ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
+
+    Notes:
+        CPU power measurement requires Linux, Intel CPUs and access to the RAPL
+        counters (often root privileges). When dummy inputs do not match the
+        model signature, Keras may emit a ``UserWarning`` which is suppressed.
     """
     # Decide how we will run inference
     is_keras_model = False
@@ -278,7 +267,7 @@ def get_model_usage_stats(
         )
         is_keras_model = True
 
-    # NVML will be initialized lazily inside the measurement loop when needed
+    # NVML is initialised inside the measurement loop only when GPU power is queried
 
     def read_cpu_power_rapl() -> Optional[float]:
         """Read CPU package energy via Intel RAPL interface.
@@ -298,7 +287,7 @@ def get_model_usage_stats(
             )
 
     def _make_dummy_for_keras(m: tf.keras.Model):
-        # m.input keeps the original structure (tensor, list, tuple, dict)
+        # Preserve the nested input structure when creating random tensors
         spec_structure = m.input
         flat_specs = tf.nest.flatten(spec_structure)
         flat_rand = [
@@ -318,7 +307,7 @@ def get_model_usage_stats(
                 return keras_model(dummy_inputs, training=False)
 
     else:
-        # SavedModel branch (already a dict). Keep it consistent:
+        # SavedModel branch (already a dict). Create random tensors matching the signature
         _, kwargs = signature.structured_input_signature
         dummy_inputs = tf.nest.map_structure(
             lambda spec: tf.random.normal(
@@ -330,8 +319,6 @@ def get_model_usage_stats(
         def infer():
             return signature(**dummy_inputs)
 
-    # Print the shapes of the input tensors
-    # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
     MAX_RETRIES = 2
     attempt = 0
@@ -412,18 +399,26 @@ def write_model_stats_to_file(
     extra_attrs: Optional[List[str]] = None,
     verbose: bool = False,
 ) -> None:
-    """
-    Write model statistics to a file.
+    """Persist model statistics to ``file_path``.
+
+    Statistics include parameter count, FLOPs, MACs, memory usage, inference
+    time and power metrics. Additional ``extra_attrs`` may be written after the
+    default statistics.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        file_path (str): The path to the output file.
-        bits_per_param (int): Number of bits per parameter for model size calculation.
-        batch_size (int): The batch size to simulate for input.
-        device (int): GPU index to run the model on. Use ``-1`` for CPU.
-        n_trials (int): Number of trials for power and energy measurement.
-        extra_attrs (Optional[List[str]]): Additional attributes to write to the file.
-        verbose (bool): If True, print detailed information.
+        model: Model to analyse.
+        file_path: Destination path for the text file.
+        bits_per_param: Bit depth assumed per parameter when estimating size.
+        batch_size: Batch size used when measuring performance metrics.
+        device: GPU index used for measurement, or ``-1`` for CPU.
+        n_trials: Number of inference runs used for the power measurement.
+        extra_attrs: Optional mapping of attribute names to values written after
+            the default statistics.
+        verbose: If ``True``, print detailed information during measurement.
+
+    Notes:
+        Extra attributes can be used to record custom metrics such as accuracy
+        alongside the default statistics.
     """
     params = model.count_params()
     peak_mem_usage, inference_time = get_memory_and_time(
