@@ -43,25 +43,43 @@ def print_warning_jit():
         PRINT_ONCE_JIT = False
 
 
-def check_gpu_limit(knn_list, K_list, units_list, n=20*200):
-    """
-        For each combination of knn_k, Chebyshev order K, and units, compute whether
-        the GPU sparse-dense matmul limit (output_channels * nnz(support) <= 2^31 - 1) is
-        respected. Returns a DataFrame summarizing threshold_units and lists of safe/error units.
+def check_gpu_limit(knn_list, K_list, units_list, n=20 * 200, save_path=None):
+    """Evaluate TensorFlow's GPU sparse--dense multiplication limit.
 
+    For each combination of ``knn_k`` (number of neighbours), Chebyshev order
+    ``K`` and output ``units`` this helper estimates whether the operation
+    ``output_channels * nnz(support)`` exceeds the GPU threshold ``2^31 - 1``.
+    Results are collected in a :class:`pandas.DataFrame` and optionally written
+    to ``save_path``.
 
-        Example code:
-            # Define your trial values
-            knn_values = [4, 8, 12, 16]
-            K_values = list(range(2, 11))
-            units_values = [128 * i for i in range(1, 9)]
+    Example:
+        ````python
+        knn_values = [4, 8, 12, 16]
+        K_values = list(range(2, 11))
+        units_values = [128 * i for i in range(1, 9)]
 
-            check_gpu_limit(
-                knn_list=knn_values,
-                K_list=K_values,
-                units_list=units_values,
-                n=20*200,
-            )
+        check_gpu_limit(
+            knn_list=knn_values,
+            K_list=K_values,
+            units_list=units_values,
+            n=20 * 200,
+            save_path="results.csv",
+        )
+        ````
+
+    Args:
+        knn_list: List of ``k`` values used when building the kNN graph.
+        K_list: List of Chebyshev orders to test.
+        units_list: Candidate numbers of output channels.
+        n: Number of nodes in the graph.
+        save_path: Optional path where the resulting table is saved as CSV.
+
+    Returns:
+        pandas.DataFrame: Table with ``knn_k``, ``K``, ``threshold_units`` and
+        lists of ``safe_units``/``error_units``.
+
+    Raises:
+        OSError: If writing the CSV file fails.
     """
 
     def threshold_units(knn_k, K, n):
@@ -94,6 +112,9 @@ def check_gpu_limit(knn_list, K_list, units_list, n=20*200):
             )
     df = pd.DataFrame(rows)
     display(df)
+    if save_path is not None:
+        df.to_csv(save_path, index=False)
+    return df
 
 
 def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
