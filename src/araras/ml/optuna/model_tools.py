@@ -286,19 +286,14 @@ def set_user_attr_model_stats(
         Dict[str, float]: A dictionary containing model statistics
     """
     params = model.count_params()
-
-    print("\n\n\nget_memory_and_time...")
     peak_mem_usage, inference_time = get_memory_and_time(
         model, batch_size=batch_size, device=device, verbose=verbose
     )
-    print("\n\n\nget_model_usage_stats...")
     _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
 
     trial.set_user_attr("num_params", params)
     trial.set_user_attr("model_size", params * bits_per_param)
-    print("\n\n\nget_flops...")
     trial.set_user_attr("flops", get_flops(model))
-    print("\n\n\nget_macs...")
     trial.set_user_attr("macs", get_macs(model))
     trial.set_user_attr("model_summary", capture_model_summary(model))
     trial.set_user_attr("peak_memory_usage", peak_mem_usage)
