@@ -1,14 +1,13 @@
 from araras.core import *
 
 import time
+import warnings
 import tensorflow as tf
 import psutil
 
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
-
-from inspect import signature
 
 import pynvml
 
@@ -21,6 +20,10 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     Calculates the total number of floating-point operations (FLOPs) needed
     to perform a single forward pass of the given Keras model.
 
+    Flow:
+        model -> input_shape -> TensorSpec -> tf.function -> concrete function
+        -> graph -> profile(graph) -> total_float_ops -> return
+
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int, optional): The batch size to simulate for input. Defaults to 1.
@@ -29,23 +32,25 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
         int: The total number of floating-point operations (FLOPs) for one forward pass.
     """
 
-    # 1) Use the *original* structure
-    target_structure = model.input  # tensor if single-input, list/tuple/dict otherwise
-    flat_tensors = tf.nest.flatten(target_structure)
+    # 1) Build one TensorSpec per input tensor
+    specs = []
+    for inp in model.inputs:
+        # K.int_shape(inp) → (None, d1, d2, …)
+        dims = K.int_shape(inp)[1:]  # drop the None batch dim
+        specs.append(tf.TensorSpec([batch_size, *dims], dtype=inp.dtype))
 
-    # 2) Build specs with same shapes and dtypes
-    flat_specs = [tf.TensorSpec([batch_size, *K.int_shape(t)[1:]], dtype=t.dtype) for t in flat_tensors]
-    spec_struct = tf.nest.pack_sequence_as(target_structure, flat_specs)
+    # 2) Define a wrapper whose args exactly match model.inputs
+    @tf.function(input_signature=specs)
+    def _forward_fn(*args):
+        # args is a tuple of Tensors, one per input.
+        # Pass them to the model as a list:
+        return model(list(args), training=False)
 
-    # 3) Trace with a single positional arg that carries the whole structure
-    @tf.function(input_signature=[spec_struct])
-    def _forward_fn(x):
-        return model(x, training=False)
-
+    # 3) Grab the concrete graph and profile it
     concrete = _forward_fn.get_concrete_function()
     opts = ProfileOptionBuilder.float_operation()
-    opts["output"] = "none"
-    info = profile(concrete.graph, options=opts)  # This API was designed for TensorFlow v1
+    opts["output"] = "none"  # Supress report
+    info = profile(concrete.graph, options=opts)
     return info.total_float_ops
 
 
@@ -53,6 +58,10 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
     """
     Estimates the number of Multiply-Accumulate operations (MACs) required
     for a single forward pass of the model. Assumes 1 MAC = 2 FLOPs.
+
+    Flow:
+        model -> input_shape -> TensorSpec -> tf.function -> concrete function
+        -> graph -> profile(graph) -> total_float_ops // 2 -> return
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -115,56 +124,53 @@ def get_memory_and_time(
               several attempts)
             - average inference time in seconds
     """
+    # Prepare dummy inputs matching model.inputs
+    shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
+    dummy_inputs = [tf.zeros(shape, dtype=inp.dtype) for shape, inp in zip(shapes, model.inputs)]
 
-    def _zeros_like_model_inputs(model: tf.keras.Model, batch_size: int):
-        """Create zeros preserving the original input nesting."""
-        structure = model.input  # tensor if single input, else nested
-        flat = tf.nest.flatten(structure)
-        flat_zeros = [tf.zeros([batch_size] + list(K.int_shape(t)[1:]), dtype=t.dtype) for t in flat]
-        return tf.nest.pack_sequence_as(structure, flat_zeros)
-
-    dummy_inputs = _zeros_like_model_inputs(model, batch_size)
-
-    # Build a TensorSpec with the same nesting
-    def _spec_from_tensor(t):
-        shape = [d if d is not None else 1 for d in t.shape]
-        return tf.TensorSpec(shape=shape, dtype=t.dtype)
-
-    spec_struct = tf.nest.map_structure(_spec_from_tensor, dummy_inputs)
-
-    @tf.function(input_signature=[spec_struct])
-    def infer(x):
+    @tf.function
+    def infer(*args):
         with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", r"The structure of `inputs`", UserWarning)
-            return model(x, training=False)
+            warnings.filterwarnings(
+                "ignore",
+                message="The structure of `inputs`",
+                category=UserWarning,
+            )
+            return model(list(args), training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
 
     if use_gpu:
+        # Verify GPU exists
         gpus = tf.config.list_physical_devices("GPU")
         if not gpus or device >= len(gpus):
             raise RuntimeError(f"No GPU found for index {device}")
 
+        # Reset tracked peak to include weights + graph
         tf.config.experimental.reset_memory_stats(device_str)
 
-        # Warm-up (first call traces)
-        _ = infer(dummy_inputs)
+        # Warm-up runs (first includes trace + alloc)
+        _ = infer(*dummy_inputs)
         for _ in range(warmup_runs - 1):
-            _ = infer(dummy_inputs)
+            _ = infer(*dummy_inputs)
 
+        # Timed inference with forced sync
         times = []
-        it = range(test_runs)
+        progress_iter = range(test_runs)
         if verbose:
-            it = white_track(it, description="Measuring GPU", total=test_runs)
-
-        for _ in it:
+            progress_iter = white_track(
+                progress_iter,
+                description="Measuring GPU",
+                total=test_runs,
+            )
+        for _ in progress_iter:
             t0 = time.perf_counter()
-            out = infer(dummy_inputs)
-            _ = tf.nest.flatten(out)[0].numpy()  # force sync
+            out = infer(*dummy_inputs)
+            _ = out.numpy()
             times.append(time.perf_counter() - t0)
-
         avg_time = sum(times) / len(times)
+
         peak_mem = tf.config.experimental.get_memory_info(device_str)["peak"]
         return peak_mem, avg_time
 
@@ -173,41 +179,53 @@ def get_memory_and_time(
         raise RuntimeError("No CPU device found")
 
     def _measure_cpu() -> Tuple[int, float]:
+        """Run the CPU measurement loop and return (peak_mem, avg_time)."""
         proc = psutil.Process()
         baseline = proc.memory_info().rss
 
-        with tf.device("/CPU:0"):
-            _ = infer(dummy_inputs)
+        # warmup on CPU
+        cpu_index = 0
+        with tf.device(f"/CPU:{cpu_index}"):
+            _ = infer(*dummy_inputs)
             for _ in range(warmup_runs - 1):
-                _ = infer(dummy_inputs)
+                _ = infer(*dummy_inputs)
 
         peak_rss = baseline
         times = []
-        with tf.device("/CPU:0"):
-            it = range(test_runs)
+        with tf.device(f"/CPU:{cpu_index}"):
+            progress_iter = range(test_runs)
             if verbose:
-                it = white_track(it, description="Measuring CPU", total=test_runs)
-            for _ in it:
+                progress_iter = white_track(
+                    progress_iter,
+                    description="Measuring CPU",
+                    total=test_runs,
+                )
+            for _ in progress_iter:
                 t0 = time.perf_counter()
-                out = infer(dummy_inputs)
-                _ = tf.nest.flatten(out)[0].numpy()
+                out = infer(*dummy_inputs)
+                _ = out.numpy()
                 times.append(time.perf_counter() - t0)
                 rss = proc.memory_info().rss
                 if rss > peak_rss:
                     peak_rss = rss
 
-        return peak_rss - baseline, sum(times) / len(times)
+        avg_time = sum(times) / len(times)
+        peak_mem = peak_rss - baseline
+        return peak_mem, avg_time
 
     max_retries = 2
+    peak_mem = 0
+    avg_time = 0.0
     for attempt in range(max_retries + 1):
         peak_mem, avg_time = _measure_cpu()
         if peak_mem != 0:
-            return peak_mem, avg_time
+            break
         if attempt < max_retries:
             logger.warning(f"{YELLOW}CPU memory usage measured as 0 bytes, retrying measurement...{RESET}")
         else:
             logger.error(f"{RED}CPU memory usage could not be measured, returning 0.{RESET}")
-            return 0, avg_time
+
+    return peak_mem, avg_time
 
 
 def get_model_usage_stats(
@@ -292,38 +310,46 @@ def get_model_usage_stats(
                 "Ensure the path is correct and accessible, or run with sudo.\033[0m"
             )
 
-    def _make_dummy_for_keras(m: tf.keras.Model):
-        # m.input keeps the original structure (tensor, list, tuple, dict)
-        spec_structure = m.input
-        flat_specs = tf.nest.flatten(spec_structure)
-        flat_rand = [
-            tf.random.normal([1 if d is None else d for d in t.shape], dtype=t.dtype) for t in flat_specs
-        ]
-        return tf.nest.pack_sequence_as(spec_structure, flat_rand)
-
     dummy_inputs = None
     infer: Callable[[], tf.Tensor]
 
     if is_keras_model:
-        dummy_inputs = _make_dummy_for_keras(keras_model)
+        # Build random tensors based on the keras model input shapes
+        tensors = []
+        for tensor in keras_model.inputs:
+            shape = [d if d is not None else 1 for d in tensor.shape]
+            tensors.append(tf.random.normal(shape, dtype=tensor.dtype))
+        dummy_inputs = tensors[0] if len(tensors) == 1 else tensors
 
         def infer():
             with warnings.catch_warnings():
-                warnings.filterwarnings("ignore", r"The structure of `inputs`", UserWarning)
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The structure of `inputs`",
+                    category=UserWarning,
+                )
                 return keras_model(dummy_inputs, training=False)
 
     else:
-        # SavedModel branch (already a dict). Keep it consistent:
+        # Load the SavedModel and obtain the serving_default signature for inference
+        reloaded_model: tf.Module = tf.saved_model.load(saved_model)
+        signature = reloaded_model.signatures["serving_default"]
+
         _, kwargs = signature.structured_input_signature
-        dummy_inputs = tf.nest.map_structure(
-            lambda spec: tf.random.normal(
-                [1 if d is None else d for d in spec.shape.as_list()], dtype=spec.dtype
-            ),
-            kwargs,
-        )
+        inputs = {}
+        for name, spec in kwargs.items():
+            shape = [d if d is not None else 1 for d in spec.shape.as_list()]
+            inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
+        dummy_inputs = inputs
 
         def infer():
-            return signature(**dummy_inputs)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="The structure of `inputs`",
+                    category=UserWarning,
+                )
+                return signature(**dummy_inputs)
 
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")

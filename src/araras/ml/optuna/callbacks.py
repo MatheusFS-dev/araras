@@ -39,7 +39,7 @@ class ImprovementStagnation:
     def __init__(
         self,
         min_n_trials: int = DEFAULT_MIN_N_TRIALS,
-        window_size: int = 5,
+        window_size: int = 10,
         variance_threshold: float = 1e-10,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
         verbose: bool = False,
