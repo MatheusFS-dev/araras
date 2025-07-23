@@ -217,6 +217,13 @@ def generate_conv1d_pool_table(
     Optionally, histograms of the final lengths for each layer can be saved to
     disk.
 
+    Notes:
+    Total rows = ``(len(kernel_sizes) * len(pool_sizes) * len(filters))**n_layers``.
+
+    Warning:
+    Large search spaces may lead to extremely big tables and long
+    generation times.
+
     Args:
         L0: Initial temporal length before the first block.
         n_layers: Number of ``Conv1D`` + ``MaxPooling1D`` blocks.
@@ -241,13 +248,6 @@ def generate_conv1d_pool_table(
 
     Raises:
         None
-
-    Notes:
-        Total rows = ``(len(kernel_sizes) * len(pool_sizes) * len(filters))**n_layers``.
-
-    Warning:
-        Large search spaces may lead to extremely big tables and long
-        generation times.
     """
 
     def conv1d_len(L: float, k: int, stride: int, dilation: int) -> float:
