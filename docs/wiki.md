@@ -1635,6 +1635,9 @@ package you can execute:
 monitor path/to/job.py [another_job.ipynb ...] [options]
 ```
 
+> [!TIP]
+> You can use `CUDA_VISIBLE_DEVICES=0,1 monitor ...` to limit the GPUs
+
 | Flag | Type | Description |
 |------|------|-------------|
 | `-t, --title` | `str` | Custom title for monitoring and email alerts. |
