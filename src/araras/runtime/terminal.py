@@ -52,7 +52,7 @@ class SimpleTerminalLauncher:
         if self.supress_tf_warnings:
             # Filter only XLA ``ptxas`` register spill warnings while keeping
             # all other TensorFlow logs visible.
-            cmd_str = f"{cmd_str} 2>&1 | grep -v 'ptxas warning'"
+            cmd_str = f"{cmd_str} 2> >(awk '!/ptxas warning/ {print}' >&2)"
 
         # Simple PID capture without exit code complexity
         full_cmd = f"({cmd_str}) & echo $! > '{pid_file}'; wait"
