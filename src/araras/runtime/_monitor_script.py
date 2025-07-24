@@ -105,7 +105,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "-w",
         "--supress-tf-warnings",
         action="store_true",
-        default=True,
+        default=False,
         help="Suppress TensorFlow warnings",
     )
     parser.add_argument(
