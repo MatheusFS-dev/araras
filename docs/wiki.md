@@ -1736,7 +1736,7 @@ monitoring resources are created and raises ``FileNotFoundError`` if not.
 | credentials_file | `Any` | Path to credentials JSON file (defaults to ./json/credentials.json) |
 | restart_after_delay | `Any` | restart the run after a delay in seconds |
 | retry_attempts | `int` | Number of retry attempts before sending failure email |
-| supress_tf_warnings | `bool` | Suppress TensorFlow warnings (default: False) |
+| supress_tf_warnings | `bool` | Suppress TensorFlow `ptxas` register spill warnings (default: False) |
 | resource_usage_log_file | `Any` | Path to write process resource usage logs. If None, logging is disabled. |
 
 **Returns**
@@ -1769,7 +1769,7 @@ monitor path/to/job.py [another_job.ipynb ...] [options]
 | `-c, --credentials-file` | `str` | Path to a JSON file with email credentials. |
 | `-f, --force-restart` | `float` | Restart the job after this many seconds even if it has not crashed. |
 | `-a, --retry-attempts` | `int` | Number of retry attempts before a failure email is sent. |
-| `-w, --supress-tf-warnings` | `bool` | Suppress TensorFlow warnings. |
+| `-w, --supress-tf-warnings` | `bool` | Filter TensorFlow `ptxas` register spill warnings. |
 | `-u, --resource-usage-log-file` | `str` | File to log process resource usage statistics. |
 | `-s, --success-flag-file` | `str` | Path where the monitored script writes a completion flag. Defaults to `/tmp/success.flag`. |
 
