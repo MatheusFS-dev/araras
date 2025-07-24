@@ -213,8 +213,8 @@ def get_callbacks_study(
     tensorboard_logs: str | None = None,
     monitor: str = "val_loss",
     early_stopping_patience: int | None = 5,
-    reduce_lr_patience: int | None = 2,
-    pruning_interval: int | None = 3,
+    reduce_lr_patience: int | None = 3,
+    pruning_interval: int | None = 5,
 ) -> List[tf.keras.callbacks.Callback]:
     """Return Optuna-specific training callbacks.
 
