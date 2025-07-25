@@ -441,6 +441,7 @@ def run_auto_restart(
     retry_attempts: int = None,
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
+    restart_email_warning: bool = True,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -460,6 +461,7 @@ def run_auto_restart(
         retry_attempts: Number of retry attempts before sending failure email
         supress_tf_warnings: Suppress TensorFlow warnings (default: False)
         resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
+        restart_email_warning: Enable or disable email warnings for restart events
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -486,6 +488,7 @@ def run_auto_restart(
             recipients_file=recipients_file,
             credentials_file=credentials_file,
             retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
+            restart_email_warning=restart_email_warning,
         )
 
         if force_restart is not None and force_restart > 0:

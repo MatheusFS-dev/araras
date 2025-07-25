@@ -51,6 +51,7 @@ class FlagBasedRestartManager:
         recipients_file: Optional[str] = None,
         credentials_file: Optional[str] = None,
         retry_attempts: int = 2,
+        restart_email_warning: bool = True,
     ):
         """Initialize restart manager with consolidated email notification support.
 
@@ -60,6 +61,7 @@ class FlagBasedRestartManager:
             recipients_file: Path to recipients JSON file
             credentials_file: Path to credentials JSON file
             retry_attempts: Number of retry attempts before sending failure email
+            restart_email_warning: Enable restart success and failure email messages
         """
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
@@ -83,7 +85,10 @@ class FlagBasedRestartManager:
         self.recipients_file = recipients_file or "./json/recipients.json"
         self.credentials_file = credentials_file or "./json/credentials.json"
         self.email_manager = ConsolidatedEmailManager(
-            self.recipients_file, self.credentials_file, retry_attempts
+            self.recipients_file,
+            self.credentials_file,
+            retry_attempts,
+            restart_email_warning,
         )
         self.process_title: str = ""
 

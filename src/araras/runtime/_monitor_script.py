@@ -109,6 +109,12 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         help="Suppress TensorFlow warnings",
     )
     parser.add_argument(
+        "--no-restart-email",
+        action="store_true",
+        default=False,
+        help="Disable email warnings for process restarts",
+    )
+    parser.add_argument(
         "-u",
         "--resource-usage-log-file",
         default=None,
@@ -155,6 +161,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             force_restart=args.force_restart,
             retry_attempts=args.retry_attempts,
             supress_tf_warnings=args.supress_tf_warnings,
+            restart_email_warning=not args.no_restart_email,
             resource_usage_log_file=args.resource_usage_log_file,
         )
 

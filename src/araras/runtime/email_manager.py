@@ -17,6 +17,7 @@ class ConsolidatedEmailManager:
         "retry_attempts",
         "retry_count",
         "last_notification_time",
+        "restart_email_warning",
     )
 
     def __init__(
@@ -24,6 +25,7 @@ class ConsolidatedEmailManager:
         recipients_file: Optional[str] = None,
         credentials_file: Optional[str] = None,
         retry_attempts: int = 2,
+        restart_email_warning: bool = True,
     ) -> None:
         """Initialize the manager and validate configuration.
 
@@ -35,6 +37,8 @@ class ConsolidatedEmailManager:
                 Defaults to ``"./json/credentials.json"``.
             retry_attempts: Maximum number of retries to attempt before giving
                 up on sending a notification.
+            restart_email_warning: When ``True`` restart success and failure
+                messages are sent via email.
 
         Notes:
             The configuration files are only validated for existence. Any
@@ -44,6 +48,7 @@ class ConsolidatedEmailManager:
         self.credentials_file = credentials_file or "./json/credentials.json"
         self.retry_attempts = retry_attempts
         self.email_enabled = self._validate_email_config()
+        self.restart_email_warning = restart_email_warning
         self.retry_count = 0
         self.last_notification_time = 0
 
@@ -84,6 +89,9 @@ class ConsolidatedEmailManager:
                 sending routine after logging a warning.
         """
         if not self.email_enabled:
+            return
+
+        if not self.restart_email_warning and status_type in {"restart_success", "restart_failed"}:
             return
 
         try:
