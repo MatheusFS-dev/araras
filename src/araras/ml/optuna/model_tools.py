@@ -168,8 +168,8 @@ def plot_model_param_distribution(
     sampling finishes. The TensorFlow session is cleared between trials to
     release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``, 
     ``tf.errors.InternalError``, ``tf.errors.UnavailableError`` or cuDNN scratch-space
-    allocation errors are skipped. The number of skipped trials is counted and
-    printed at the end.
+    allocation errors are skipped. These types of errors usually mean Out of Memory (OOM) 
+    problems. The number of skipped trials is counted and printed at the end.
 
     Args:
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
