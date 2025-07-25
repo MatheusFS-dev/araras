@@ -287,7 +287,6 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
                                         tf.errors.ResourceExhaustedError: None,
                                         tf.errors.InternalError: None,
                                         tf.errors.UnavailableError: None,
-                                        tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
                                     }
         propagate (dict, optional): Dictionary mapping exception types to substrings that trigger propagation.
                                     If None, defaults to:
@@ -308,7 +307,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
             tf.errors.ResourceExhaustedError: None,
             tf.errors.InternalError: None,
             tf.errors.UnavailableError: None,
-            tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
+            # tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
         }
 
     if propagate is None:
