@@ -176,8 +176,10 @@ def plot_model_param_distribution(
     allocation errors are skipped. These types of errors usually mean Out of
     Memory (OOM) problems. The number of skipped trials is counted and printed
     at the end. When ``csv_path`` is provided, the collected statistics are
-    saved to a CSV file. If ``logs_dir`` is set, parameters of failed trials
-    along with the error traceback are saved to individual log files.
+    saved to a CSV file including each trial's parameters and sorted in
+    decreasing order of the estimated training memory. If ``logs_dir`` is set,
+    parameters of failed trials along with the error traceback are saved to
+    individual log files.
 
     Args:
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
@@ -188,7 +190,9 @@ def plot_model_param_distribution(
         fig_save_path: Optional path to save the figure. If ``None`` the figure
             is shown only.
         figsize: Figure size for the histograms.
-        csv_path: Optional path to store trial results as CSV.
+        csv_path: Optional path to store trial results as CSV. The CSV includes
+            the sampled parameters and is sorted by ``training_memory_mb`` in
+            descending order.
         logs_dir: Directory where error logs are written. If ``None``, no logs
             are saved.
 
@@ -219,6 +223,7 @@ def plot_model_param_distribution(
     param_counts = []
     model_sizes_mb = []
     training_memory = []
+    collected_params = []
 
     progress_iter = range(n_trials)
     if n_trials:
@@ -255,10 +260,9 @@ def plot_model_param_distribution(
             size_mb = (n_params * bits_per_param) / (8 * 1024 * 1024)
             model_sizes_mb.append(size_mb)
 
-            training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (
-                1024 * 1024
-            )
+            training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024)
             training_memory.append(training_memory_mb)
+            collected_params.append(trial.params)
 
             study.tell(trial, 0.0)
         except tf.errors.ResourceExhaustedError as e:
@@ -289,7 +293,7 @@ def plot_model_param_distribution(
             print(f"Error during model sampling: {e}")
             traceback.print_exc()
             _log_error(trial, e)
-            
+
         finally:
             if "model" in locals():
                 del model
@@ -324,12 +328,17 @@ def plot_model_param_distribution(
                 "param_count": param_counts,
                 "model_size_mb": model_sizes_mb,
                 "training_memory_mb": training_memory,
+                "params": collected_params,
             }
         )
+        df = df.sort_values("training_memory_mb", ascending=False)
         df.to_csv(csv_path, index=False)
 
     if oom_count:
         print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")
+        print(f"{RED}Skipped {internal_error_count} trial(s) due to InternalError.{RESET}")
+        print(f"{RED}Skipped {unavailable_count} trial(s) due to UnavailableError.{RESET}")
+        print(f"{RED}Skipped {scratch_error_count} trial(s) due to cuDNN scratch space error.{RESET}")
 
 
 def set_user_attr_model_stats(
