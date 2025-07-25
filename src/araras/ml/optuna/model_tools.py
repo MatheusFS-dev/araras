@@ -155,6 +155,69 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
     return param_memory + activation_memory + framework_overhead
 
 
+def prune_model_by_config(
+    trial: optuna.Trial,
+    model: keras.Model,
+    thresholds: Dict[str, float],
+    *,
+    bits_per_param: int = 32,
+    batch_size: int = 1,
+) -> None:
+    """Prune the given trial if the model exceeds any configured limits.
+
+    This helper computes several resource statistics for ``model`` and compares
+    them against user provided ``thresholds``. If a threshold is surpassed the
+    associated Optuna ``trial`` is pruned and a warning is logged.
+
+    Supported keys for ``thresholds`` are:
+
+    - ``"param"``: total number of parameters.
+    - ``"model_size"``: model size in megabytes.
+    - ``"memory_mb"``: estimated training memory in megabytes.
+    - ``"flops"``: FLOPs for a single forward pass.
+
+    Args:
+        trial: The Optuna trial that may be pruned.
+        model: Keras model to evaluate.
+        thresholds: Mapping of pruning criteria to threshold values.
+        bits_per_param: Bits used to store each parameter when calculating the
+            model size. Defaults to ``32``.
+        batch_size: Batch size used for memory estimation. Defaults to ``1``.
+
+    Returns:
+        None
+
+    Raises:
+        optuna.TrialPruned: If any threshold is exceeded.
+
+    Notes:
+        When multiple thresholds are provided the model will be pruned as soon
+        as the first limit is violated.
+
+    Warning:
+        The memory estimation relies on :func:`estimate_training_memory` and is
+        therefore only an approximation.
+    """
+
+    metrics = {
+        "param": model.count_params(),
+        "model_size": model.count_params() * bits_per_param / (8 * 1024 * 1024),
+        "memory_mb": estimate_training_memory(model, batch_size=batch_size)
+        / (1024 * 1024),
+        "flops": get_flops(model, batch_size=1),
+    }
+
+    for key, threshold in thresholds.items():
+        value = metrics.get(key)
+        if value is None:
+            continue
+        if value > threshold:
+            logger.warning(
+                f"{YELLOW}Pruning trial {trial.number}: {key} {value:.2f} exceeds {threshold}{RESET}"
+            )
+            raise optuna.TrialPruned(f"Model exceeded {key} limit")
+
+
 def plot_model_param_distribution(
     build_model_fn: Callable[[optuna.Trial], tf.keras.Model],
     bits_per_param: int,
