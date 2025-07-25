@@ -272,32 +272,54 @@ def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
 
 def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
     """
-    Log a single JSON file for this trial and decide whether to prune.
-
+    Log an error that occurred during a trial and handle pruning or propagation.
+    If the error matches any pruning rules, it raises a TrialPruned exception and logs the error.
+    If the error matches any propagation rules, it re-raises the exception.
+    If no rules match, it logs the error to a file and re-raises the exception.
+    
     Args:
-        trial: optuna.Trial
-        exc: Exception instance
-        logs_dir: str or Path
-        prune_on: iterable of Exception classes that should trigger pruning.
-                  Defaults to common TF runtime errors: ResourceExhaustedError, InternalError, UnavailableError.
-        propagate: iterable of Exception classes that should be just propagated without doing anything.
-                  Defaults to optuna.exceptions.TrialPruned.
-
+        trial (optuna.trial.FrozenTrial): The trial that encountered the error.
+        exc (Exception): The exception that occurred during the trial.
+        logs_dir (str): Directory where the error log file should be saved.
+        prune_on (dict, optional): Dictionary mapping exception types to substrings that trigger pruning.
+                                   If None, defaults to:
+                                    {
+                                        tf.errors.ResourceExhaustedError: None,
+                                        tf.errors.InternalError: None,
+                                        tf.errors.UnavailableError: None,
+                                        tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
+                                    }
+        propagate (dict, optional): Dictionary mapping exception types to substrings that trigger propagation.
+                                    If None, defaults to:
+                                    {
+                                        optuna.exceptions.TrialPruned: None,
+                                    }
+                                    
+    Returns:
+        None
+        
+    Raises:
+        optuna.TrialPruned: If the error matches any pruning rules.
+        Exception: If the error matches any propagation rules or if no rules match.
     """
+
     if prune_on is None:
-        prune_on = (
-            tf.errors.ResourceExhaustedError,
-            tf.errors.InternalError,
-            tf.errors.UnavailableError,
-        )
+        prune_on = {
+            tf.errors.ResourceExhaustedError: None,
+            tf.errors.InternalError: None,
+            tf.errors.UnavailableError: None,
+            tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
+        }
 
     if propagate is None:
-        propagate = (optuna.exceptions.TrialPruned,)
-        
-        
-    if isinstance(exc, propagate):
-        # If the exception is in the propagate list, we just re-raise it
-        raise exc    
+        propagate = {
+            optuna.exceptions.TrialPruned: None,
+        }
+
+    # If exception should just propagate, re‑raise now
+    for exc_type, msg_substr in propagate.items():
+        if isinstance(exc, exc_type) and (msg_substr is None or msg_substr in str(exc)):
+            raise exc
 
     path = os.path.join(logs_dir, f"trial_{trial.number}.log")
     with open(str(path), "w", encoding="utf-8") as log_file:
@@ -309,9 +331,13 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
         log_file.write("Traceback:\n")
         log_file.write(traceback.format_exc())
 
-    if isinstance(exc, prune_on):
-        logger.warning(
-            f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}. Pruning the trial.{RESET}"
-        )
-        raise optuna.TrialPruned() from exc
-    raise exc
+    # Check each prune rule
+    for exc_type, msg_substr in prune_on.items():
+        if isinstance(exc, exc_type) and (msg_substr is None or msg_substr in str(exc)):
+            logger.warning(
+                f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}"
+                f"{', message contains '+repr(msg_substr) if msg_substr else ''}. Pruning.{RESET}"
+            )
+            raise optuna.TrialPruned() from exc
+
+    raise exc  # Otherwise re‑raise
