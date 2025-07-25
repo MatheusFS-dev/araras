@@ -198,6 +198,10 @@ def prune_model_by_config(
         The memory estimation relies on :func:`estimate_training_memory` and is
         therefore only an approximation.
     """
+    
+    # Do nothing if user pass thresholds={}
+    if not thresholds:
+        return
 
     metrics = {
         "param": model.count_params(),
