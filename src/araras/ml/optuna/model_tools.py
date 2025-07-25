@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow import keras
 import gc
+import pandas as pd
+import traceback
+import os
 
 
 from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
@@ -157,19 +160,24 @@ def plot_model_param_distribution(
     bits_per_param: int,
     batch_size: int = 1,
     n_trials: int = 1000,
-    save_path: Optional[str] = None,
+    fig_save_path: Optional[str] = None,
     figsize: Tuple[int, int] = (18, 6),
+    csv_path: Optional[str] = None,
+    logs_dir: Optional[str] = None,
 ) -> None:
-    """Sample random models and plot parameter and size histograms.
+    """Sample random models, plot statistics and optionally save the results.
 
     This helper draws ``n_trials`` random models using ``build_model_fn`` and
     records their parameter counts, approximate model sizes and estimated
     training memory consumption. Histograms for each metric are displayed once
     sampling finishes. The TensorFlow session is cleared between trials to
-    release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``, 
+    release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``,
     ``tf.errors.InternalError``, ``tf.errors.UnavailableError`` or cuDNN scratch-space
-    allocation errors are skipped. These types of errors usually mean Out of Memory (OOM) 
-    problems. The number of skipped trials is counted and printed at the end.
+    allocation errors are skipped. These types of errors usually mean Out of
+    Memory (OOM) problems. The number of skipped trials is counted and printed
+    at the end. When ``csv_path`` is provided, the collected statistics are
+    saved to a CSV file. If ``logs_dir`` is set, parameters of failed trials
+    along with the error traceback are saved to individual log files.
 
     Args:
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
@@ -177,8 +185,12 @@ def plot_model_param_distribution(
         bits_per_param: Number of bits used to store each parameter.
         batch_size: Batch size used when estimating the training memory.
         n_trials: Total number of random trials to sample.
-        save_path: Optional path to save the figure. If None, the figure is shown only.
+        fig_save_path: Optional path to save the figure. If ``None`` the figure
+            is shown only.
         figsize: Figure size for the histograms.
+        csv_path: Optional path to store trial results as CSV.
+        logs_dir: Directory where error logs are written. If ``None``, no logs
+            are saved.
 
     Returns:
         None. The histograms are displayed using ``matplotlib``.
@@ -188,7 +200,9 @@ def plot_model_param_distribution(
 
     Notes:
         Clearing the Keras backend session between trials mitigates
-        ``ResourceExhaustedError`` on GPUs with limited VRAM.
+        ``ResourceExhaustedError`` on GPUs with limited VRAM. When ``logs_dir``
+        is provided, one log file per failed trial is created containing the
+        trial parameters and traceback.
 
     Warning:
         Models that trigger ``ResourceExhaustedError`` are ignored in the final
@@ -198,6 +212,9 @@ def plot_model_param_distribution(
 
     sampler = optuna.samplers.RandomSampler()
     study = optuna.create_study(sampler=sampler, direction="minimize")
+
+    if logs_dir:
+        os.makedirs(logs_dir, exist_ok=True)
 
     param_counts = []
     model_sizes_mb = []
@@ -217,6 +234,16 @@ def plot_model_param_distribution(
     unavailable_count = 0
     scratch_error_count = 0
 
+    def _log_error(trial: optuna.Trial, err: BaseException) -> None:
+        if not logs_dir:
+            return
+        log_file = os.path.join(logs_dir, f"trial_{trial.number}.log")
+        with open(log_file, "w") as f:
+            f.write(f"Params: {trial.params}\n")
+            f.write(f"Error: {err}\n")
+            f.write("Traceback:\n")
+            f.write(traceback.format_exc())
+
     for _ in progress_iter:
         trial = study.ask()
         try:
@@ -234,29 +261,34 @@ def plot_model_param_distribution(
             training_memory.append(training_memory_mb)
 
             study.tell(trial, 0.0)
-        except tf.errors.ResourceExhaustedError:
+        except tf.errors.ResourceExhaustedError as e:
             oom_count += 1
+            _log_error(trial, e)
             continue
 
-        except tf.errors.InternalError:
+        except tf.errors.InternalError as e:
             internal_error_count += 1
+            _log_error(trial, e)
             continue
 
-        except tf.errors.UnavailableError:
+        except tf.errors.UnavailableError as e:
             unavailable_count += 1
+            _log_error(trial, e)
             continue
 
         except tf.errors.UnknownError as e:
             # Skip cuDNN scratch‑space failures
             if "CUDNN failed to allocate the scratch space" in str(e):
                 scratch_error_count += 1
+                _log_error(trial, e)
                 continue
             # re‑raise other UnknownError
             raise
-        
+
         except Exception as e:
             print(f"Error during model sampling: {e}")
             traceback.print_exc()
+            _log_error(trial, e)
             
         finally:
             if "model" in locals():
@@ -283,8 +315,18 @@ def plot_model_param_distribution(
     plt.tight_layout()
     plt.show()
 
-    if save_path:
-        fig.savefig(save_path, bbox_inches="tight", dpi=300)
+    if fig_save_path:
+        fig.savefig(fig_save_path, bbox_inches="tight", dpi=300)
+
+    if csv_path:
+        df = pd.DataFrame(
+            {
+                "param_count": param_counts,
+                "model_size_mb": model_sizes_mb,
+                "training_memory_mb": training_memory,
+            }
+        )
+        df.to_csv(csv_path, index=False)
 
     if oom_count:
         print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")

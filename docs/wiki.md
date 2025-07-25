@@ -1410,6 +1410,10 @@ plot_model_param_distribution(
     bits_per_param,
     batch_size,
     n_trials,
+    fig_save_path=None,
+    figsize=(18, 6),
+    csv_path=None,
+    logs_dir=None,
 )
 ```
 Sample random models and plot parameter and size histograms.
@@ -1421,6 +1425,10 @@ Sample random models and plot parameter and size histograms.
 | bits_per_param | `int` | Number of bits used to store each parameter. |
 | batch_size | `int` | Batch size used when estimating the training memory. |
 | n_trials | `int` | Total number of random trials to sample. |
+| fig_save_path | `str, optional` | Path to save the figure. If ``None`` the figure is shown only. |
+| figsize | `Tuple[int, int]` | Figure size for the histograms. |
+| csv_path | `str, optional` | Path to save trial results in CSV format. |
+| logs_dir | `str, optional` | Directory to store error logs for failed trials. |
 
 **Returns**
 `None`
@@ -1431,6 +1439,9 @@ Sample random models and plot parameter and size histograms.
 **Notes**
 - Clearing the Keras backend session between trials mitigates ``ResourceExhaustedError``.
 - Trials that raise ``ResourceExhaustedError`` are skipped and the count is printed.
+- When ``csv_path`` is provided the sampled statistics are saved to CSV. If
+  ``logs_dir`` is set, parameters of failed trials along with their traceback are
+  written to individual log files.
 
 ### set_user_attr_model_stats
 
