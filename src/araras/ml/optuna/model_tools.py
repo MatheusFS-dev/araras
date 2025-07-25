@@ -172,7 +172,7 @@ def prune_model_by_config(
     Supported keys for ``thresholds`` are:
 
     - ``"param"``: total number of parameters.
-    - ``"model_size"``: model size in megabytes.
+    - ``"model_size"``: model size in megabytes. MUST PROVIDE CORRECT BITS PER PARAMETER.
     - ``"memory_mb"``: estimated training memory in megabytes.
     - ``"flops"``: FLOPs for a single forward pass.
 
