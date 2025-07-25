@@ -206,7 +206,7 @@ def prune_model_by_config(
 
     metrics = {
         "param": model.count_params(),
-        "model_size": model.count_params() * bytes_per_param / (8 * 1024 * 1024),
+        "model_size": model.count_params() * bytes_per_param / (1024 * 1024),
         "memory_mb": estimate_training_memory(model, batch_size=batch_size)
         / (1024 * 1024),
         "flops": get_flops(model, batch_size=1),
