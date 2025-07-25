@@ -162,6 +162,7 @@ def prune_model_by_config(
     *,
     bits_per_param: int = 32,
     batch_size: int = 1,
+    verbose: bool = False,
 ) -> None:
     """Prune the given trial if the model exceeds any configured limits.
 
@@ -183,6 +184,7 @@ def prune_model_by_config(
         bits_per_param: Bits used to store each parameter when calculating the
             model size. Defaults to ``32``.
         batch_size: Batch size used for memory estimation. Defaults to ``1``.
+        verbose: If True, print stats for the model.
 
     Returns:
         None
@@ -210,6 +212,12 @@ def prune_model_by_config(
         / (1024 * 1024),
         "flops": get_flops(model, batch_size=1),
     }
+    
+    if verbose:
+        print(f"\nModel stats for trial {trial.number}:")
+        for key, value in metrics.items():
+            print(f"  {key}: {value:.2f}")
+        print()
 
     for key, threshold in thresholds.items():
         value = metrics.get(key)
