@@ -65,7 +65,7 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
         "-m",
         "--max-restarts",
         type=int,
-        default=10,
+        default=1000,
         help="Maximum number of restart attempts",
     )
     parser.add_argument(
