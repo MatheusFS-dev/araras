@@ -166,8 +166,10 @@ def plot_model_param_distribution(
     records their parameter counts, approximate model sizes and estimated
     training memory consumption. Histograms for each metric are displayed once
     sampling finishes. The TensorFlow session is cleared between trials to
-    release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``
-    are skipped and the total number of skipped trials is printed at the end.
+    release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``, 
+    ``tf.errors.InternalError``, ``tf.errors.UnavailableError`` or cuDNN scratch-space
+    allocation errors are skipped. The number of skipped trials is counted and
+    printed at the end.
 
     Args:
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
@@ -208,7 +210,13 @@ def plot_model_param_distribution(
             description="Sampling models",
             total=n_trials,
         )
+
+    # Counters for skipped trials
     oom_count = 0
+    internal_error_count = 0
+    unavailable_count = 0
+    scratch_error_count = 0
+
     for _ in progress_iter:
         trial = study.ask()
         try:
@@ -229,6 +237,27 @@ def plot_model_param_distribution(
         except tf.errors.ResourceExhaustedError:
             oom_count += 1
             continue
+
+        except tf.errors.InternalError:
+            internal_error_count += 1
+            continue
+
+        except tf.errors.UnavailableError:
+            unavailable_count += 1
+            continue
+
+        except tf.errors.UnknownError as e:
+            # Skip cuDNN scratch‑space failures
+            if "CUDNN failed to allocate the scratch space" in str(e):
+                scratch_error_count += 1
+                continue
+            # re‑raise other UnknownError
+            raise
+        
+        except Exception as e:
+            print(f"Error during model sampling: {e}")
+            traceback.print_exc()
+            
         finally:
             if "model" in locals():
                 del model
@@ -253,7 +282,7 @@ def plot_model_param_distribution(
 
     plt.tight_layout()
     plt.show()
-    
+
     if save_path:
         fig.savefig(save_path, bbox_inches="tight", dpi=300)
 
