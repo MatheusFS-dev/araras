@@ -5,6 +5,7 @@ import math
 import optuna
 import tensorflow as tf
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
+from araras.utils.system import _get_nvidia_smi_data
 
 
 def get_remaining_trials(study: optuna.Study, num_trials: int) -> list[optuna.trial.FrozenTrial]:
@@ -276,6 +277,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
     If the error matches any pruning rules, it raises a TrialPruned exception and logs the error.
     If the error matches any propagation rules, it re-raises the exception.
     If no rules match, it logs the error to a file and re-raises the exception.
+    It also collects GPU statistics using nvidia-smi and includes them in the log.
     
     Args:
         trial (optuna.trial.FrozenTrial): The trial that encountered the error.
@@ -322,6 +324,23 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
 
     path = os.path.join(logs_dir, f"trial_{trial.number}.log")
     with open(str(path), "w", encoding="utf-8") as log_file:
+        # Gather GPU statistics using nvidia-smi
+        try:
+            gpu_data = _get_nvidia_smi_data()
+            log_file.write("GPU Stats:\n")
+            if gpu_data:
+                for gpu in gpu_data:
+                    log_file.write(
+                        f"  GPU {gpu['index']} - {gpu['name']}: "
+                        f"used {gpu['used_mb']}MB / {gpu['total_mb']}MB, "
+                        f"free {gpu['free_mb']}MB, "
+                        f"temp {gpu['temperature']}C, "
+                        f"util {gpu['utilization']}%\n"
+                    )
+            else:
+                log_file.write("  No GPU information available\n")
+        except Exception as e:  # noqa: BLE001
+            log_file.write(f"Failed to collect GPU stats: {e}\n")
         log_file.write(f"Trial: {trial.number}\n")
         log_file.write(f"Params: {trial.params}\n")
         log_file.write(f"User Attributes: {trial.user_attrs}\n")
