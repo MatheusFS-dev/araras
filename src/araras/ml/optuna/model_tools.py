@@ -160,7 +160,7 @@ def prune_model_by_config(
     model: keras.Model,
     thresholds: Dict[str, float],
     *,
-    bits_per_param: int = 32,
+    bytes_per_param: int = 8,
     batch_size: int = 1,
     verbose: bool = False,
 ) -> None:
@@ -181,8 +181,7 @@ def prune_model_by_config(
         trial: The Optuna trial that may be pruned.
         model: Keras model to evaluate.
         thresholds: Mapping of pruning criteria to threshold values.
-        bits_per_param: Bits used to store each parameter when calculating the
-            model size. Defaults to ``32``.
+        bytes_per_param: Bytes used to store each parameter when calculating the model size. Defaults to ``8``.
         batch_size: Batch size used for memory estimation. Defaults to ``1``.
         verbose: If True, print stats for the model.
 
@@ -207,7 +206,7 @@ def prune_model_by_config(
 
     metrics = {
         "param": model.count_params(),
-        "model_size": model.count_params() * bits_per_param / (8 * 1024 * 1024),
+        "model_size": model.count_params() * bytes_per_param / (8 * 1024 * 1024),
         "memory_mb": estimate_training_memory(model, batch_size=batch_size)
         / (1024 * 1024),
         "flops": get_flops(model, batch_size=1),
@@ -232,7 +231,7 @@ def prune_model_by_config(
 
 def plot_model_param_distribution(
     build_model_fn: Callable[[optuna.Trial], tf.keras.Model],
-    bits_per_param: int,
+    bytes_per_param: int,
     batch_size: int = 1,
     n_trials: int = 1000,
     fig_save_path: Optional[str] = None,
@@ -259,7 +258,7 @@ def plot_model_param_distribution(
     Args:
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a
             compiled :class:`tf.keras.Model`.
-        bits_per_param: Number of bits used to store each parameter.
+        bytes_per_param: Number of bytes used to store each parameter.
         batch_size: Batch size used when estimating the training memory.
         n_trials: Total number of random trials to sample.
         fig_save_path: Optional path to save the figure. If ``None`` the figure
@@ -332,7 +331,7 @@ def plot_model_param_distribution(
             n_params = model.count_params()
             param_counts.append(n_params)
 
-            size_mb = (n_params * bits_per_param) / (8 * 1024 * 1024)
+            size_mb = (n_params * bytes_per_param) / (8 * 1024 * 1024)
             model_sizes_mb.append(size_mb)
 
             training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024)
@@ -419,7 +418,7 @@ def plot_model_param_distribution(
 def set_user_attr_model_stats(
     trial: optuna.Trial,
     model: tf.keras.Model,
-    bits_per_param: int,
+    bytes_per_param: int,
     batch_size: int,
     n_trials: int = 10000,
     device: int = 0,
@@ -458,7 +457,7 @@ def set_user_attr_model_stats(
     _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
 
     trial.set_user_attr("num_params", params)
-    trial.set_user_attr("model_size", params * bits_per_param)
+    trial.set_user_attr("model_size", params * bytes_per_param)
     trial.set_user_attr("flops", get_flops(model))
     trial.set_user_attr("macs", get_macs(model))
     trial.set_user_attr("model_summary", capture_model_summary(model))
@@ -469,7 +468,7 @@ def set_user_attr_model_stats(
 
     return {
         "num_params": params,
-        "model_size": params * bits_per_param,
+        "model_size": params * bytes_per_param,
         "flops": get_flops(model),
         "macs": get_macs(model),
         "model_summary": capture_model_summary(model),

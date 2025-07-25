@@ -1032,7 +1032,7 @@ Estimate average power draw and energy usage. Careful with the RAPL path; it may
 write_model_stats_to_file(
     model,
     file_path,
-    bits_per_param,
+    bytes_per_param,
     batch_size,
     device,
     n_trials,
@@ -1047,7 +1047,7 @@ Write model statistics to a file.
 |------|------|-------------|
 | model | `tf.keras.Model` | The Keras model to analyze. |
 | file_path | `str` | The path to the output file. |
-| bits_per_param | `int` | Number of bits per parameter for model size calculation. |
+| bytes_per_param | `int` | Number of bytes per parameter for model size calculation. |
 | batch_size | `int` | The batch size to simulate for input. |
 | device | `int` | GPU index to run the model on. Use ``-1`` for CPU. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
@@ -1407,7 +1407,7 @@ Estimate total VRAM needed for training a Keras model in bytes.
 ```python
 plot_model_param_distribution(
     build_model_fn,
-    bits_per_param,
+    bytes_per_param,
     batch_size,
     n_trials,
     fig_save_path=None,
@@ -1422,7 +1422,7 @@ Sample random models and plot parameter and size histograms.
 | Name | Type | Description |
 |------|------|-------------|
 | build_model_fn | `Callable` | Callable that receives an Optuna ``Trial`` and returns a compiled ``tf.keras.Model``. |
-| bits_per_param | `int` | Number of bits used to store each parameter. |
+| bytes_per_param | `int` | Number of bytes used to store each parameter. |
 | batch_size | `int` | Batch size used when estimating the training memory. |
 | n_trials | `int` | Total number of random trials to sample. |
 | fig_save_path | `str, optional` | Path to save the figure. If ``None`` the figure is shown only. |
@@ -1449,7 +1449,7 @@ Sample random models and plot parameter and size histograms.
 set_user_attr_model_stats(
     trial,
     model,
-    bits_per_param,
+    bytes_per_param,
     batch_size,
     n_trials,
     device,

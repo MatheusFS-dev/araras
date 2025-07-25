@@ -410,7 +410,7 @@ def get_model_usage_stats(
 def write_model_stats_to_file(
     model: tf.keras.Model,
     file_path: str,
-    bits_per_param: int,
+    bytes_per_param: int,
     batch_size: int,
     device: int = 0,
     n_trials: int = 1000,
@@ -433,7 +433,7 @@ def write_model_stats_to_file(
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         file_path (str): The path to the output file.
-        bits_per_param (int): Number of bits per parameter for model size calculation.
+        bytes_per_param (int): Number of bytes per parameter for model size calculation.
         batch_size (int): The batch size to simulate for input.
         device (int): GPU index to run the model on. Use ``-1`` for CPU.
         n_trials (int): Number of trials for power and energy measurement.
@@ -448,7 +448,7 @@ def write_model_stats_to_file(
 
     model_stats = {
         "num_params": params,
-        "model_size": params * bits_per_param,
+        "model_size": params * bytes_per_param,
         "flops": get_flops(model),
         "macs": get_macs(model),
         "model_summary": capture_model_summary(model),
