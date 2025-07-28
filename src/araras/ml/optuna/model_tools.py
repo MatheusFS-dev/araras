@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow import keras
 import gc
 import pandas as pd
+import numpy as np
 import traceback
 import os
 
@@ -238,6 +239,7 @@ def plot_model_param_distribution(
     figsize: Tuple[int, int] = (18, 6),
     csv_path: Optional[str] = None,
     logs_dir: Optional[str] = None,
+    corr_csv_path: Optional[str] = None,
 ) -> None:
     """Sample random models, plot statistics and optionally save the results.
 
@@ -269,6 +271,9 @@ def plot_model_param_distribution(
             descending order.
         logs_dir: Directory where error logs are written. If ``None``, no logs
             are saved.
+        corr_csv_path: Optional path to store correlations between numeric
+            hyperparameters and the model parameter count. If ``None`` the
+            correlation analysis is skipped.
 
     Returns:
         None. The histograms are displayed using ``matplotlib``.
@@ -407,6 +412,19 @@ def plot_model_param_distribution(
         )
         df = df.sort_values("training_memory_mb", ascending=False)
         df.to_csv(csv_path, index=False)
+
+    if corr_csv_path:
+        param_df = pd.DataFrame(collected_params)
+        param_df["param_count"] = param_counts
+        numeric_df = param_df.select_dtypes(include=[np.number])
+        if "param_count" in numeric_df.columns:
+            corr = (
+                numeric_df.corr(method="spearman")["param_count"]
+                .drop("param_count")
+                .dropna()
+                .sort_values(key=abs, ascending=False)
+            )
+            corr.to_csv(corr_csv_path)
 
     if oom_count:
         print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")

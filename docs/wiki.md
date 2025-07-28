@@ -1414,6 +1414,7 @@ plot_model_param_distribution(
     figsize=(18, 6),
     csv_path=None,
     logs_dir=None,
+    corr_csv_path=None,
 )
 ```
 Sample random models and plot parameter and size histograms.
@@ -1429,6 +1430,7 @@ Sample random models and plot parameter and size histograms.
 | figsize | `Tuple[int, int]` | Figure size for the histograms. |
 | csv_path | `str, optional` | Path to save trial results in CSV format. |
 | logs_dir | `str, optional` | Directory to store error logs for failed trials. |
+| corr_csv_path | `str, optional` | Path to save hyperparameter correlations. |
 
 **Returns**
 `None`
@@ -1442,6 +1444,8 @@ Sample random models and plot parameter and size histograms.
 - When ``csv_path`` is provided the sampled statistics are saved to CSV. If
   ``logs_dir`` is set, parameters of failed trials along with their traceback are
   written to individual log files.
+- When ``corr_csv_path`` is set, a Spearman correlation analysis between numeric
+  hyperparameters and the number of parameters is written to CSV.
 
 ### set_user_attr_model_stats
 
