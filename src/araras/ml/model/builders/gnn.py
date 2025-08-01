@@ -268,6 +268,7 @@ def build_gcn(
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
     retry_on_cpu: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "gcn",
 ) -> layers.Layer:
     """Build a single Graph Convolutional Network (GCN) layer.
@@ -299,6 +300,8 @@ def build_gcn(
         trial_kernel_reg: If ``True``, search for a kernel regularizer.
         trial_bias_reg: If ``True``, search for a bias regularizer.
         trial_activity_reg: If ``True``, search for an activity regularizer.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         retry_on_cpu: Retry the layer on the CPU when a GPU ``InvalidArgumentError`` occurs.
         name_prefix: Prefix for naming the created Keras layers.
 
@@ -337,10 +340,16 @@ def build_gcn(
         retry_on_cpu=retry_on_cpu,
     )
 
+
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x
@@ -366,6 +375,7 @@ def build_gat(
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
     retry_on_cpu: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "gat",
 ) -> layers.Layer:
     """Build a single Graph Attention (GAT) layer.
@@ -398,6 +408,8 @@ def build_gat(
         trial_kernel_reg: If ``True``, search for a kernel regularizer.
         trial_bias_reg: If ``True``, search for a bias regularizer.
         trial_activity_reg: If ``True``, search for an activity regularizer.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         retry_on_cpu: Retry the operation on the CPU if a GPU
             ``InvalidArgumentError`` is raised.
         name_prefix: Prefix for naming the created Keras layers.
@@ -444,7 +456,12 @@ def build_gat(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x
@@ -469,6 +486,7 @@ def build_cheb(
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
     retry_on_cpu: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "cheb",
 ) -> layers.Layer:
     """Build a single Chebyshev graph convolution layer.
@@ -500,6 +518,8 @@ def build_cheb(
         trial_kernel_reg: If ``True``, search for a kernel regularizer.
         trial_bias_reg: If ``True``, search for a bias regularizer.
         trial_activity_reg: If ``True``, search for an activity regularizer.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         retry_on_cpu: Retry the operation on the CPU if a GPU
             ``InvalidArgumentError`` is raised.
         name_prefix: Prefix for naming the created Keras layers.
@@ -545,7 +565,12 @@ def build_cheb(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    x = layers.Activation(kparams.get_activation(trial, f"{name_prefix}_act"), name=f"{name_prefix}_act")(x)
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
     return x

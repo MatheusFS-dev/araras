@@ -23,6 +23,7 @@ def build_tcnn1d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "tcnn1d",
 ) -> layers.Layer:
     """
@@ -50,6 +51,8 @@ def build_tcnn1d(
         trial_kernel_reg (bool): Whether to enable and tune kernel regularization.
         trial_bias_reg (bool): Whether to enable and tune bias regularization.
         trial_activity_reg (bool): Whether to enable and tune activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         name_prefix (str): Prefix used for naming all internal layers.
 
     Returns:
@@ -106,11 +109,13 @@ def build_tcnn1d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize outputs to stabilize learning
 
-    # Apply activation function as defined by kparams
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),  # Retrieve activation function from kparams
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x  # Return the final output tensor after all transformations
 
@@ -134,6 +139,7 @@ def build_tcnn2d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "tcnn2d",
 ) -> layers.Layer:
     """
@@ -162,6 +168,8 @@ def build_tcnn2d(
         trial_kernel_reg (bool): Whether to enable and tune kernel regularization.
         trial_bias_reg (bool): Whether to enable and tune bias regularization.
         trial_activity_reg (bool): Whether to enable and tune activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         name_prefix (str): Prefix used for naming all internal layers.
 
     Returns:
@@ -219,11 +227,13 @@ def build_tcnn2d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply activation function as defined by kparams
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x
 
@@ -250,6 +260,7 @@ def build_tcnn3d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     name_prefix: str = "tcnn3d",
 ) -> layers.Layer:
     """
@@ -280,6 +291,8 @@ def build_tcnn3d(
         trial_kernel_reg (bool): Whether to enable and tune kernel regularization.
         trial_bias_reg (bool): Whether to enable and tune bias regularization.
         trial_activity_reg (bool): Whether to enable and tune activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         name_prefix (str): Prefix used for naming all internal layers.
 
     Returns:
@@ -339,10 +352,12 @@ def build_tcnn3d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply activation function as defined by kparams
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x

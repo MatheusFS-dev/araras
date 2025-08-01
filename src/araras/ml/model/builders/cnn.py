@@ -22,6 +22,7 @@ def build_cnn1d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     strides: int = 1,
     dilation_rate: int = 1,
     groups: int = 1,
@@ -51,6 +52,8 @@ def build_cnn1d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         strides (int): Stride size for the convolution.
         dilation_rate (int): Dilation rate for convolution.
         groups (int): Number of filter groups.
@@ -115,11 +118,13 @@ def build_cnn1d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from kparams using the trial
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply the activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     # Return the final transformed Keras layer
     return x
@@ -135,6 +140,7 @@ def build_dense_as_conv1d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     data_format: str = "channels_last",
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
@@ -164,6 +170,8 @@ def build_dense_as_conv1d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         data_format (str): Data format, either 'channels_last' or 'channels_first'.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
         bias_initializer (initializers.Initializer): Initializer for bias.
@@ -200,6 +208,7 @@ def build_dense_as_conv1d(
         trial_kernel_reg=trial_kernel_reg,
         trial_bias_reg=trial_bias_reg,
         trial_activity_reg=trial_activity_reg,
+        activation=activation,
     )
 
 
@@ -345,6 +354,7 @@ def build_cnn2d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     strides: tuple[int, int] = (1, 1),
     dilation_rate: tuple[int, int] = (1, 1),
     groups: int = 1,
@@ -375,6 +385,8 @@ def build_cnn2d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         strides (tuple[int, int]): Stride size for height and width.
         dilation_rate (tuple[int, int]): Dilation rate for height and width.
         groups (int): Number of filter groups.
@@ -441,11 +453,13 @@ def build_cnn2d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from kparams using the trial
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply the activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x
 
@@ -460,6 +474,7 @@ def build_dense_as_conv2d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     data_format: str = "channels_last",
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
@@ -489,6 +504,8 @@ def build_dense_as_conv2d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         data_format (str): Data format, either 'channels_last' or 'channels_first'.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
         bias_initializer (initializers.Initializer): Initializer for bias.
@@ -525,6 +542,7 @@ def build_dense_as_conv2d(
         trial_kernel_reg=trial_kernel_reg,
         trial_bias_reg=trial_bias_reg,
         trial_activity_reg=trial_activity_reg,
+        activation=activation,
     )
 
 
@@ -643,11 +661,13 @@ def build_cnn3d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
 
-    # Apply the activation function retrieved from kparams using the trial
-    x = layers.Activation(
-        kparams.get_activation(trial, f"{name_prefix}_act"),
-        name=f"{name_prefix}_act",
-    )(x)
+    # Determine and apply the activation function
+    if activation is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x
 
@@ -662,6 +682,7 @@ def build_dense_as_conv3d(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
+    activation: Optional[Callable[..., Any]] = None,
     data_format: str = "channels_last",
     kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
     bias_initializer: initializers.Initializer = initializers.Zeros(),
@@ -691,6 +712,8 @@ def build_dense_as_conv3d(
         trial_kernel_reg (bool): Whether to tune and apply kernel regularization.
         trial_bias_reg (bool): Whether to tune and apply bias regularization.
         trial_activity_reg (bool): Whether to tune and apply activity regularization.
+        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
         data_format (str): Data format, either 'channels_last' or 'channels_first'.
         kernel_initializer (initializers.Initializer): Initializer for kernel weights.
         bias_initializer (initializers.Initializer): Initializer for bias.
@@ -727,4 +750,5 @@ def build_dense_as_conv3d(
         trial_kernel_reg=trial_kernel_reg,
         trial_bias_reg=trial_bias_reg,
         trial_activity_reg=trial_activity_reg,
+        activation=activation,
     )
