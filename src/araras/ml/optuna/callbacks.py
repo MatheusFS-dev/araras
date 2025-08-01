@@ -144,9 +144,13 @@ class StopIfKeepBeingPruned:
             threshold (int): The number of consecutive pruned trials required to stop the study.
         """
         self.threshold = threshold
-        self._consequtive_pruned_count = 0  # Tracks the count of consecutive pruned trials.
+        self._consequtive_pruned_count = (
+            0  # Tracks the count of consecutive pruned trials.
+        )
 
-    def __call__(self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial) -> None:
+    def __call__(
+        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
         """
         Invoked after each trial to check its state and decide whether to stop the study.
 
@@ -162,6 +166,82 @@ class StopIfKeepBeingPruned:
 
         # Stop the study if the threshold of consecutive pruned trials is reached.
         if self._consequtive_pruned_count >= self.threshold:
+            study.stop()
+
+
+class StopWhenNoValueImprovement:
+    """Stop a study if the objective value fails to improve for ``patience`` trials.
+
+    The callback compares the study's best objective value after each completed
+    trial with the best value seen so far. If no improvement exceeding
+    ``min_delta`` occurs for ``patience`` consecutive completed trials, the
+    optimization is halted via :meth:`optuna.study.Study.stop`.
+
+    Notes:
+        Only trials that finish successfully are considered when counting the
+        patience window. Pruned or failed trials reset neither the patience
+        counter nor the best value.
+
+    Args:
+        patience: Number of consecutive completed trials allowed without a new
+            best value.
+        min_delta: Minimum absolute improvement required to reset the patience
+            counter. Defaults to ``0.0``.
+        verbose: If ``True``, log a warning when the study is stopped.
+
+    Returns:
+        None
+
+    Raises:
+        ValueError: If ``patience`` is not positive or ``min_delta`` is negative.
+    """
+
+    def __init__(
+        self, patience: int, min_delta: float = 0.0, verbose: bool = False
+    ) -> None:
+        if patience <= 0:
+            raise ValueError("patience must be positive")
+        if min_delta < 0:
+            raise ValueError("min_delta must be non-negative")
+
+        self.patience = patience
+        self.min_delta = min_delta
+        self.verbose = verbose
+
+        self._best_value: Optional[float] = None
+        self._counter: int = 0
+
+    def __call__(
+        self, study: optuna.study.Study, trial: optuna.trial.FrozenTrial
+    ) -> None:
+        """Update best value and stop the study if no improvement is observed."""
+
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            return
+
+        if self._best_value is None:
+            self._best_value = trial.value
+            self._counter = 0
+            return
+
+        direction = study.direction
+        if direction == optuna.study.StudyDirection.MINIMIZE:
+            improvement = self._best_value - trial.value
+        else:
+            improvement = trial.value - self._best_value
+
+        if improvement > self.min_delta:
+            self._best_value = trial.value
+            self._counter = 0
+        else:
+            self._counter += 1
+
+        if self._counter >= self.patience:
+            if self.verbose:
+                logger.warning(
+                    f"[No Value Improvement Callback] Stopping study {study.study_name} after "
+                    f"{self.patience} trials without improvement"
+                )
             study.stop()
 
 
