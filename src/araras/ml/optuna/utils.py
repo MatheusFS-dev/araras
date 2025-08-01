@@ -405,9 +405,9 @@ def run_study(
         extra_attrs: Additional user attributes copied when saving the top trials.
         pruner: Optional custom Optuna pruner. Defaults to :class:`HyperbandPruner`.
         sampler: Optional custom Optuna sampler. Defaults to :class:`TPESampler`.
-        patience: Patience for the value improvement callback.
-        prune_threshold: Threshold for the pruning callback.
-        variance_threshold: Variance threshold for the stagnation callback.
+        patience: Stop a study if the objective value fails to improve for patience trials.
+        prune_threshold: Stop the study if prune_threshold consecutive pruned trials happen.
+        variance_threshold: Stop the study if the variance of improvement falls below this threshold.
 
     Returns:
         optuna.study.Study: The completed study object.
