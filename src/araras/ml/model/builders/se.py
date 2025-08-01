@@ -9,8 +9,10 @@ from araras.ml.model.hyperparams import KParams
 def build_squeeze_excite_1d(
     x: tf.keras.layers.Layer,
     trial: optuna.Trial,
-    kparams: KParams,
+    kparams: Optional[KParams],
     ratio_choices: List[int],
+    act_reduce: Optional[Callable[..., Any]] = None,
+    act_expand: Optional[Callable[..., Any]] = None,
     name_prefix: str = "se_block",
 ) -> tf.keras.layers.Layer:
     """Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
@@ -19,8 +21,13 @@ def build_squeeze_excite_1d(
     Args:
         x: Input 3D tensor (batch, length, channels).
         trial: Optuna Trial object for suggesting hyperparameters.
-        kparams: KParams object containing hyperparameter choices.
+        kparams: KParams object containing hyperparameter choices. Can be ``None`` if
+            both ``act_reduce`` and ``act_expand`` are provided.
         ratio_choices: List of integers representing reduction ratios for SE block.
+        act_reduce: Optional activation for the reduction Dense layer. Overrides sampling
+            from ``kparams`` when provided.
+        act_expand: Optional activation for the expansion Dense layer. Overrides sampling
+            from ``kparams`` when provided.
         name_prefix: Prefix for naming layers and trial parameters.
 
     Returns:
@@ -36,8 +43,14 @@ def build_squeeze_excite_1d(
 
     # 2. Optuna suggestions using ratio_choices and KParams
     ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
-    act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
-    act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+    if act_reduce is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_reduce is None")
+        act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+    if act_expand is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_expand is None")
+        act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
 
     # 3. Squeeze
     se = layers.GlobalAveragePooling1D(name=f"{name_prefix}_se_squeeze")(x)
@@ -60,8 +73,10 @@ def build_squeeze_excite_1d(
 def build_squeeze_excite_2d(
     x: tf.keras.layers.Layer,
     trial: optuna.Trial,
-    kparams: KParams,
+    kparams: Optional[KParams],
     ratio_choices: List[int],
+    act_reduce: Optional[Callable[..., Any]] = None,
+    act_expand: Optional[Callable[..., Any]] = None,
     name_prefix: str = "se_block_2d",
 ) -> tf.keras.layers.Layer:
     """
@@ -70,8 +85,13 @@ def build_squeeze_excite_2d(
     Args:
         x: Input tensor of shape (batch, height, width, channels).
         trial: Optuna Trial for hyperparameter suggestions.
-        hparams: HParams object for activation choices.
+        hparams: HParams object for activation choices. Can be ``None`` if both
+            ``act_reduce`` and ``act_expand`` are provided.
         ratio_choices: List of reduction ratios to try.
+        act_reduce: Optional activation for the reduction Dense layer. Overrides
+            sampling from ``kparams`` when provided.
+        act_expand: Optional activation for the expansion Dense layer. Overrides
+            sampling from ``kparams`` when provided.
         name_prefix: Prefix for layer names.
 
     Returns:
@@ -87,8 +107,14 @@ def build_squeeze_excite_2d(
 
     # 2. Hyperparameter suggestions
     ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
-    act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
-    act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+    if act_reduce is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_reduce is None")
+        act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+    if act_expand is None:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_expand is None")
+        act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
 
     # 3. Squeeze: global average over spatial dims
     se = layers.GlobalAveragePooling2D(name=f"{name_prefix}_se_squeeze")(x)
