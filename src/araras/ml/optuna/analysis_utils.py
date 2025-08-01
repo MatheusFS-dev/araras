@@ -15,6 +15,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
+from optuna.terminator import BaseImprovementEvaluator, RegretBoundEvaluator
+from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
+
 from .analyzer import PLOT_CFG
 
 
@@ -430,4 +433,79 @@ def print_study_columns(
             print(f"{ORANGE}No columns to display after applying exclusions.{RESET}")
     except Exception as e:
         logger_error.error(f"{RED}Error extracting study information: {str(e)}{RESET}")
+
+
+def analyze_improvement_variance(
+    study: optuna.Study,
+    window_size: int = 10,
+    min_n_trials: int = DEFAULT_MIN_N_TRIALS,
+    improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
+) -> List[float]:
+    """Compute variance of improvement across sliding windows.
+
+    This helper replicates the improvement calculation performed by
+    :class:`ImprovementStagnation` without altering the study. It is intended
+    as a diagnostic tool to inspect how the improvement variance evolves over
+    time so that a suitable ``variance_threshold`` can be chosen.
+
+    Args:
+        study: The Optuna study containing trials to analyse.
+        window_size: Number of recent improvements used for each variance
+            calculation.
+        min_n_trials: Minimum number of completed trials required before
+            variance values are produced.
+        improvement_evaluator: Custom evaluator used to estimate potential
+            improvement. Defaults to :class:`RegretBoundEvaluator`.
+
+    Returns:
+        List[float]: Sequence of variance values calculated after each
+        completed trial. Elements corresponding to trials before the warm-up
+        period contain ``numpy.nan``.
+
+    Raises:
+        ValueError: If ``window_size`` is less than ``1`` or ``min_n_trials`` is
+            negative.
+
+    Notes:
+        The function prints the trial indices associated with each computed
+        variance for convenience.
+    """
+
+    if window_size < 1:
+        raise ValueError("window_size must be at least 1")
+    if min_n_trials < 0:
+        raise ValueError("min_n_trials must be non-negative")
+
+    if improvement_evaluator is None:
+        improvement_evaluator = RegretBoundEvaluator()
+
+    completed_trials: List[optuna.trial.FrozenTrial] = []
+    improvements: List[float] = []
+    trial_numbers: List[int] = []
+    variances: List[float] = []
+
+    for trial in study.trials:
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            continue
+
+        completed_trials.append(trial)
+        trial_numbers.append(trial.number)
+
+        improvement = improvement_evaluator.evaluate(
+            trials=completed_trials,
+            study_direction=study.direction,
+        )
+        improvements.append(improvement)
+
+        if len(completed_trials) >= max(min_n_trials, window_size):
+            window_improvements = improvements[-window_size:]
+            variance = float(np.var(window_improvements))
+            print(
+                f"Variance of trials {trial_numbers[-window_size:]}: {variance:.3e}"
+            )
+            variances.append(variance)
+        else:
+            variances.append(float('nan'))
+
+    return variances
 
