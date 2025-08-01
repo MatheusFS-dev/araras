@@ -4,7 +4,7 @@ import time
 import tensorflow as tf
 import pynvml
 import psutil
-
+from inspect import signature
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
@@ -20,40 +20,45 @@ from araras.utils.misc import (
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
     """
-    Calculates the total number of floating-point operations (FLOPs) needed
-    to perform a single forward pass of the given Keras model.
+    Returns the total number of floating point operations (FLOPs).
 
-    Flow:
-        model -> input_shape -> TensorSpec -> tf.function -> concrete function
-        -> graph -> profile(graph) -> total_float_ops -> return
+    The model is traced with dummy inputs matching ``batch_size`` and the
+    resulting graph is profiled using TensorFlow's V1 profiler API.
 
     Args:
-        model (tf.keras.Model): The Keras model to analyze.
-        batch_size (int, optional): The batch size to simulate for input. Defaults to 1.
+        model: Keras model to inspect.
+        batch_size: Batch size used for the dummy input. ``1`` by default.
 
     Returns:
-        int: The total number of floating-point operations (FLOPs) for one forward pass.
+        The FLOP count for a single forward pass.
+
+    Notes:
+        TensorFlow's profiler uses graph mode under the hood; therefore the
+        model is executed once to build a concrete function before profiling.
     """
 
-    # 1) Build one TensorSpec per input tensor
-    specs = []
-    for inp in model.inputs:
-        # K.int_shape(inp) → (None, d1, d2, …)
-        dims = K.int_shape(inp)[1:]  # drop the None batch dim
-        specs.append(tf.TensorSpec([batch_size, *dims], dtype=inp.dtype))
+    # Supress API deprecation warnings
+    logging.getLogger("tensorflow").addFilter(
+        lambda r: "tensor_shape_from_node_def_name" not in r.getMessage()
+    )
 
-    # 2) Define a wrapper whose args exactly match model.inputs
-    @tf.function(input_signature=specs)
-    def _forward_fn(*args):
-        # args is a tuple of Tensors, one per input.
-        # Pass them to the model as a list:
-        return model(list(args), training=False)
+    # 1) Use the *original* structure
+    target_structure = model.input  # tensor if single-input, list/tuple/dict otherwise
+    flat_tensors = tf.nest.flatten(target_structure)
 
-    # 3) Grab the concrete graph and profile it
+    # 2) Build specs with same shapes and dtypes
+    flat_specs = [tf.TensorSpec([batch_size, *K.int_shape(t)[1:]], dtype=t.dtype) for t in flat_tensors]
+    spec_struct = tf.nest.pack_sequence_as(target_structure, flat_specs)
+
+    # 3) Trace with a single positional arg that carries the whole structure
+    @tf.function(input_signature=[spec_struct])
+    def _forward_fn(x):
+        return model(x, training=False)
+
     concrete = _forward_fn.get_concrete_function()
     opts = ProfileOptionBuilder.float_operation()
-    opts["output"] = "none"  # Supress report
-    info = profile(concrete.graph, options=opts)
+    opts["output"] = "none"
+    info = profile(concrete.graph, options=opts)  # This API was designed for TensorFlow v1
     return info.total_float_ops
 
 
@@ -61,10 +66,6 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
     """
     Estimates the number of Multiply-Accumulate operations (MACs) required
     for a single forward pass of the model. Assumes 1 MAC = 2 FLOPs.
-
-    Flow:
-        model -> input_shape -> TensorSpec -> tf.function -> concrete function
-        -> graph -> profile(graph) -> total_float_ops // 2 -> return
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -87,7 +88,9 @@ def get_memory_and_time(
 ) -> Tuple[int, float]:
     """
     Measures the peak memory usage and average inference time of a Keras model
-    on GPU or CPU.
+    on GPU or CPU. The model is first warmed up to account for graph tracing and kernel
+    compilation. Subsequent runs are timed while monitoring either the GPU
+    memory statistics or the CPU resident set size.
 
     Observations:
         Warmup runs exclude one-time initialization costs from your measurements. On GPU
@@ -105,12 +108,7 @@ def get_memory_and_time(
     The CPU memory probe occasionally reports zero usage. When this happens, the
     measurement is retried up to two additional times. If all attempts still
     report zero memory, the function returns ``0`` for the peak usage and emits a
-    warning in red.
-
-    Notes:
-        The Keras Functional API may emit a ``UserWarning`` when the provided
-        input structure does not exactly match the model's expected structure.
-        This function suppresses that warning to keep console output tidy.
+    warning.
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -127,53 +125,56 @@ def get_memory_and_time(
               several attempts)
             - average inference time in seconds
     """
-    # Prepare dummy inputs matching model.inputs
-    shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
-    dummy_inputs = [tf.zeros(shape, dtype=inp.dtype) for shape, inp in zip(shapes, model.inputs)]
 
-    @tf.function
-    def infer(*args):
+    def _zeros_like_model_inputs(model: tf.keras.Model, batch_size: int):
+        """Create zeros preserving the original input nesting."""
+        structure = model.input  # tensor if single input, else nested
+        flat = tf.nest.flatten(structure)
+        flat_zeros = [tf.zeros([batch_size] + list(K.int_shape(t)[1:]), dtype=t.dtype) for t in flat]
+        return tf.nest.pack_sequence_as(structure, flat_zeros)
+
+    dummy_inputs = _zeros_like_model_inputs(model, batch_size)
+
+    # Build a TensorSpec with the same nesting
+    def _spec_from_tensor(t):
+        shape = [d if d is not None else 1 for d in t.shape]
+        return tf.TensorSpec(shape=shape, dtype=t.dtype)
+
+    spec_struct = tf.nest.map_structure(_spec_from_tensor, dummy_inputs)
+
+    @tf.function(input_signature=[spec_struct])
+    def infer(x):
         with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore",
-                message="The structure of `inputs`",
-                category=UserWarning,
-            )
-            return model(list(args), training=False)
+            warnings.filterwarnings("ignore", r"The structure of `inputs`", UserWarning)
+            return model(x, training=False)
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
 
     if use_gpu:
-        # Verify GPU exists
         gpus = tf.config.list_physical_devices("GPU")
         if not gpus or device >= len(gpus):
             raise RuntimeError(f"No GPU found for index {device}")
 
-        # Reset tracked peak to include weights + graph
         tf.config.experimental.reset_memory_stats(device_str)
 
-        # Warm-up runs (first includes trace + alloc)
-        _ = infer(*dummy_inputs)
+        # Warm-up (first call traces)
+        _ = infer(dummy_inputs)
         for _ in range(warmup_runs - 1):
-            _ = infer(*dummy_inputs)
+            _ = infer(dummy_inputs)
 
-        # Timed inference with forced sync
         times = []
-        progress_iter = range(test_runs)
+        it = range(test_runs)
         if verbose:
-            progress_iter = white_track(
-                progress_iter,
-                description="Measuring GPU",
-                total=test_runs,
-            )
-        for _ in progress_iter:
-            t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            _ = out.numpy()
-            times.append(time.perf_counter() - t0)
-        avg_time = sum(times) / len(times)
+            it = white_track(it, description="Measuring GPU", total=test_runs)
 
+        for _ in it:
+            t0 = time.perf_counter()
+            out = infer(dummy_inputs)
+            _ = tf.nest.flatten(out)[0].numpy()  # force sync
+            times.append(time.perf_counter() - t0)
+
+        avg_time = sum(times) / len(times)
         peak_mem = tf.config.experimental.get_memory_info(device_str)["peak"]
         return peak_mem, avg_time
 
@@ -182,53 +183,41 @@ def get_memory_and_time(
         raise RuntimeError("No CPU device found")
 
     def _measure_cpu() -> Tuple[int, float]:
-        """Run the CPU measurement loop and return (peak_mem, avg_time)."""
         proc = psutil.Process()
         baseline = proc.memory_info().rss
 
-        # warmup on CPU
-        cpu_index = 0
-        with tf.device(f"/CPU:{cpu_index}"):
-            _ = infer(*dummy_inputs)
+        with tf.device("/CPU:0"):
+            _ = infer(dummy_inputs)
             for _ in range(warmup_runs - 1):
-                _ = infer(*dummy_inputs)
+                _ = infer(dummy_inputs)
 
         peak_rss = baseline
         times = []
-        with tf.device(f"/CPU:{cpu_index}"):
-            progress_iter = range(test_runs)
+        with tf.device("/CPU:0"):
+            it = range(test_runs)
             if verbose:
-                progress_iter = white_track(
-                    progress_iter,
-                    description="Measuring CPU",
-                    total=test_runs,
-                )
-            for _ in progress_iter:
+                it = white_track(it, description="Measuring CPU", total=test_runs)
+            for _ in it:
                 t0 = time.perf_counter()
-                out = infer(*dummy_inputs)
-                _ = out.numpy()
+                out = infer(dummy_inputs)
+                _ = tf.nest.flatten(out)[0].numpy()
                 times.append(time.perf_counter() - t0)
                 rss = proc.memory_info().rss
                 if rss > peak_rss:
                     peak_rss = rss
 
-        avg_time = sum(times) / len(times)
-        peak_mem = peak_rss - baseline
-        return peak_mem, avg_time
+        return peak_rss - baseline, sum(times) / len(times)
 
     max_retries = 2
-    peak_mem = 0
-    avg_time = 0.0
     for attempt in range(max_retries + 1):
         peak_mem, avg_time = _measure_cpu()
         if peak_mem != 0:
-            break
+            return peak_mem, avg_time
         if attempt < max_retries:
             logger.warning(f"{YELLOW}CPU memory usage measured as 0 bytes, retrying measurement...{RESET}")
         else:
             logger.error(f"{RED}CPU memory usage could not be measured, returning 0.{RESET}")
-
-    return peak_mem, avg_time
+            return 0, avg_time
 
 
 def get_model_usage_stats(
@@ -239,23 +228,23 @@ def get_model_usage_stats(
     verbose: bool = True,
 ) -> Tuple[float, float, float]:
     """
-    Estimate average power draw and energy usage.
-    Careful with the RAPL path; it may vary by system.
-    The RAPL interface is typically found at:
-        $ ls /sys/class/powercap
-        intel-rapl
-        $ ls /sys/class/powercap/intel-rapl
-        intel-rapl:0       intel-rapl:0:0    intel-rapl:1    …
-        $ ls /sys/class/powercap/intel-rapl/intel-rapl:0
-        energy_uj  max_energy_range_uj  name
-    Also, you MUST run this on a linux system with Intel CPUs!!!!!
-    And run the python script with SUDO to access RAPL files.
+    Estimate average power draw and per-inference energy consumption.
 
-    Notes:
-        When a ``tf.keras.Model`` is provided, Keras may issue a ``UserWarning``
-        about mismatched input structure if the dummy inputs do not precisely
-        reflect the model's expected format. The warning is suppressed within
-        this function.
+    Power measurements come from NVML when ``device`` is a GPU index or from the
+    Intel RAPL interface when ``device`` is ``-1``.  The model is executed
+    ``n_trials`` times and instantaneous power readings are averaged.
+
+    Warning:
+        Careful with the RAPL path; it may vary by system.
+        The RAPL interface is typically found at:
+            $ ls /sys/class/powercap
+            intel-rapl
+            $ ls /sys/class/powercap/intel-rapl
+            intel-rapl:0       intel-rapl:0:0    intel-rapl:1    …
+            $ ls /sys/class/powercap/intel-rapl/intel-rapl:0
+            energy_uj  max_energy_range_uj  name
+        Also, you MUST run this on a linux system with Intel CPUs!!!!!
+        And run the python script with SUDO to access RAPL files.
 
     Args:
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
@@ -313,46 +302,38 @@ def get_model_usage_stats(
                 "Ensure the path is correct and accessible, or run with sudo.\033[0m"
             )
 
+    def _make_dummy_for_keras(m: tf.keras.Model):
+        # m.input keeps the original structure (tensor, list, tuple, dict)
+        spec_structure = m.input
+        flat_specs = tf.nest.flatten(spec_structure)
+        flat_rand = [
+            tf.random.normal([1 if d is None else d for d in t.shape], dtype=t.dtype) for t in flat_specs
+        ]
+        return tf.nest.pack_sequence_as(spec_structure, flat_rand)
+
     dummy_inputs = None
     infer: Callable[[], tf.Tensor]
 
     if is_keras_model:
-        # Build random tensors based on the keras model input shapes
-        tensors = []
-        for tensor in keras_model.inputs:
-            shape = [d if d is not None else 1 for d in tensor.shape]
-            tensors.append(tf.random.normal(shape, dtype=tensor.dtype))
-        dummy_inputs = tensors[0] if len(tensors) == 1 else tensors
+        dummy_inputs = _make_dummy_for_keras(keras_model)
 
         def infer():
             with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="The structure of `inputs`",
-                    category=UserWarning,
-                )
+                warnings.filterwarnings("ignore", r"The structure of `inputs`", UserWarning)
                 return keras_model(dummy_inputs, training=False)
 
     else:
-        # Load the SavedModel and obtain the serving_default signature for inference
-        reloaded_model: tf.Module = tf.saved_model.load(saved_model)
-        signature = reloaded_model.signatures["serving_default"]
-
+        # SavedModel branch (already a dict). Keep it consistent:
         _, kwargs = signature.structured_input_signature
-        inputs = {}
-        for name, spec in kwargs.items():
-            shape = [d if d is not None else 1 for d in spec.shape.as_list()]
-            inputs[name] = tf.random.normal(shape, dtype=spec.dtype)
-        dummy_inputs = inputs
+        dummy_inputs = tf.nest.map_structure(
+            lambda spec: tf.random.normal(
+                [1 if d is None else d for d in spec.shape.as_list()], dtype=spec.dtype
+            ),
+            kwargs,
+        )
 
         def infer():
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    "ignore",
-                    message="The structure of `inputs`",
-                    category=UserWarning,
-                )
-                return signature(**dummy_inputs)
+            return signature(**dummy_inputs)
 
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
@@ -438,7 +419,7 @@ def write_model_stats_to_file(
 ) -> None:
     """
     Write model statistics to a file.
-    
+
     Statistics include:
         - Number of parameters
         - Model size in bits
