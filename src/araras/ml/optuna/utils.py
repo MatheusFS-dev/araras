@@ -6,21 +6,6 @@ import optuna
 import tensorflow as tf
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
 from araras.utils.system import _get_nvidia_smi_data
-from araras.ml.optuna.callbacks import (
-    ImprovementStagnation,
-    StopIfKeepBeingPruned,
-    StopWhenNoValueImprovement,
-)
-from araras.ml.optuna.utils import (
-    get_remaining_trials,
-    cleanup_non_top_trials,
-    rename_top_k_files,
-    get_top_trials,
-    save_top_k_trials,
-    init_study_dirs,
-)
-from araras.ml.optuna.analyzer import analyze_study
-from araras.utils.misc import clear
 
 
 def get_remaining_trials(study: optuna.Study, num_trials: int) -> list[optuna.trial.FrozenTrial]:
@@ -293,7 +278,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
     If the error matches any propagation rules, it re-raises the exception.
     If no rules match, it logs the error to a file and re-raises the exception.
     It also collects GPU statistics using nvidia-smi and includes them in the log.
-    
+
     Args:
         trial (optuna.trial.FrozenTrial): The trial that encountered the error.
         exc (Exception): The exception that occurred during the trial.
@@ -310,10 +295,10 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
                                     {
                                         optuna.exceptions.TrialPruned: None,
                                     }
-                                    
+
     Returns:
         None
-        
+
     Raises:
         optuna.TrialPruned: If the error matches any pruning rules.
         Exception: If the error matches any propagation rules or if no rules match.
@@ -430,6 +415,22 @@ def run_study(
     Raises:
         Exception: Propagates any exception raised during optimization.
     """
+
+    from araras.ml.optuna.callbacks import (
+        ImprovementStagnation,
+        StopIfKeepBeingPruned,
+        StopWhenNoValueImprovement,
+    )
+    from araras.ml.optuna.utils import (
+        get_remaining_trials,
+        cleanup_non_top_trials,
+        rename_top_k_files,
+        get_top_trials,
+        save_top_k_trials,
+        init_study_dirs,
+    )
+    from araras.ml.optuna.analyzer import analyze_study
+    from araras.utils.misc import clear
 
     (
         study_dir,
