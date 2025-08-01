@@ -55,6 +55,7 @@ This document provides an overview of the API functions available in the ARARAS 
     - [get\_callbacks\_study](#get_callbacks_study)
     - [ImprovementStagnation](#improvementstagnation)
     - [StopIfKeepBeingPruned](#stopifkeepbeingpruned)
+    - [StopWhenNoValueImprovement](#stopwhennovalueimprovement)
     - [NanLossPrunerOptuna](#nanlosspruneroptuna)
   - [ml.optuna.model\_tools](#mloptunamodel_tools)
     - [estimate\_training\_memory](#estimate_training_memory)
@@ -1358,6 +1359,26 @@ A callback for Optuna studies that stops the optimization process when a specifi
 
 **Raises**
 - None
+
+### StopWhenNoValueImprovement
+
+```python
+StopWhenNoValueImprovement
+```
+Stop a study if the best objective value fails to improve for ``patience`` consecutive trials.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| patience | `int` | Number of completed trials allowed without improvement. |
+| min_delta | `float` | Minimum change in value to qualify as improvement. |
+| verbose | `bool` | Log a warning when stopping the study. |
+
+**Returns**
+`None`
+
+**Raises**
+- ValueError
 
 ### NanLossPrunerOptuna
 
