@@ -22,26 +22,40 @@ def plot_hyperparameter_distributions(
     numeric_cols: List[str],
     categorical_cols: List[str],
     dirs: Dict[str, str],
-    param_name_mapping: Dict[str, str] = None,
+    param_name_mapping: Dict[str, str] | None = None,
     create_standalone: bool = False,
     create_plotly: bool = False,
 ) -> None:
-    """
-    Generate and save distribution plots for numeric and categorical hyperparameters in separate figures.
+    """Generate and save hyperparameter distribution plots.
 
-    For numeric parameters, a KDE curve is estimated prior to plotting. If the
-    KDE computation fails (e.g., due to singular covariance or insufficient
-    unique values), the parameter plot is replaced with a placeholder message so
-    that the remaining plots can still be generated.
+    This function produces histograms for numeric and categorical
+    hyperparameters and overlays a KDE curve when possible. If KDE
+    estimation fails because the data lack sufficient unique values or due
+    to numerical issues, the histogram and summary statistics are still
+    displayed without the KDE curve so that the analysis can proceed.
 
     Args:
-        df (pd.DataFrame): DataFrame containing hyperparameter data
-        numeric_cols (List[str]): List of numeric column names
-        categorical_cols (List[str]): List of categorical column names
-        dirs (Dict[str, str]): Dictionary of directory paths for saving plots
-        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
-    create_standalone (bool): Whether to create standalone images for each parameter
-    create_plotly (bool): Whether to save interactive HTML versions
+        df: DataFrame containing the hyperparameter values.
+        numeric_cols: Columns interpreted as numeric hyperparameters.
+        categorical_cols: Columns interpreted as categorical hyperparameters.
+        dirs: Dictionary of directories where plots and data files are saved.
+        param_name_mapping: Optional mapping from parameter name to a more
+            readable display name.
+        create_standalone: When ``True`` also saves each distribution as a
+            standalone figure.
+        create_plotly: When ``True`` saves interactive HTML versions of the
+            generated figures.
+
+    Returns:
+        ``None``. Files are written to ``dirs``.
+
+    Raises:
+        None.
+
+    Notes:
+        The function logs warnings when KDE estimation is skipped. Other
+        exceptions during plotting are caught so that remaining plots are not
+        affected.
     """
 
     # ———————————————————————— Numeric Parameters Figure ——————————————————————— #
@@ -105,52 +119,22 @@ def plot_hyperparameter_distributions(
                 )
                 continue
 
-            # Attempt KDE estimation first so that we can skip the plot entirely
+            # Attempt KDE estimation; histogram is always shown regardless of KDE result
+            kde_values = None
+            x_range = None
             try:
-                if values.nunique() < 2:
+                if values.nunique() >= 2:
+                    kde = gaussian_kde(values)
+                    x_range = np.linspace(values.min(), values.max(), 200)
+                    kde_values = kde(x_range)
+                else:
                     raise ValueError("insufficient unique values")
-
-                kde = gaussian_kde(values)
-                x_range = np.linspace(values.min(), values.max(), 200)
-                kde_values = kde(x_range)
-            except ValueError as e:
-                logger.warning(f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}")
-                ax.text(
-                    0.5,
-                    0.5,
-                    "Insufficient unique values\nfor KDE estimation",
-                    transform=ax.transAxes,
-                    ha="center",
-                    va="center",
-                    fontsize=PLOT_CFG.label_fs,
-                    style="italic",
+            except ValueError:
+                logger.warning(
+                    f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}"
                 )
-                ax.set_title(
-                    format_title(PLOT_CFG.param_title_tpl, display_name),
-                    fontsize=PLOT_CFG.title_fs,
-                    fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
-                )
-                continue
             except Exception as e:
                 logger.warning(f"{YELLOW}Error generating KDE for {col}: {e}{RESET}")
-                ax.text(
-                    0.5,
-                    0.5,
-                    f"{e}",
-                    transform=ax.transAxes,
-                    ha="center",
-                    va="center",
-                    fontsize=PLOT_CFG.label_fs,
-                    style="italic",
-                )
-                ax.set_title(
-                    format_title(PLOT_CFG.param_title_tpl, display_name),
-                    fontsize=PLOT_CFG.title_fs,
-                    fontweight="bold",
-                    pad=PLOT_CFG.title_pad,
-                )
-                continue
 
             # Main histogram
             n, bins, patches = ax.hist(
@@ -166,14 +150,15 @@ def plot_hyperparameter_distributions(
             )
 
             # KDE curve
-            ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
+            if kde_values is not None and x_range is not None:
+                ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
 
-            # Save KDE data for LaTeX
-            save_data_for_latex(
-                {"x": x_range, "y": kde_values},
-                f"numeric_kde_{col}",
-                dirs["data_distributions"],
-            )
+                # Save KDE data for LaTeX
+                save_data_for_latex(
+                    {"x": x_range, "y": kde_values},
+                    f"numeric_kde_{col}",
+                    dirs["data_distributions"],
+                )
 
             # Statistics
             mean_val = values.mean()
@@ -235,7 +220,15 @@ def plot_hyperparameter_distributions(
                 standalone_ax.hist(
                     values, bins=50, alpha=0.7, color="skyblue", edgecolor="navy", linewidth=0.8, density=True
                 )
-                standalone_ax.plot(x_range, kde_values, color="darkblue", linewidth=2, alpha=0.8, label="KDE")
+                if kde_values is not None and x_range is not None:
+                    standalone_ax.plot(
+                        x_range,
+                        kde_values,
+                        color="darkblue",
+                        linewidth=2,
+                        alpha=0.8,
+                        label="KDE",
+                    )
                 standalone_ax.axvline(
                     mean_val,
                     color="red",
