@@ -98,7 +98,7 @@ def save_model_plot(
     except Exception as exc:
         logger_error.error(f"{RED} Failed to save model plot: {exc}{RESET}")
         logger.warning(f"{YELLOW} Ensure 'graphviz' is installed and updated.{RESET}")
-        logger.warning(f"{YELLOW} If using conda, try: conda install graphviz python-graphviz{RESET}")
+        logger.warning(f"{YELLOW} If using conda, try: {ORANGE}conda install graphviz python-graphviz{RESET}")
 
         traceback.print_exc()
 
