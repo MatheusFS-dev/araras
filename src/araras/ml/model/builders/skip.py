@@ -136,12 +136,7 @@ def _project_conv1d(
     channels_tgt = target.shape[2]
     stride = 1
     len_src = source.shape[1]
-    if (
-        len_src is not None
-        and len_tgt is not None
-        and len_src >= len_tgt
-        and len_src % len_tgt == 0
-    ):
+    if len_src is not None and len_tgt is not None and len_src >= len_tgt and len_src % len_tgt == 0:
         stride = len_src // len_tgt
 
     x = layers.Conv1D(
@@ -188,19 +183,9 @@ def _project_conv2d(
     channels_tgt = target.shape[3]
     stride_h = stride_w = 1
     h_src, w_src = source.shape[1], source.shape[2]
-    if (
-        h_src is not None
-        and h_tgt is not None
-        and h_src >= h_tgt
-        and h_src % h_tgt == 0
-    ):
+    if h_src is not None and h_tgt is not None and h_src >= h_tgt and h_src % h_tgt == 0:
         stride_h = h_src // h_tgt
-    if (
-        w_src is not None
-        and w_tgt is not None
-        and w_src >= w_tgt
-        and w_src % w_tgt == 0
-    ):
+    if w_src is not None and w_tgt is not None and w_src >= w_tgt and w_src % w_tgt == 0:
         stride_w = w_src // w_tgt
 
     x = layers.Conv2D(
@@ -214,9 +199,8 @@ def _project_conv2d(
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name}_bn")(x)
 
-    if (
-        (h_tgt is not None and x.shape[1] is not None and x.shape[1] != h_tgt)
-        or (w_tgt is not None and x.shape[2] is not None and x.shape[2] != w_tgt)
+    if (h_tgt is not None and x.shape[1] is not None and x.shape[1] != h_tgt) or (
+        w_tgt is not None and x.shape[2] is not None and x.shape[2] != w_tgt
     ):
         x = _resize_2d(x, (h_tgt, w_tgt), name=f"{name}_resize")
 
@@ -266,7 +250,7 @@ def _project_gnn(
     """Project the feature axis of a rank-3 graph tensor.
 
     Notes:
-        This function is specialized for graph tensors shaped ``(batch, nodes, 
+        This function is specialized for graph tensors shaped ``(batch, nodes,
         channels)``. The number of nodes must already be the same between
         ``source`` and ``target``; only the feature dimension is adapted via a
         :class:`~keras.layers.Dense` layer. When ``use_batch_norm`` is ``True`` a
@@ -304,6 +288,7 @@ def _project_gnn(
         x = layers.BatchNormalization(name=f"{name}_bn")(x)
 
     return x
+
 
 def _trial_skip_connections_projected(
     trial: optuna.trial.Trial,
@@ -370,9 +355,7 @@ def _trial_skip_connections_projected(
     if strategy == "final":
         selected = []
         for i in range(last_idx):
-            include = trial.suggest_categorical(
-                f"skip_{i}_{last_idx}", [False, True]
-            )
+            include = trial.suggest_categorical(f"skip_{i}_{last_idx}", [False, True])
             if include:
                 name = _unique_name(f"{name_prefix}_{i}_{last_idx}")
                 src = layers_list[i]
