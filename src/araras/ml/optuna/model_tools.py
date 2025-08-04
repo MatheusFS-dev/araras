@@ -356,7 +356,7 @@ def plot_model_param_distribution(
                 try:
                     import hiddenlayer as hl
                     graph = hl.build_graph(model, transforms=[hl.transforms.Prune('Constant')])
-                    graph.save("model_architecture.png")
+                    graph.save(model_path)
                 except Exception as e:
                     logger_error.error(f"{RED} Failed to plot model {trial.number}: {e} {RESET}")
                     traceback.print_exc()
