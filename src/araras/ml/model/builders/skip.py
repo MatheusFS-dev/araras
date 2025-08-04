@@ -81,19 +81,30 @@ def _needs_projection(
     must match. For ``"concat"`` only the dimensions other than
     ``axis_to_concat`` are compared.
 
+    Notes:
+        The function accepts both tensors and raw shape tuples. Shapes may contain
+        ``None`` for unknown dimensions and are normalized via
+        :class:`tf.TensorShape` for safe comparison.
+
     Args:
-        source: Tensor proposed as the skip source.
-        target: Tensor receiving the skip connection.
+        source: Tensor or shape tuple proposed as the skip source.
+        target: Tensor or shape tuple receiving the skip connection.
         merge_mode: Either ``"add"`` or ``"concat"``.
         axis_to_concat: Axis along which concatenation occurs when
             ``merge_mode`` is ``"concat"``.
 
     Returns:
         ``True`` if projection is required, ``False`` otherwise.
+
+    Raises:
+        ValueError: If ``merge_mode`` is neither ``"add"`` nor ``"concat"``.
     """
 
-    src_shape = source.shape.as_list()
-    tgt_shape = target.shape.as_list()
+    if merge_mode not in {"concat", "add"}:
+        raise ValueError("merge_mode must be 'add' or 'concat'.")
+
+    src_shape = tf.TensorShape(getattr(source, "shape", source)).as_list()
+    tgt_shape = tf.TensorShape(getattr(target, "shape", target)).as_list()
 
     if merge_mode == "concat":
         if len(src_shape) != len(tgt_shape):
