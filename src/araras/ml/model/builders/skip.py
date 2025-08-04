@@ -1,5 +1,3 @@
-from typing import Callable, Sequence
-
 from araras.core import *
 
 import itertools
@@ -252,55 +250,6 @@ def _project_dense(
     return x
 
 
-def _project_gnn(
-    source: tf.Tensor,
-    target: tf.Tensor,
-    use_batch_norm: bool,
-    name: str,
-) -> tf.Tensor:
-    """Project the feature axis of a rank-3 graph tensor.
-
-    Notes:
-        This function is specialized for graph tensors shaped ``(batch, nodes,
-        channels)``. The number of nodes must already be the same between
-        ``source`` and ``target``; only the feature dimension is adapted via a
-        :class:`~keras.layers.Dense` layer. When ``use_batch_norm`` is ``True`` a
-        :class:`~keras.layers.BatchNormalization` layer follows the projection.
-
-    Args:
-        source: Graph tensor to be projected, expected shape ``(batch, nodes, channels)``.
-        target: Tensor providing the desired feature dimension with shape
-            ``(batch, nodes, channels)``.
-        use_batch_norm: Apply batch normalization after projection when set to
-            ``True``.
-        name: Base name used for created layers.
-
-    Returns:
-        Tensor with its feature dimension matching that of ``target``.
-
-    Raises:
-        ValueError: If either input tensor does not have rank 3 or if the node
-            dimensions differ.
-    """
-
-    if source.shape.rank != 3 or target.shape.rank != 3:
-        raise ValueError("_project_gnn expects tensors of rank 3 (batch, nodes, channels).")
-
-    nodes_src, nodes_tgt = source.shape[1], target.shape[1]
-    if nodes_src != nodes_tgt:
-        raise ValueError(
-            "_project_gnn cannot modify the number of nodes; source and target must share the same nodes dimension."
-        )
-
-    units = target.shape[-1]
-    x = layers.Dense(units, name=f"{name}_dense")(source)
-
-    if use_batch_norm:
-        x = layers.BatchNormalization(name=f"{name}_bn")(x)
-
-    return x
-
-
 def _trial_skip_connections_projected(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
@@ -488,55 +437,6 @@ def trial_skip_dnn(
         trial=trial,
         layers_list=layers_list,
         project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
-        axis_to_concat=axis_to_concat,
-        print_combinations=print_combinations,
-        strategy=strategy,
-        merge_mode=merge_mode,
-        name_prefix=name_prefix,
-    )
-
-
-def trial_skip_gnn(
-    trial: optuna.trial.Trial,
-    layers_list: Sequence[tf.Tensor],
-    axis_to_concat: int = -1,
-    use_batch_norm: bool = False,
-    print_combinations: bool = False,
-    strategy: str = "any",
-    merge_mode: str = "add",
-    name_prefix: str = "skip_gnn",
-) -> tf.Tensor:
-    """Skip connections tailored for graph neural network tensors.
-
-    Notes:
-        Input tensors must have shape ``(batch, nodes, features)``. The
-        projection branch applies a :class:`~keras.layers.Dense` layer node-wise
-        to adjust the feature dimension while leaving the number of nodes
-        untouched.
-
-    Args:
-        trial: Optuna trial controlling which connections are active.
-        layers_list: Sequence of GNN tensors to connect via skips.
-        axis_to_concat: Axis used for concatenation when ``merge_mode`` is
-            ``"concat"``.
-        use_batch_norm: Apply batch normalization in projection branches.
-        print_combinations: If ``True``, display all possible skip
-            configurations.
-        strategy: ``"final"`` or ``"any"``.
-        merge_mode: ``"add"`` or ``"concat"``.
-        name_prefix: Prefix for projection layers, defaults to ``"skip_gnn"``.
-
-    Returns:
-        Tensor after applying the selected skip connections.
-
-    Raises:
-        ValueError: If ``strategy`` or ``merge_mode`` are invalid.
-    """
-
-    return _trial_skip_connections_projected(
-        trial=trial,
-        layers_list=layers_list,
-        project=lambda s, t, name: _project_gnn(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
         print_combinations=print_combinations,
         strategy=strategy,
