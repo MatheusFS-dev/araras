@@ -43,6 +43,64 @@ def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
                 zf.write(file_path, arcname)
 
 
+def save_model_plot(model_or_path: Union[tf.keras.Model, str, Path], output_path: Union[str, Path]) -> None:
+    """Generate and save a visual graph of a Keras model using ``hiddenlayer``.
+
+    This helper accepts either an in-memory :class:`tf.keras.Model` instance or the
+    path to a serialized ``.keras`` model file. The model architecture is
+    converted into a graph representation via :mod:`hiddenlayer` and written to
+    ``output_path``.
+
+    Notes:
+        The resulting plot format is inferred from the file extension provided
+        in ``output_path``. Common choices are ``.png`` and ``.pdf``. Existing
+        files at ``output_path`` will be overwritten.
+
+    Warning:
+        A valid TensorFlow installation is required. Attempting to call this
+        function without TensorFlow or ``hiddenlayer`` installed will raise an
+        :class:`ImportError`.
+
+    Args:
+        model_or_path: Either a :class:`tf.keras.Model` instance to be plotted or
+            a filesystem path pointing to a ``.keras`` model archive.
+        output_path: Destination path where the plot image will be saved.
+
+    Returns:
+        None: The plot is written to ``output_path``.
+
+    Raises:
+        ImportError: If TensorFlow or ``hiddenlayer`` cannot be imported.
+        TypeError: If ``model_or_path`` is neither a model instance nor a path.
+        ValueError: If a path is provided that does not end with ``.keras``.
+        OSError: If saving the generated plot fails.
+    """
+
+    try:
+        import hiddenlayer as hl
+    except ModuleNotFoundError as exc:  # pragma: no cover - import check
+        raise ImportError("hiddenlayer is required to plot the model") from exc
+
+    if isinstance(model_or_path, tf.keras.Model):
+        model = model_or_path
+    elif isinstance(model_or_path, (str, Path)):
+        model_path = Path(model_or_path)
+        if model_path.suffix != ".keras":
+            raise ValueError("Model path must point to a '.keras' file.")
+        try:
+            model = tf.keras.models.load_model(model_path)
+        except Exception as exc:  # pragma: no cover - external load
+            raise OSError("Failed to load Keras model from file") from exc
+    else:
+        raise TypeError("model_or_path must be a tf.keras.Model or path to a '.keras' file")
+
+    try:
+        graph = hl.build_graph(model, tf.keras.Input(shape=model.input_shape[1:]))
+        graph.save(str(output_path))
+    except Exception as exc:  # pragma: no cover - hiddenlayer failures
+        raise OSError("Failed to save model plot") from exc
+
+
 def punish_model_flops(
     target: Union[float, Sequence[float]],
     model: tf.keras.Model,
