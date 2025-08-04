@@ -355,7 +355,7 @@ def _trial_skip_connections_projected(
     return updated[-1]
 
 
-def trial_skip_cnn1d(
+def trial_skip_3d_tensors(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
@@ -365,12 +365,15 @@ def trial_skip_cnn1d(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn1d",
 ) -> tf.Tensor:
-    """Apply projected skips for 1-D convolutional tensors.
+    """
+    Apply projected skips for 3D tensors. This function can be used for convs 1D
+    or graph layers that produce 3D outputs.
 
     Notes:
-        Tensors are expected to have shape ``(batch, length, channels)``. The
+        Tensors are expected to have shape ``(batch, features, channels)``. The
         projection branch uses ``Conv1D(1)`` layers to adjust channels and, when
-        possible, the temporal dimension.
+        possible, the temporal dimension. If the lengths still differ, a resize 
+        operation is applied.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -404,7 +407,7 @@ def trial_skip_cnn1d(
     )
 
 
-def trial_skip_dnn(
+def trial_skip_2d_tensors(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
@@ -414,7 +417,13 @@ def trial_skip_dnn(
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
 ) -> tf.Tensor:
-    """Skip connections for dense layers with feature projection.
+    """Skip connections for 2D tensors with feature projection.
+    
+    Notes:
+        This function is designed for tensors with shape ``(batch, features)``.
+        It applies a :class:`~keras.layers.Dense` layer to project the source
+        tensor's features to match the target tensor's features. If the shapes
+        differ, a resize operation is applied.
 
     Args:
         trial: Optuna trial controlling which connections are active.
@@ -445,7 +454,7 @@ def trial_skip_dnn(
     )
 
 
-def trial_skip_cnn2d(
+def trial_skip_4d_tensors(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
@@ -455,12 +464,13 @@ def trial_skip_cnn2d(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn2d",
 ) -> tf.Tensor:
-    """Apply projected skip connections for 2-D convolutional tensors.
+    """Apply projected skip connections 4D tensors.
 
     Notes:
-        Projection uses ``Conv2D(1x1)`` layers to match channel dimensions and
-        optionally downsample spatial dimensions when they are integer multiples
-        of the targets.
+        This function is designed for tensors with shape ``(batch, height, width, channels)``.
+        It applies a :class:`~keras.layers.Conv2D` layer with kernel size ``1``
+        to project the source tensor's channels to match the target tensor's
+        channels. If the spatial dimensions differ, a resize operation is applied.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
