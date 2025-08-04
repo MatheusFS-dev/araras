@@ -240,6 +240,7 @@ def plot_model_param_distribution(
     csv_path: Optional[str] = None,
     logs_dir: Optional[str] = None,
     corr_csv_path: Optional[str] = None,
+    plot_model_dir: Optional[str] = None
 ) -> None:
     """Sample random models, plot statistics and optionally save the results.
 
@@ -274,6 +275,9 @@ def plot_model_param_distribution(
         corr_csv_path: Optional path to store correlations between numeric
             hyperparameters and the model parameter count. If ``None`` the
             correlation analysis is skipped.
+        plot_model_dir: Directory where model plots are saved. If ``None``, no
+            plots are saved. Each model is saved as a PNG file named
+            ``model_{trial_number}.png``.
 
     Returns:
         None. The histograms are displayed using ``matplotlib``.
@@ -342,6 +346,17 @@ def plot_model_param_distribution(
             training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024)
             training_memory.append(training_memory_mb)
             collected_params.append(trial.params)
+
+            if plot_model_dir:
+                os.makedirs(plot_model_dir, exist_ok=True)
+                model_path = os.path.join(plot_model_dir, f"model_{trial.number}.png")
+                
+                tf.keras.utils.plot_model(
+                    model,
+                    to_file=model_path,
+                    show_shapes=True,
+                    show_layer_names=True,
+                )
 
             study.tell(trial, 0.0)
         except tf.errors.ResourceExhaustedError as e:
