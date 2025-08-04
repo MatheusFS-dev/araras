@@ -31,6 +31,7 @@ This document provides an overview of the API functions available in the ARARAS 
     - [build\_squeeze\_excite\_1d](#build_squeeze_excite_1d)
   - [ml.model.builders.skip](#mlmodelbuildersskip)
     - [trial\_skip\_connections](#trial_skip_connections)
+    - [trial\_skip\_connection](#trial_skip_connection)
   - [ml.model.callbacks](#mlmodelcallbacks)
     - [get\_callbacks\_model](#get_callbacks_model)
   - [ml.model.stats](#mlmodelstats)
@@ -887,6 +888,39 @@ Constructs conditional skip connections between layers based on Optuna trial cho
 **Raises**
 - ValueError: If `strategy` is not one of `'final'` or `'any'`.
 - ValueError: If `merge_mode` is not one of `'concat'` or `'add'`.
+
+### trial_skip_connection
+
+```python
+trial_skip_connection(
+    trial,
+    source,
+    target,
+    axis_to_concat,
+    use_batch_norm,
+    merge_mode,
+)
+```
+Conditionally merge a projected skip tensor into a target tensor. This is
+primarily intended for GNN layers where the feature dimension may change across
+the network while the number of nodes stays constant.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| trial | `optuna.trial.Trial` | Optuna trial controlling inclusion of the skip. |
+| source | `tf.Tensor` | Tensor supplying the skip connection. |
+| target | `tf.Tensor` | Destination tensor for the skip connection. |
+| axis_to_concat | `int, optional` | Axis used when concatenating tensors. Default is -1. |
+| use_batch_norm | `bool, optional` | Apply batch normalization in the projection branch. Defaults to False. |
+| merge_mode | `str, optional` | Merge strategy: `'add'` or `'concat'`. Defaults to `'add'`. |
+
+**Returns**
+` tf.Tensor: The resulting tensor after applying the skip connection if
+selected; otherwise `target`.`
+
+**Raises**
+- ValueError: If `merge_mode` is not `'concat'` or `'add'`.
 
 ## ml.model.callbacks
 
