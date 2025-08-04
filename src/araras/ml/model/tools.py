@@ -1,10 +1,10 @@
 from araras.core import *
 
-
 import tempfile
 import zipfile
 from pathlib import Path
 from araras.ml.model.stats import get_flops
+import hiddenlayer as hl
 
 import tensorflow as tf
 
@@ -43,7 +43,11 @@ def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
                 zf.write(file_path, arcname)
 
 
-def save_model_plot(model_or_path: Union[tf.keras.Model, str, Path], output_path: Union[str, Path]) -> None:
+def save_model_plot(
+    model_or_path: Union[tf.keras.Model, str, Path],
+    output_path: Union[str, Path],
+    backend: Literal["hiddenlayer", "plot_model"] = "hiddenlayer",
+) -> None:
     """Generate and save a visual graph of a Keras model using ``hiddenlayer``.
 
     This helper accepts either an in-memory :class:`tf.keras.Model` instance or the
@@ -56,30 +60,22 @@ def save_model_plot(model_or_path: Union[tf.keras.Model, str, Path], output_path
         in ``output_path``. Common choices are ``.png`` and ``.pdf``. Existing
         files at ``output_path`` will be overwritten.
 
-    Warning:
-        A valid TensorFlow installation is required. Attempting to call this
-        function without TensorFlow or ``hiddenlayer`` installed will raise an
-        :class:`ImportError`.
-
     Args:
         model_or_path: Either a :class:`tf.keras.Model` instance to be plotted or
             a filesystem path pointing to a ``.keras`` model archive.
         output_path: Destination path where the plot image will be saved.
+        backend: The backend to use for plotting. Options are:
+            - "hiddenlayer": Uses the :mod:`hiddenlayer` library to generate the plot.
+            - "plot_model": Uses :func:`tf.keras.utils.plot_model`.
 
     Returns:
         None: The plot is written to ``output_path``.
 
     Raises:
-        ImportError: If TensorFlow or ``hiddenlayer`` cannot be imported.
         TypeError: If ``model_or_path`` is neither a model instance nor a path.
         ValueError: If a path is provided that does not end with ``.keras``.
         OSError: If saving the generated plot fails.
     """
-
-    try:
-        import hiddenlayer as hl
-    except ModuleNotFoundError as exc:  # pragma: no cover - import check
-        raise ImportError("hiddenlayer is required to plot the model") from exc
 
     if isinstance(model_or_path, tf.keras.Model):
         model = model_or_path
@@ -95,8 +91,21 @@ def save_model_plot(model_or_path: Union[tf.keras.Model, str, Path], output_path
         raise TypeError("model_or_path must be a tf.keras.Model or path to a '.keras' file")
 
     try:
-        graph = hl.build_graph(model, tf.keras.Input(shape=model.input_shape[1:]))
-        graph.save(str(output_path))
+        if backend == "plot_model":
+            tf.keras.utils.plot_model(
+                model,
+                to_file=str(output_path),
+                show_shapes=True,
+                show_dtype=True,
+                show_layer_names=True,
+                show_layer_activations=True,
+                show_trainable=True,
+            )
+        elif backend == "hiddenlayer":
+            graph = hl.build_graph(model, tf.keras.Input(shape=model.input_shape[1:]))
+            graph.save(str(output_path))
+        else:
+            raise ValueError("Invalid backend specified. Use 'hiddenlayer' or 'plot_model'.")
     except Exception as exc:  # pragma: no cover - hiddenlayer failures
         raise OSError("Failed to save model plot") from exc
 

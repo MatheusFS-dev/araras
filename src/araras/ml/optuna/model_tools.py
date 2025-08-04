@@ -10,11 +10,12 @@ import numpy as np
 import traceback
 import os
 
-
 from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
 from araras.ml.model.utils import capture_model_summary
 
 from araras.visualization.configs import config_plt
+
+from araras.ml.model.tools import save_model_plot
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                   Utilities                                  #
@@ -354,9 +355,10 @@ def plot_model_param_distribution(
                 model_path = os.path.join(plot_model_dir, f"model_{trial.number}.png")
 
                 try:
-                    import hiddenlayer as hl
-                    graph = hl.build_graph(model, transforms=[hl.transforms.Prune('Constant')])
-                    graph.save(model_path)
+                    save_model_plot(
+                        model,
+                        model_path,
+                    )
                 except Exception as e:
                     logger_error.error(f"{RED} Failed to plot model {trial.number}: {e} {RESET}")
                     traceback.print_exc()
