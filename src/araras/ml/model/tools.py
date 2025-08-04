@@ -46,16 +46,16 @@ def save_model_plot(
     model_or_path: Union[tf.keras.Model, str, Path],
     output_path: Union[str, Path],
 ) -> None:
-    """Generate and save a visual graph of a Keras model using ``hiddenlayer``.
+    """
+    Save a visual representation of a Keras model architecture to an image file.
 
-    This helper accepts either an in-memory :class:`tf.keras.Model` instance or the
-    path to a serialized ``.keras`` model file. The model architecture is
-    converted into a graph representation via :mod:`hiddenlayer` and written to
-    ``output_path``.
+    This function can take either a Keras model instance or a path to a `.keras`
+    model archive. It generates a plot of the model architecture and saves it
+    to the specified output path.
 
     Notes:
         The resulting plot format is inferred from the file extension provided
-        in ``output_path``. Common choices are ``.png`` and ``.pdf``. Existing
+        in ``output_path``. A common choice is ``.png``. Existing
         files at ``output_path`` will be overwritten.
 
     Args:
@@ -95,8 +95,12 @@ def save_model_plot(
             show_layer_activations=True,
             show_trainable=True,
         )
-    except Exception as exc:  # pragma: no cover - hiddenlayer failures
-        raise OSError("Failed to save model plot") from exc
+    except Exception as exc:
+        logger_error.error(f"{RED} Failed to save model plot: {exc}{RESET}")
+        logger.warning(f"{YELLOW} Ensure 'graphviz' is installed and updated.{RESET}")
+        logger.warning(f"{YELLOW} If using conda, try: conda install graphviz python-graphviz{RESET}")
+
+        traceback.print_exc()
 
 
 def punish_model_flops(
