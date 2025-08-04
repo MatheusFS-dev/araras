@@ -5,6 +5,8 @@ import zipfile
 from pathlib import Path
 from araras.ml.model.stats import get_flops
 import hiddenlayer as hl
+import hiddenlayer.transforms as ht
+import tensorflow.keras.backend as K
 
 import tensorflow as tf
 
@@ -102,8 +104,21 @@ def save_model_plot(
                 show_trainable=True,
             )
         elif backend == "hiddenlayer":
-            graph = hl.build_graph(model, tf.keras.Input(shape=model.input_shape[1:]))
-            graph.save(str(output_path))
+            K.set_learning_phase(0) # Set learning phase to 0 for inference mode
+
+            sess = tf.compat.v1.keras.backend.get_session()
+            graph = sess.graph
+
+            transforms = [
+                # ht.Fold("Conv > Relu", "ConvRelu"),  # merge Conv+ReLU sequences
+                # ht.Prune("Const"),  # drop constant nodes
+                ht.FoldDuplicates(),  # merge identical subgraphs
+            ]
+            
+            hl_graph = hl.build_graph(graph, transforms=transforms)
+            hl_graph.theme = hl.graph.THEMES["blue"].copy()
+            
+            hl_graph.save(str(output_path))
         else:
             raise ValueError("Invalid backend specified. Use 'hiddenlayer' or 'plot_model'.")
     except Exception as exc:  # pragma: no cover - hiddenlayer failures
