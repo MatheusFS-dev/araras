@@ -354,19 +354,12 @@ def plot_model_param_distribution(
                 model_path = os.path.join(plot_model_dir, f"model_{trial.number}.png")
 
                 try:
-                    tf.keras.utils.plot_model(
-                        model,
-                        to_file=model_path,
-                        show_shapes=True,
-                        show_dtype=True,
-                        show_layer_names=True,
-                        show_layer_activations=True,
-                        show_trainable=True,
-                    )
+                    import hiddenlayer as hl
+                    graph = hl.build_graph(model, transforms=[hl.transforms.Prune('Constant')])
+                    graph.save("model_architecture.png")
                 except Exception as e:
                     logger_error.error(f"{RED} Failed to plot model {trial.number}: {e} {RESET}")
                     traceback.print_exc()
-                    logger.warning(f"{ORANGE}\nTry updating Graphviz.{RESET}")
 
             study.tell(trial, 0.0)
         except tf.errors.ResourceExhaustedError as e:
