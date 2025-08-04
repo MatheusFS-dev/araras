@@ -256,7 +256,7 @@ def _trial_skip_connections_projected(
     project: Callable[[tf.Tensor, tf.Tensor, str], tf.Tensor],
     *,
     axis_to_concat: int = -1,
-    print_combinations: bool = False,
+    verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_proj",
@@ -274,7 +274,9 @@ def _trial_skip_connections_projected(
         layers_list: Sequence of tensors to connect.
         project: Callable used to adapt a source tensor to a target tensor.
         axis_to_concat: Axis for concatenation when ``merge_mode`` is ``"concat"``.
-        print_combinations: Whether to print every skip configuration.
+        verbose: Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` to only skip to the final layer or ``"any"`` for all
             forward pairs. Defaults to ``"any"``.
         merge_mode: ``"add"`` or ``"concat"``.
@@ -284,8 +286,12 @@ def _trial_skip_connections_projected(
         Tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``strategy`` or ``merge_mode`` are invalid.
+        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
+            ``merge_mode`` are invalid.
     """
+
+    if verbose not in {0, 1, 2}:
+        raise ValueError("verbose must be 0, 1, or 2.")
 
     N = len(layers_list)
     if N < 2:
@@ -301,12 +307,13 @@ def _trial_skip_connections_projected(
         raise ValueError(f"Unknown strategy '{strategy}'. Use 'final' or 'any'.")
 
     num_skips = len(pairs)
-    if print_combinations:
+    if verbose > 0:
         print("=" * 50)
         print(f"Total skip possibilities: {2**num_skips}")
-        for combo in itertools.product([False, True], repeat=num_skips):
-            settings = {f"skip_{i}_{j}": val for (i, j), val in zip(pairs, combo)}
-            print(settings)
+        if verbose > 1:
+            for combo in itertools.product([False, True], repeat=num_skips):
+                settings = {f"skip_{i}_{j}": val for (i, j), val in zip(pairs, combo)}
+                print(settings)
         print("=" * 50)
 
     if merge_mode not in ("concat", "add"):
@@ -360,7 +367,7 @@ def trial_skip_3d_tensors(
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
     use_batch_norm: bool = False,
-    print_combinations: bool = False,
+    verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn1d",
@@ -381,8 +388,9 @@ def trial_skip_3d_tensors(
         axis_to_concat: Axis used for concatenation when ``merge_mode`` is
             ``"concat"``.
         use_batch_norm: Apply batch normalization in the projection branch.
-        print_combinations: Display all possible skip configurations when
-            ``True``.
+        verbose: Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"`` to select candidate skip pairs.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names. Defaults to
@@ -392,7 +400,8 @@ def trial_skip_3d_tensors(
         The merged output tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``strategy`` or ``merge_mode`` are invalid.
+        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
+            ``merge_mode`` are invalid.
     """
 
     return _trial_skip_connections_projected(
@@ -400,7 +409,7 @@ def trial_skip_3d_tensors(
         layers_list=layers_list,
         project=lambda s, t, name: _project_conv1d(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
-        print_combinations=print_combinations,
+        verbose=verbose,
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
@@ -412,7 +421,7 @@ def trial_skip_2d_tensors(
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
     use_batch_norm: bool = False,
-    print_combinations: bool = False,
+    verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
@@ -430,7 +439,9 @@ def trial_skip_2d_tensors(
         layers_list: Sequence of dense tensors of shape ``(batch, features)``.
         axis_to_concat: Axis used when concatenating outputs.
         use_batch_norm: Apply batch normalization in projection branches.
-        print_combinations: If ``True``, print all skip configurations.
+        verbose: Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
@@ -439,7 +450,8 @@ def trial_skip_2d_tensors(
         Output tensor after applying skip connections.
 
     Raises:
-        ValueError: If ``strategy`` or ``merge_mode`` are invalid.
+        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
+            ``merge_mode`` are invalid.
     """
 
     return _trial_skip_connections_projected(
@@ -447,7 +459,7 @@ def trial_skip_2d_tensors(
         layers_list=layers_list,
         project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
-        print_combinations=print_combinations,
+        verbose=verbose,
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
@@ -459,7 +471,7 @@ def trial_skip_4d_tensors(
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
     use_batch_norm: bool = False,
-    print_combinations: bool = False,
+    verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn2d",
@@ -479,8 +491,9 @@ def trial_skip_4d_tensors(
         axis_to_concat: Concatenation axis if ``merge_mode`` is ``"concat"``.
         use_batch_norm: Whether to apply batch normalization in the projection
             branch.
-        print_combinations: Display all possible skip configurations when
-            ``True``.
+        verbose: Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"``.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names, defaults to
@@ -490,7 +503,8 @@ def trial_skip_4d_tensors(
         The merged output tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``strategy`` or ``merge_mode`` contain invalid values.
+        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
+            ``merge_mode`` contain invalid values.
     """
 
     return _trial_skip_connections_projected(
@@ -498,7 +512,7 @@ def trial_skip_4d_tensors(
         layers_list=layers_list,
         project=lambda s, t, name: _project_conv2d(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
-        print_combinations=print_combinations,
+        verbose=verbose,
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
