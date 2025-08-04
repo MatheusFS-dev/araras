@@ -104,20 +104,17 @@ def save_model_plot(
                 show_trainable=True,
             )
         elif backend == "hiddenlayer":
-            K.set_learning_phase(0) # Set learning phase to 0 for inference mode
-
-            sess = tf.compat.v1.keras.backend.get_session()
-            graph = sess.graph
+            # K.set_learning_phase(0) # Set learning phase to 0 for inference mode
 
             transforms = [
                 # ht.Fold("Conv > Relu", "ConvRelu"),  # merge Conv+ReLU sequences
                 # ht.Prune("Const"),  # drop constant nodes
                 ht.FoldDuplicates(),  # merge identical subgraphs
             ]
-            
-            hl_graph = hl.build_graph(graph, transforms=transforms)
+
+            hl_graph = hl.build_graph(K.get_session().graph, transforms=transforms)
             hl_graph.theme = hl.graph.THEMES["blue"].copy()
-            
+
             hl_graph.save(str(output_path))
         else:
             raise ValueError("Invalid backend specified. Use 'hiddenlayer' or 'plot_model'.")
