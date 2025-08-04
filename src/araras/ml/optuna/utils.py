@@ -390,6 +390,8 @@ def run_study(
           ``training_error.log`` and the process aborts so an external
           monitor can restart it.
         - The temporary ``backup_dir`` is deleted regardless of success.
+        - Setting ``variance_threshold``, ``prune_threshold`` or ``patience`` to
+          ``None`` disables the corresponding callback.
 
     Args:
         objective: Function that trains a model and returns the metric to
@@ -405,9 +407,12 @@ def run_study(
         extra_attrs: Additional user attributes copied when saving the top trials.
         pruner: Optional custom Optuna pruner. Defaults to :class:`HyperbandPruner`.
         sampler: Optional custom Optuna sampler. Defaults to :class:`TPESampler`.
-        patience: Stop a study if the objective value fails to improve for patience trials.
-        prune_threshold: Stop the study if prune_threshold consecutive pruned trials happen.
-        variance_threshold: Stop the study if the variance of improvement falls below this threshold.
+        patience: Number of completed trials allowed without improvement before
+            stopping the study. ``None`` disables this check.
+        prune_threshold: Number of consecutive pruned trials that triggers early
+            stopping. ``None`` disables this check.
+        variance_threshold: Improvement variance threshold used to detect
+            stagnation. ``None`` disables this check.
 
     Returns:
         optuna.study.Study: The completed study object.
@@ -453,6 +458,16 @@ def run_study(
             direction=direction,
         )
 
+        callbacks_list: list[Callable[[optuna.Study, optuna.Trial], None]] = []
+        if variance_threshold is not None:
+            callbacks_list.append(
+                ImprovementStagnation(variance_threshold=variance_threshold)
+            )
+        if prune_threshold is not None:
+            callbacks_list.append(StopIfKeepBeingPruned(threshold=prune_threshold))
+        if patience is not None:
+            callbacks_list.append(StopWhenNoValueImprovement(patience=patience))
+
         study.optimize(
             lambda trial: objective(
                 trial,
@@ -468,11 +483,7 @@ def run_study(
                 },
             ),
             n_trials=get_remaining_trials(study, num_trials),
-            callbacks=[
-                ImprovementStagnation(variance_threshold=variance_threshold),
-                StopIfKeepBeingPruned(threshold=prune_threshold),
-                StopWhenNoValueImprovement(patience=patience),
-            ],
+            callbacks=callbacks_list,
             catch=(),
             gc_after_trial=True,
         )
