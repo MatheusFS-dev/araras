@@ -19,7 +19,7 @@ def build_dnn(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
-    activation: Optional[Callable[..., Any]] = None,
+    activation: Optional[Union[str, Callable[..., Any]]] = None,
     name_prefix: str = "dnn",
 ) -> layers.Layer:
     """
@@ -44,7 +44,8 @@ def build_dnn(
         trial_kernel_reg (bool): Whether to tune and apply a kernel regularizer.
         trial_bias_reg (bool): Whether to tune and apply a bias regularizer.
         trial_activity_reg (bool): Whether to tune and apply an activity regularizer.
-        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+        activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
+            ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
             ``kparams`` may be ``None`` and no activation is sampled.
         name_prefix (str): Prefix to use for naming the layers.
 
@@ -98,12 +99,17 @@ def build_dnn(
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize batch with moving statistics
 
     # Determine and apply activation function
-    if activation is None:
+    explicit_none = isinstance(activation, str) and activation.lower() == "none"
+    if explicit_none:
+        activation = None
+
+    if activation is None and not explicit_none:
         if kparams is None:
             raise ValueError("kparams must be provided when activation is None")
         activation = kparams.get_activation(trial, f"{name_prefix}_act")
 
-    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
+    if activation is not None:
+        x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     # Apply dropout for regularization
     if dropout_rate > 0:

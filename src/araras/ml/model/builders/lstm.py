@@ -20,7 +20,7 @@ def build_lstm(
     trial_kernel_reg: bool = False,
     trial_bias_reg: bool = False,
     trial_activity_reg: bool = False,
-    activation: Optional[Callable[..., Any]] = None,
+    activation: Optional[Union[str, Callable[..., Any]]] = None,
     name_prefix: str = "lstm",
 ) -> layers.Layer:
     """
@@ -45,7 +45,8 @@ def build_lstm(
         trial_kernel_reg (bool): Whether to apply/tune a kernel regularizer.
         trial_bias_reg (bool): Whether to apply/tune a bias regularizer.
         trial_activity_reg (bool): Whether to apply/tune an activity regularizer.
-        activation (Optional[Callable[..., Any]]): Activation function to use. When provided,
+        activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
+            ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
             ``kparams`` may be ``None`` and no activation is sampled.
         name_prefix (str): Prefix to use for naming the layers.
 
@@ -107,11 +108,16 @@ def build_lstm(
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)  # Normalize the activations
 
     # Determine and apply activation function
-    if activation is None:
+    explicit_none = isinstance(activation, str) and activation.lower() == "none"
+    if explicit_none:
+        activation = None
+
+    if activation is None and not explicit_none:
         if kparams is None:
             raise ValueError("kparams must be provided when activation is None")
         activation = kparams.get_activation(trial, f"{name_prefix}_act")
 
-    x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
+    if activation is not None:
+        x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
 
     return x  # Return final output tensor after LSTM, batch norm (optional), and activation

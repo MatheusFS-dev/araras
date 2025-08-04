@@ -11,8 +11,8 @@ def build_squeeze_excite_1d(
     trial: optuna.Trial,
     kparams: Optional[KParams],
     ratio_choices: List[int],
-    act_reduce: Optional[Callable[..., Any]] = None,
-    act_expand: Optional[Callable[..., Any]] = None,
+    act_reduce: Optional[Union[str, Callable[..., Any]]] = None,
+    act_expand: Optional[Union[str, Callable[..., Any]]] = None,
     name_prefix: str = "se_block",
 ) -> tf.keras.layers.Layer:
     """Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
@@ -23,11 +23,11 @@ def build_squeeze_excite_1d(
         trial: Optuna Trial object for suggesting hyperparameters.
         kparams: KParams object containing hyperparameter choices. Can be ``None`` if
             both ``act_reduce`` and ``act_expand`` are provided.
-        ratio_choices: List of integers representing reduction ratios for SE block.
-        act_reduce: Optional activation for the reduction Dense layer. Overrides sampling
-            from ``kparams`` when provided.
-        act_expand: Optional activation for the expansion Dense layer. Overrides sampling
-            from ``kparams`` when provided.
+        ratio_choices: List of integers representing reduction ratios for the SE block.
+        act_reduce: Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        act_expand: Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
         name_prefix: Prefix for naming layers and trial parameters.
 
     Returns:
@@ -43,11 +43,18 @@ def build_squeeze_excite_1d(
 
     # 2. Optuna suggestions using ratio_choices and KParams
     ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
-    if act_reduce is None:
+    explicit_reduce_none = isinstance(act_reduce, str) and act_reduce.lower() == "none"
+    if explicit_reduce_none:
+        act_reduce = None
+    if act_reduce is None and not explicit_reduce_none:
         if kparams is None:
             raise ValueError("kparams must be provided when act_reduce is None")
         act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
-    if act_expand is None:
+
+    explicit_expand_none = isinstance(act_expand, str) and act_expand.lower() == "none"
+    if explicit_expand_none:
+        act_expand = None
+    if act_expand is None and not explicit_expand_none:
         if kparams is None:
             raise ValueError("kparams must be provided when act_expand is None")
         act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
@@ -75,8 +82,8 @@ def build_squeeze_excite_2d(
     trial: optuna.Trial,
     kparams: Optional[KParams],
     ratio_choices: List[int],
-    act_reduce: Optional[Callable[..., Any]] = None,
-    act_expand: Optional[Callable[..., Any]] = None,
+    act_reduce: Optional[Union[str, Callable[..., Any]]] = None,
+    act_expand: Optional[Union[str, Callable[..., Any]]] = None,
     name_prefix: str = "se_block_2d",
 ) -> tf.keras.layers.Layer:
     """
@@ -88,10 +95,10 @@ def build_squeeze_excite_2d(
         hparams: HParams object for activation choices. Can be ``None`` if both
             ``act_reduce`` and ``act_expand`` are provided.
         ratio_choices: List of reduction ratios to try.
-        act_reduce: Optional activation for the reduction Dense layer. Overrides
-            sampling from ``kparams`` when provided.
-        act_expand: Optional activation for the expansion Dense layer. Overrides
-            sampling from ``kparams`` when provided.
+        act_reduce: Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        act_expand: Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
         name_prefix: Prefix for layer names.
 
     Returns:
@@ -107,11 +114,18 @@ def build_squeeze_excite_2d(
 
     # 2. Hyperparameter suggestions
     ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
-    if act_reduce is None:
+    explicit_reduce_none = isinstance(act_reduce, str) and act_reduce.lower() == "none"
+    if explicit_reduce_none:
+        act_reduce = None
+    if act_reduce is None and not explicit_reduce_none:
         if kparams is None:
             raise ValueError("kparams must be provided when act_reduce is None")
         act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
-    if act_expand is None:
+
+    explicit_expand_none = isinstance(act_expand, str) and act_expand.lower() == "none"
+    if explicit_expand_none:
+        act_expand = None
+    if act_expand is None and not explicit_expand_none:
         if kparams is None:
             raise ValueError("kparams must be provided when act_expand is None")
         act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
