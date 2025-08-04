@@ -4,9 +4,6 @@ import tempfile
 import zipfile
 from pathlib import Path
 from araras.ml.model.stats import get_flops
-import hiddenlayer as hl
-import hiddenlayer.transforms as ht
-import tensorflow.keras.backend as K
 
 import tensorflow as tf
 
@@ -48,7 +45,6 @@ def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
 def save_model_plot(
     model_or_path: Union[tf.keras.Model, str, Path],
     output_path: Union[str, Path],
-    backend: Literal["hiddenlayer", "plot_model"] = "hiddenlayer",
 ) -> None:
     """Generate and save a visual graph of a Keras model using ``hiddenlayer``.
 
@@ -66,9 +62,6 @@ def save_model_plot(
         model_or_path: Either a :class:`tf.keras.Model` instance to be plotted or
             a filesystem path pointing to a ``.keras`` model archive.
         output_path: Destination path where the plot image will be saved.
-        backend: The backend to use for plotting. Options are:
-            - "hiddenlayer": Uses the :mod:`hiddenlayer` library to generate the plot.
-            - "plot_model": Uses :func:`tf.keras.utils.plot_model`.
 
     Returns:
         None: The plot is written to ``output_path``.
@@ -93,31 +86,15 @@ def save_model_plot(
         raise TypeError("model_or_path must be a tf.keras.Model or path to a '.keras' file")
 
     try:
-        if backend == "plot_model":
-            tf.keras.utils.plot_model(
-                model,
-                to_file=str(output_path),
-                show_shapes=True,
-                show_dtype=True,
-                show_layer_names=True,
-                show_layer_activations=True,
-                show_trainable=True,
-            )
-        elif backend == "hiddenlayer":
-            # K.set_learning_phase(0) # Set learning phase to 0 for inference mode
-
-            transforms = [
-                # ht.Fold("Conv > Relu", "ConvRelu"),  # merge Conv+ReLU sequences
-                # ht.Prune("Const"),  # drop constant nodes
-                ht.FoldDuplicates(),  # merge identical subgraphs
-            ]
-
-            hl_graph = hl.build_graph(K.get_session().graph, transforms=transforms)
-            hl_graph.theme = hl.graph.THEMES["blue"].copy()
-
-            hl_graph.save(str(output_path))
-        else:
-            raise ValueError("Invalid backend specified. Use 'hiddenlayer' or 'plot_model'.")
+        tf.keras.utils.plot_model(
+            model,
+            to_file=str(output_path),
+            show_shapes=True,
+            show_dtype=True,
+            show_layer_names=True,
+            show_layer_activations=True,
+            show_trainable=True,
+        )
     except Exception as exc:  # pragma: no cover - hiddenlayer failures
         raise OSError("Failed to save model plot") from exc
 
