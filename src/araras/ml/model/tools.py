@@ -45,6 +45,7 @@ def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
 def save_model_plot(
     model_or_path: Union[tf.keras.Model, str, Path],
     output_path: Union[str, Path],
+    safe_mode: bool = True,
 ) -> None:
     """
     Save a visual representation of a Keras model architecture to an image file.
@@ -62,6 +63,10 @@ def save_model_plot(
         model_or_path: Either a :class:`tf.keras.Model` instance to be plotted or
             a filesystem path pointing to a ``.keras`` model archive.
         output_path: Destination path where the plot image will be saved.
+        safe_mode: a parameter from :func:`tf.keras.utils.plot_model` that
+            controls whether to use safe mode for plotting. If set to `True`, the
+            function will not plot layers that are not supported by the plotting
+            utility, which can help avoid errors with custom layers.
 
     Returns:
         None: The plot is written to ``output_path``.
@@ -79,7 +84,7 @@ def save_model_plot(
         if model_path.suffix != ".keras":
             raise ValueError("Model path must point to a '.keras' file.")
         try:
-            model = tf.keras.models.load_model(model_path)
+            model = tf.keras.models.load_model(model_path, safe_mode=safe_mode)
         except Exception as exc:  # pragma: no cover - external load
             raise OSError("Failed to load Keras model from file") from exc
     else:
