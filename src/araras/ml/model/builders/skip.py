@@ -50,6 +50,24 @@ def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
     return layers.Lambda(_func, name=name)(x)
 
 
+def _resize_2d(x: tf.Tensor, size: tuple[int, int], name: str) -> tf.Tensor:
+    """Resize a 2D tensor to a specific spatial size using nearest interpolation.
+
+    Args:
+        x: Input tensor of shape ``(batch, height, width, channels)``.
+        size: Tuple ``(height, width)`` indicating the target spatial dimensions.
+        name: Base name for the generated :class:`~keras.layers.Lambda` layer.
+
+    Returns:
+        Tensor resized along the spatial axes.
+    """
+
+    def _func(t: tf.Tensor) -> tf.Tensor:
+        return tf.image.resize(t, size, method="nearest")
+
+    return layers.Lambda(_func, name=name)(x)
+
+
 def _project_conv1d(
     source: tf.Tensor,
     target: tf.Tensor,
@@ -98,6 +116,68 @@ def _project_conv1d(
 
     if len_tgt is not None and x.shape[1] is not None and x.shape[1] != len_tgt:
         x = _resize_1d(x, len_tgt, name=f"{name}_resize")
+
+    return x
+
+
+def _project_conv2d(
+    source: tf.Tensor,
+    target: tf.Tensor,
+    use_batch_norm: bool,
+    name: str,
+) -> tf.Tensor:
+    """Project a source 2-D tensor so it matches a target tensor.
+
+    The function applies a ``Conv2D`` with kernel size ``1`` to adjust the
+    channel dimension and optionally downsamples spatial axes. When the output
+    size still differs from ``target``, a resize operation is applied.
+
+    Args:
+        source: Tensor with shape ``(batch, height, width, channels)``.
+        target: Tensor providing the desired spatial dimensions and channels.
+        use_batch_norm: Whether to include batch normalization after the
+            convolution.
+        name: Base name used for created layers.
+
+    Returns:
+        The projected tensor that has the same shape as ``target``.
+    """
+
+    h_tgt, w_tgt = target.shape[1], target.shape[2]
+    channels_tgt = target.shape[3]
+    stride_h = stride_w = 1
+    h_src, w_src = source.shape[1], source.shape[2]
+    if (
+        h_src is not None
+        and h_tgt is not None
+        and h_src >= h_tgt
+        and h_src % h_tgt == 0
+    ):
+        stride_h = h_src // h_tgt
+    if (
+        w_src is not None
+        and w_tgt is not None
+        and w_src >= w_tgt
+        and w_src % w_tgt == 0
+    ):
+        stride_w = w_src // w_tgt
+
+    x = layers.Conv2D(
+        channels_tgt,
+        kernel_size=1,
+        strides=(stride_h, stride_w),
+        padding="same",
+        name=f"{name}_conv",
+    )(source)
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name}_bn")(x)
+
+    if (
+        (h_tgt is not None and x.shape[1] is not None and x.shape[1] != h_tgt)
+        or (w_tgt is not None and x.shape[2] is not None and x.shape[2] != w_tgt)
+    ):
+        x = _resize_2d(x, (h_tgt, w_tgt), name=f"{name}_resize")
 
     return x
 
@@ -234,7 +314,7 @@ def _trial_skip_connections_projected(
     return updated[-1]
 
 
-def trial_skip_connections_cnn1d(
+def trial_skip_3d_tensor(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
@@ -244,12 +324,12 @@ def trial_skip_connections_cnn1d(
     merge_mode: str = "add",
     name_prefix: str = "skip_proj",
 ) -> tf.Tensor:
-    """Apply projected skip connections for 1D convolutional tensors.
+    """Apply projected skip connections for rank-3 tensors.
 
     Notes:
-        The projection uses ``Conv1D(1)`` layers to match channel dimensions and
-        optionally downsample the temporal axis when the source length is an
-        integer multiple of the target length.
+        Primarily intended for tensors produced by 1D convolutions. Projection
+        employs ``Conv1D(1)`` layers to match channels and downsample the temporal
+        axis when its length is an integer multiple of the target length.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -283,7 +363,7 @@ def trial_skip_connections_cnn1d(
     )
 
 
-def trial_skip_connections_dense(
+def trial_skip_2d_tensor(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
     axis_to_concat: int = -1,
@@ -292,8 +372,8 @@ def trial_skip_connections_dense(
     strategy: str = "final",
     merge_mode: str = "add",
     name_prefix: str = "skip_proj",
-    ) -> tf.Tensor:
-    """Skip connections for dense tensors with automatic feature projection.
+) -> tf.Tensor:
+    """Skip connections for rank-2 tensors with automatic feature projection.
 
     Args:
         trial: Optuna trial governing which connections are active.
@@ -317,6 +397,55 @@ def trial_skip_connections_dense(
         trial=trial,
         layers_list=layers_list,
         project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
+        axis_to_concat=axis_to_concat,
+        print_combinations=print_combinations,
+        strategy=strategy,
+        merge_mode=merge_mode,
+        name_prefix=name_prefix,
+    )
+
+
+def trial_skip_4d_tensor(
+    trial: optuna.trial.Trial,
+    layers_list: Sequence[tf.Tensor],
+    axis_to_concat: int = -1,
+    use_batch_norm: bool = False,
+    print_combinations: bool = False,
+    strategy: str = "final",
+    merge_mode: str = "add",
+    name_prefix: str = "skip_proj",
+) -> tf.Tensor:
+    """Apply projected skip connections for rank-4 tensors.
+
+    Notes:
+        Designed for tensors produced by 2D convolution layers. Projection uses
+        ``Conv2D(1x1)`` layers to match channels and optionally downsample spatial
+        dimensions when they are integer multiples of the targets.
+
+    Args:
+        trial: Optuna trial for selecting which skips to include.
+        layers_list: Sequence of tensors to connect via skips. Each tensor must
+            have rank 4 ``(batch, height, width, channels)``.
+        axis_to_concat: Concatenation axis if ``merge_mode`` is ``"concat"``.
+        use_batch_norm: Whether to apply batch normalization in the projection
+            branch.
+        print_combinations: Display all possible skip configurations when ``True``.
+        strategy: ``"final"`` to only skip to the last layer or ``"any"`` for all
+            forward pairs.
+        merge_mode: ``"add"`` or ``"concat"``.
+        name_prefix: Prefix for projection layer names.
+
+    Returns:
+        The merged output tensor after applying the selected skip connections.
+
+    Raises:
+        ValueError: If ``strategy`` or ``merge_mode`` contain invalid values.
+    """
+
+    return _trial_skip_connections_projected(
+        trial=trial,
+        layers_list=layers_list,
+        project=lambda s, t, name: _project_conv2d(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
         print_combinations=print_combinations,
         strategy=strategy,
