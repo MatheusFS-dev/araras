@@ -290,6 +290,8 @@ def plot_model_param_distribution(
         ``ResourceExhaustedError`` on GPUs with limited VRAM. When ``logs_dir``
         is provided, one log file per failed trial is created containing the
         trial parameters and traceback.
+        
+        Must have Graphviz installed to plot models.
 
     Warning:
         Models that trigger ``ResourceExhaustedError`` are ignored in the final
@@ -350,13 +352,21 @@ def plot_model_param_distribution(
             if plot_model_dir:
                 os.makedirs(plot_model_dir, exist_ok=True)
                 model_path = os.path.join(plot_model_dir, f"model_{trial.number}.png")
-                
-                tf.keras.utils.plot_model(
-                    model,
-                    to_file=model_path,
-                    show_shapes=True,
-                    show_layer_names=True,
-                )
+
+                try:
+                    tf.keras.utils.plot_model(
+                        model,
+                        to_file=model_path,
+                        show_shapes=True,
+                        show_dtype=True,
+                        show_layer_names=True,
+                        show_layer_activations=True,
+                        show_trainable=True,
+                    )
+                except Exception as e:
+                    logger_error.error(f"{RED} Failed to plot model {trial.number}: {e} {RESET}")
+                    traceback.print_exc()
+                    logger.warning(f"{ORANGE}\nTry updating Graphviz.{RESET}")
 
             study.tell(trial, 0.0)
         except tf.errors.ResourceExhaustedError as e:
