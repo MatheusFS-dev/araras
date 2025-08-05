@@ -101,7 +101,7 @@ def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
     return layers.Lambda(
         _func,
         #! Lambda has deserialization issues, so providing the output shape is necessary
-        output_shape=lambda s: (s[0], length, s[-1]),
+        output_shape=(length, x.shape[-1]),
         name=name,
     )(x)
 
@@ -140,7 +140,7 @@ def _resize_2d(x: tf.Tensor, size: tuple[int, int], name: str) -> tf.Tensor:
     return layers.Lambda(
         _func,
         #! Lambda has deserialization issues, so providing the output shape is necessary
-        output_shape=lambda s: (size[0], size[1], s[-1]),
+        output_shape=(size[0], size[1], x.shape[-1]),
         name=name,
     )(x)
 
