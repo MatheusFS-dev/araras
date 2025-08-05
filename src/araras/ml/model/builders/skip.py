@@ -7,6 +7,29 @@ import tensorflow as tf
 from tensorflow.keras import layers
 
 
+def base_name(t: tf.Tensor) -> str:
+    """Return the base name of a tensor without TensorFlow suffixes.
+
+    The ``name`` attribute of a :class:`tf.Tensor` includes information about
+    the operation that produced it and an output suffix (e.g., ``":0"``). This
+    helper strips everything after the first slash to recover the original
+    layer name.
+
+    Args:
+        t: Tensor whose name is to be simplified.
+
+    Returns:
+        The portion of ``t.name`` before the first ``"/"``.
+
+    Raises:
+        ValueError: If ``t`` does not have a valid ``name`` attribute.
+    """
+
+    if not getattr(t, "name", None):
+        raise ValueError("Tensor must have a non-empty 'name' attribute.")
+    return t.name.split("/", 1)[0]
+
+
 def _unique_name(base: str) -> str:
     """Create a globally unique Keras layer name.
 
@@ -330,6 +353,7 @@ def _trial_skip_connections_projected(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_proj",
+    nickname: Sequence[str] | None = None,
 ) -> tf.Tensor:
     """Generic skip connections that project mismatched tensors.
 
@@ -351,13 +375,17 @@ def _trial_skip_connections_projected(
             forward pairs. Defaults to ``"any"``.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for layers created by ``project``.
+        nickname: Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and will be used in naming skip
+            connections instead of inferring names from tensors.
 
     Returns:
         Tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
-            ``merge_mode`` are invalid.
+        ValueError: If ``verbose`` not in ``{0, 1, 2}``, if ``strategy`` or
+            ``merge_mode`` are invalid, or if ``nickname`` is provided with a
+            length different from ``layers_list``.
     """
 
     if verbose not in {0, 1, 2}:
@@ -368,6 +396,13 @@ def _trial_skip_connections_projected(
         return layers_list[-1]
 
     last_idx = N - 1
+
+    if nickname is not None:
+        if len(nickname) != N:
+            raise ValueError("nickname must have the same length as layers_list.")
+        names = list(nickname)
+    else:
+        names = [base_name(t) for t in layers_list]
 
     if strategy == "any":
         pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
@@ -382,7 +417,10 @@ def _trial_skip_connections_projected(
         print(f"Total skip possibilities: {2**num_skips}")
         if verbose > 1:
             for combo in itertools.product([False, True], repeat=num_skips):
-                settings = {f"skip_{i}_{j}": val for (i, j), val in zip(pairs, combo)}
+                settings = {
+                    f"skip_from_{names[i]}_to_{names[j]}": val
+                    for (i, j), val in zip(pairs, combo)
+                }
                 print(settings)
         print("=" * 50)
 
@@ -392,9 +430,13 @@ def _trial_skip_connections_projected(
     if strategy == "final":
         selected = []
         for i in range(last_idx):
-            include = trial.suggest_categorical(f"skip_{i}_{last_idx}", [False, True])
+            include = trial.suggest_categorical(
+                f"skip_from_{names[i]}_to_{names[last_idx]}", [False, True]
+            )
             if include:
-                name = _unique_name(f"{name_prefix}_{i}_{last_idx}")
+                name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}"
+                )
                 src = layers_list[i]
                 if _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat):
                     src = project(src, layers_list[-1], name)
@@ -412,9 +454,13 @@ def _trial_skip_connections_projected(
     for j in range(1, N):
         sources = []
         for i in range(j):
-            include = trial.suggest_categorical(f"skip_{i}_{j}", [False, True])
+            include = trial.suggest_categorical(
+                f"skip_from_{names[i]}_to_{names[j]}", [False, True]
+            )
             if include:
-                name = _unique_name(f"{name_prefix}_{i}_{j}")
+                name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[j]}"
+                )
                 src = updated[i]
                 if _needs_projection(src, updated[j], merge_mode, axis_to_concat):
                     src = project(src, updated[j], name)
@@ -427,7 +473,9 @@ def _trial_skip_connections_projected(
             
             # Print sources for debugging
             if verbose > 1:
-                print(f"Concatenating sources for skip_{j}: {[s.shape for s in sources]}")
+                print(
+                    f"Concatenating sources for skip_to_{names[j]}: {[s.shape for s in sources]}"
+                )
             
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
         else:
@@ -446,6 +494,7 @@ def trial_skip_3d_tensors(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn1d",
+    nickname: Sequence[str] | None = None,
 ) -> tf.Tensor:
     """Apply projected skips for 3D tensors.
 
@@ -470,14 +519,17 @@ def trial_skip_3d_tensors(
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names. Defaults to
             ``"skip_cnn1d"``.
+        nickname: Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and overrides automatic name
+            inference.
 
     Returns:
         The merged output tensor after applying the selected skip connections.
 
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 3-D, if ``verbose``
-            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` are
-            invalid.
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
+            invalid, or if ``nickname`` is provided with a length mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 3, "trial_skip_3d_tensors")
@@ -491,6 +543,7 @@ def trial_skip_3d_tensors(
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
+        nickname=nickname,
     )
 
 
@@ -503,6 +556,7 @@ def trial_skip_2d_tensors(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
+    nickname: Sequence[str] | None = None,
 ) -> tf.Tensor:
     """Skip connections for 2D tensors with feature projection.
 
@@ -525,14 +579,17 @@ def trial_skip_2d_tensors(
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
+        nickname: Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and replaces automatic name
+            inference.
 
     Returns:
         Output tensor after applying skip connections.
 
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 2-D, if ``verbose``
-            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` are
-            invalid.
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
+            invalid, or if ``nickname`` is provided with a length mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 2, "trial_skip_2d_tensors")
@@ -546,6 +603,7 @@ def trial_skip_2d_tensors(
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
+        nickname=nickname,
     )
 
 
@@ -558,6 +616,7 @@ def trial_skip_4d_tensors(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn2d",
+    nickname: Sequence[str] | None = None,
 ) -> tf.Tensor:
     """Apply projected skip connections for 4D tensors.
 
@@ -583,14 +642,18 @@ def trial_skip_4d_tensors(
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names, defaults to
             ``"skip_cnn2d"``.
+        nickname: Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and overrides automatic name
+            inference.
 
     Returns:
         The merged output tensor after applying the selected skip connections.
 
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 4-D, if ``verbose``
-            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` contain
-            invalid values.
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` contain
+            invalid values, or if ``nickname`` is provided with a length
+            mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 4, "trial_skip_4d_tensors")
@@ -604,4 +667,5 @@ def trial_skip_4d_tensors(
         strategy=strategy,
         merge_mode=merge_mode,
         name_prefix=name_prefix,
+        nickname=nickname,
     )
