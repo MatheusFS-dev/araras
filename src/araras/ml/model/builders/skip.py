@@ -32,25 +32,57 @@ def _unique_name(base: str) -> str:
 def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
     """Resize a 1D tensor to a specific length using nearest interpolation.
 
+    This helper expands the tensor along a spatial axis, applies
+    nearest-neighbor resizing, and then removes the added axis.
+
+    Notes:
+        A :class:`~keras.layers.Lambda` layer with an explicit ``output_shape``
+        is used to avoid deserialization issues.
+
+    Warnings:
+        Setting ``length`` to excessively large values may lead to
+        considerable memory consumption.
+
     Args:
         x: Input tensor of shape ``(batch, length, channels)``.
         length: Target temporal length.
         name: Base name for the generated :class:`~keras.layers.Lambda` layer.
 
     Returns:
-        Tensor resized along the temporal axis.
+        Tensor resized along the temporal axis with shape
+        ``(batch, length, channels)``.
+
+    Raises:
+        ValueError: If ``length`` is not a positive integer.
     """
+
+    if length <= 0:
+        raise ValueError("length must be a positive integer.")
 
     def _func(t: tf.Tensor) -> tf.Tensor:
         t = tf.expand_dims(t, axis=2)
         t = tf.image.resize(t, (length, 1), method="nearest")
         return tf.squeeze(t, axis=2)
 
-    return layers.Lambda(_func, name=name)(x)
+    return layers.Lambda(
+        _func,
+        #! Lambda has deserialization issues, so providing the output shape is necessary
+        output_shape=lambda s: (length, s[-1]),
+        name=name,
+    )(x)
 
 
 def _resize_2d(x: tf.Tensor, size: tuple[int, int], name: str) -> tf.Tensor:
     """Resize a 2D tensor to a specific spatial size using nearest interpolation.
+
+    The tensor is resized using nearest-neighbor interpolation.
+
+    Notes:
+        Employs a :class:`~keras.layers.Lambda` layer with an explicit
+        ``output_shape`` to prevent deserialization problems.
+
+    Warnings:
+        Very large ``size`` values can cause high memory usage.
 
     Args:
         x: Input tensor of shape ``(batch, height, width, channels)``.
@@ -58,13 +90,25 @@ def _resize_2d(x: tf.Tensor, size: tuple[int, int], name: str) -> tf.Tensor:
         name: Base name for the generated :class:`~keras.layers.Lambda` layer.
 
     Returns:
-        Tensor resized along the spatial axes.
+        Tensor resized along the spatial axes with shape
+        ``(batch, height, width, channels)``.
+
+    Raises:
+        ValueError: If any dimension in ``size`` is not a positive integer.
     """
+
+    if any(d <= 0 for d in size):
+        raise ValueError("size dimensions must be positive integers.")
 
     def _func(t: tf.Tensor) -> tf.Tensor:
         return tf.image.resize(t, size, method="nearest")
 
-    return layers.Lambda(_func, name=name)(x)
+    return layers.Lambda(
+        _func,
+        #! Lambda has deserialization issues, so providing the output shape is necessary
+        output_shape=lambda s: (size[0], size[1], s[-1]),
+        name=name,
+    )(x)
 
 
 def _needs_projection(
