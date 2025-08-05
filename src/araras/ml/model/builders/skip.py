@@ -318,6 +318,12 @@ def _project_dense(
     units = target.shape[-1]
     x = layers.Dense(units, name=f"{name}_dense")(x)
 
+    if x.shape.rank > 2 and x.shape[-1] == 1 and auto_squeeze:
+        # remove trailing singleton channel if present
+        x = layers.Lambda(
+            lambda t: tf.squeeze(t, axis=-1), output_shape=x.shape[1:], name=f"{name}_ensure_2d"
+        )(x)
+
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name}_bn")(x)
 
