@@ -364,15 +364,17 @@ def _trial_skip_connections_projected(
     merge_mode: str = "add",
     name_prefix: str = "skip_proj",
     nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
 ) -> tf.Tensor:
     """Generic skip connections that project mismatched tensors.
 
     Each :class:`~keras.layers.Add` or :class:`~keras.layers.Concatenate` layer
     receives the name ``"skip_from_{source}_to_{target}"`` to clearly indicate
     the connected pair. Auxiliary layers created by ``project`` maintain unique
-    names derived from ``name_prefix``. Projection is only applied to source
-    tensors and only when their shapes differ from the target (respecting
-    ``axis_to_concat`` in concatenation mode).
+    names derived from ``name_prefix``. Projection, controlled by
+    ``projection_mode``, is only applied to source tensors and only when their
+    shapes differ from the target (respecting ``axis_to_concat`` in
+    concatenation mode).
 
     Args:
         trial: Optuna trial for selecting which skips are active.
@@ -389,18 +391,32 @@ def _trial_skip_connections_projected(
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and will be used in naming skip
             connections instead of inferring names from tensors.
+        projection_mode: How to align source and target tensors. ``"conv"``
+            applies ``project`` to adjust channel/feature dimensions.
+            ``"resize"`` skips the projection callable and only resizes spatial
+            or temporal dimensions. Incompatible with ``merge_mode='add'``.
 
     Returns:
         Tensor after applying the selected skip connections.
 
     Raises:
         ValueError: If ``verbose`` not in ``{0, 1, 2}``, if ``strategy`` or
-            ``merge_mode`` are invalid, or if ``nickname`` is provided with a
-            length different from ``layers_list``.
+            ``merge_mode`` are invalid, if ``projection_mode`` is unsupported,
+            if ``merge_mode='add'`` with ``projection_mode='resize'`` is used,
+            or if ``nickname`` is provided with a length different from
+            ``layers_list``.
     """
 
     if verbose not in {0, 1, 2}:
         raise ValueError("verbose must be 0, 1, or 2.")
+
+    if merge_mode == "add" and projection_mode == "resize":
+        raise ValueError(
+            "merge_mode='add' requires channel projection; 'resize' mode is incompatible"
+        )
+
+    if projection_mode not in {"conv", "resize"}:
+        raise ValueError("projection_mode must be 'conv' or 'resize'.")
 
     N = len(layers_list)
     if N < 2:
@@ -438,6 +454,30 @@ def _trial_skip_connections_projected(
     if merge_mode not in ("concat", "add"):
         raise ValueError(f"Unknown merge_mode '{merge_mode}'. Use 'concat' or 'add'.")
 
+    if projection_mode == "conv":
+        project_fn = project
+    else:
+        def project_fn(src: tf.Tensor, tgt: tf.Tensor, name: str) -> tf.Tensor:
+            rank = len(src.shape)
+            if rank == 3 and len(tgt.shape) == 3:
+                length = tgt.shape[1]
+                if length is None:
+                    raise ValueError(
+                        "Target temporal dimension must be known for resize projection."
+                    )
+                return _resize_1d(src, length, name=f"{name}_resize")
+            if rank == 4 and len(tgt.shape) == 4:
+                h, w = tgt.shape[1], tgt.shape[2]
+                if h is None or w is None:
+                    raise ValueError(
+                        "Target spatial dimensions must be known for resize projection."
+                    )
+                size = (h, w)
+                return _resize_2d(src, size, name=f"{name}_resize")
+            raise ValueError(
+                "projection_mode='resize' supports only 3-D or 4-D tensors."
+            )
+
     if strategy == "final":
         target = layers_list[-1]
         for i in range(last_idx):
@@ -446,10 +486,12 @@ def _trial_skip_connections_projected(
             )
             if include:
                 skip_name = f"skip_from_{names[i]}_to_{names[last_idx]}"
-                proj_name = _unique_name(f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}")
+                proj_name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}"
+                )
                 src = layers_list[i]
                 if _needs_projection(src, target, merge_mode, axis_to_concat):
-                    src = project(src, target, proj_name)
+                    src = project_fn(src, target, proj_name)
                 if merge_mode == "concat":
                     target = layers.Concatenate(axis=axis_to_concat, name=skip_name)([src, target])
                 else:
@@ -465,16 +507,20 @@ def _trial_skip_connections_projected(
             )
             if include:
                 skip_name = f"skip_from_{names[i]}_to_{names[j]}"
-                proj_name = _unique_name(f"{name_prefix}_from_{names[i]}_to_{names[j]}")
+                proj_name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[j]}"
+                )
                 src = updated[i]
                 if _needs_projection(src, target, merge_mode, axis_to_concat):
-                    src = project(src, target, proj_name)
+                    src = project_fn(src, target, proj_name)
                 if merge_mode == "concat":
                     if verbose > 1:
                         print(
                             f"Concatenating sources for {skip_name}: {[s.shape for s in [src, target]]}"
                         )
-                    target = layers.Concatenate(axis=axis_to_concat, name=skip_name)([src, target])
+                    target = layers.Concatenate(
+                        axis=axis_to_concat, name=skip_name
+                    )([src, target])
                 else:
                     target = layers.Add(name=skip_name)([src, target])
         updated[j] = target
@@ -492,6 +538,7 @@ def trial_skip_3d_tensors(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn1d",
     nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
 ) -> tf.Tensor:
     """Apply projected skips for 3D tensors.
 
@@ -500,8 +547,10 @@ def trial_skip_3d_tensors(
         Although only a subset of layers is provided via ``layers_list``,
         upstream layers with incompatible ranks may propagate invalid tensors
         that trigger an early ``ValueError``. The projection branch uses
-        ``Conv1D(1)`` layers to adjust channels and, when possible, the temporal
-        dimension. If the lengths still differ, a resize operation is applied.
+        ``Conv1D(1)`` layers when ``projection_mode='conv'`` to adjust channels
+        and, when possible, the temporal dimension. With
+        ``projection_mode='resize'`` only the temporal dimension is resized and
+        channel counts remain untouched.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -519,6 +568,9 @@ def trial_skip_3d_tensors(
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and overrides automatic name
             inference.
+        projection_mode: ``"conv"`` uses ``Conv1D(1)`` to match channel
+            counts. ``"resize"`` only resizes the temporal dimension and keeps
+            channels unchanged. ``merge_mode='add'`` requires ``"conv"``.
 
     Returns:
         The merged output tensor after applying the selected skip connections.
@@ -526,7 +578,8 @@ def trial_skip_3d_tensors(
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 3-D, if ``verbose``
             not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
-            invalid, or if ``nickname`` is provided with a length mismatch.
+            invalid, if ``projection_mode`` is unsupported, or if ``nickname``
+            is provided with a length mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 3, "trial_skip_3d_tensors")
@@ -541,6 +594,7 @@ def trial_skip_3d_tensors(
         merge_mode=merge_mode,
         name_prefix=name_prefix,
         nickname=nickname,
+        projection_mode=projection_mode,
     )
 
 
@@ -554,6 +608,7 @@ def trial_skip_2d_tensors(
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
     nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
 ) -> tf.Tensor:
     """Skip connections for 2D tensors with feature projection.
 
@@ -562,8 +617,9 @@ def trial_skip_2d_tensors(
         only a subset of layers is passed through ``layers_list``, preceding
         layers emitting tensors of other ranks may lead to an early
         ``ValueError``. A :class:`~keras.layers.Dense` layer projects the
-        source tensor's features to match the target. If shapes still differ, a
-        resize operation is applied.
+        source tensor's features when ``projection_mode='conv'``. With
+        ``projection_mode='resize'`` no feature projection occurs and tensors
+        must already share the same feature dimension.
 
     Args:
         trial: Optuna trial controlling which connections are active.
@@ -579,6 +635,10 @@ def trial_skip_2d_tensors(
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and replaces automatic name
             inference.
+        projection_mode: ``"conv"`` applies a dense layer to match feature
+            counts. ``"resize"`` skips this projection and only concatenates
+            or adds tensors when features already align. ``merge_mode='add'``
+            requires ``"conv"``.
 
     Returns:
         Output tensor after applying skip connections.
@@ -586,7 +646,8 @@ def trial_skip_2d_tensors(
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 2-D, if ``verbose``
             not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
-            invalid, or if ``nickname`` is provided with a length mismatch.
+            invalid, if ``projection_mode`` is unsupported, or if ``nickname``
+            is provided with a length mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 2, "trial_skip_2d_tensors")
@@ -601,6 +662,7 @@ def trial_skip_2d_tensors(
         merge_mode=merge_mode,
         name_prefix=name_prefix,
         nickname=nickname,
+        projection_mode=projection_mode,
     )
 
 
@@ -614,6 +676,7 @@ def trial_skip_4d_tensors(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn2d",
     nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
 ) -> tf.Tensor:
     """Apply projected skip connections for 4D tensors.
 
@@ -622,8 +685,9 @@ def trial_skip_4d_tensors(
         supported. Because ``layers_list`` may include only some of the model's
         layers, mismatched ranks from preceding layers can still propagate and
         trigger an early ``ValueError``. A :class:`~keras.layers.Conv2D` layer
-        with kernel size ``1`` projects the source tensor's channels to match the
-        target, and a resize operation addresses spatial mismatches when needed.
+        with kernel size ``1`` projects channels when ``projection_mode='conv'``.
+        With ``projection_mode='resize'`` only the spatial dimensions are resized
+        and channels remain unaltered.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -642,6 +706,9 @@ def trial_skip_4d_tensors(
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and overrides automatic name
             inference.
+        projection_mode: ``"conv"`` uses ``Conv2D(1)`` to match channel counts.
+            ``"resize"`` only resizes spatial dimensions and leaves channels
+            untouched. ``merge_mode='add'`` requires ``"conv"``.
 
     Returns:
         The merged output tensor after applying the selected skip connections.
@@ -649,8 +716,8 @@ def trial_skip_4d_tensors(
     Raises:
         ValueError: If any tensor in ``layers_list`` is not 4-D, if ``verbose``
             not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` contain
-            invalid values, or if ``nickname`` is provided with a length
-            mismatch.
+            invalid values, if ``projection_mode`` is unsupported, or if
+            ``nickname`` is provided with a length mismatch.
     """
 
     _validate_tensor_ranks(layers_list, 4, "trial_skip_4d_tensors")
@@ -665,4 +732,5 @@ def trial_skip_4d_tensors(
         merge_mode=merge_mode,
         name_prefix=name_prefix,
         nickname=nickname,
+        projection_mode=projection_mode,
     )
