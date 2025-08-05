@@ -341,6 +341,10 @@ def _trial_skip_connections_projected(
     if N < 2:
         return layers_list[-1]
 
+    if verbose > 0:
+        for idx, tensor in enumerate(layers_list):
+            print(f"Initial tensor {idx} shape: {tensor.shape}")
+
     last_idx = N - 1
 
     if strategy == "any":
@@ -370,8 +374,15 @@ def _trial_skip_connections_projected(
             if include:
                 name = _unique_name(f"{name_prefix}_{i}_{last_idx}")
                 src = layers_list[i]
-                if _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat):
+                need_proj = _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat)
+                if verbose > 0:
+                    print(
+                        f"Skip {i}->{last_idx}: src shape {src.shape}, target shape {layers_list[-1].shape}, project={need_proj}"
+                    )
+                if need_proj:
                     src = project(src, layers_list[-1], name)
+                    if verbose > 0:
+                        print(f"Projected src {i}->{last_idx} shape: {src.shape}")
                 selected.append(src)
         if not selected:
             return layers_list[-1]
@@ -390,12 +401,22 @@ def _trial_skip_connections_projected(
             if include:
                 name = _unique_name(f"{name_prefix}_{i}_{j}")
                 src = updated[i]
-                if _needs_projection(src, updated[j], merge_mode, axis_to_concat):
+                need_proj = _needs_projection(src, updated[j], merge_mode, axis_to_concat)
+                if verbose > 0:
+                    print(
+                        f"Skip {i}->{j}: src shape {src.shape}, target shape {updated[j].shape}, project={need_proj}"
+                    )
+                if need_proj:
                     src = project(src, updated[j], name)
+                    if verbose > 0:
+                        print(f"Projected src {i}->{j} shape: {src.shape}")
                 sources.append(src)
         if not sources:
             continue
         sources.append(updated[j])
+        if verbose > 0:
+            merged_shapes = [s.shape for s in sources]
+            print(f"Merging at layer {j} with shapes: {merged_shapes}")
         if merge_mode == "concat":
             
             # Print all shapes and ranks for debugging
@@ -503,6 +524,9 @@ def trial_skip_2d_tensors(
         ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
             ``merge_mode`` are invalid.
     """
+    if verbose > 0:
+        for idx, tensor in enumerate(layers_list):
+            print(f"trial_skip_2d_tensors input {idx} shape: {tensor.shape}")
 
     return _trial_skip_connections_projected(
         trial=trial,
