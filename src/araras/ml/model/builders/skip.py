@@ -357,11 +357,12 @@ def _trial_skip_connections_projected(
 ) -> tf.Tensor:
     """Generic skip connections that project mismatched tensors.
 
-    Layer names are automatically suffixed with unique identifiers so the
-    function can be invoked multiple times in the same model without causing
-    naming collisions. Projection is only applied to source tensors and only
-    when their shapes differ from the target (respecting ``axis_to_concat`` in
-    concatenation mode).
+    Each :class:`~keras.layers.Add` or :class:`~keras.layers.Concatenate` layer
+    receives the name ``"skip_from_{source}_to_{target}"`` to clearly indicate
+    the connected pair. Auxiliary layers created by ``project`` maintain unique
+    names derived from ``name_prefix``. Projection is only applied to source
+    tensors and only when their shapes differ from the target (respecting
+    ``axis_to_concat`` in concatenation mode).
 
     Args:
         trial: Optuna trial for selecting which skips are active.
@@ -428,59 +429,45 @@ def _trial_skip_connections_projected(
         raise ValueError(f"Unknown merge_mode '{merge_mode}'. Use 'concat' or 'add'.")
 
     if strategy == "final":
-        selected = []
+        target = layers_list[-1]
         for i in range(last_idx):
             include = trial.suggest_categorical(
                 f"skip_from_{names[i]}_to_{names[last_idx]}", [False, True]
             )
             if include:
-                name = _unique_name(
-                    f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}"
-                )
+                skip_name = f"skip_from_{names[i]}_to_{names[last_idx]}"
+                proj_name = _unique_name(f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}")
                 src = layers_list[i]
-                if _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat):
-                    src = project(src, layers_list[-1], name)
-                selected.append(src)
-        if not selected:
-            return layers_list[-1]
-        selected.append(layers_list[-1])
-        if merge_mode == "concat":
-            layer_name = _unique_name(f"{name_prefix}_concat_final")
-            return layers.Concatenate(axis=axis_to_concat, name=layer_name)(selected)
-        layer_name = _unique_name(f"{name_prefix}_add_final")
-        return layers.Add(name=layer_name)(selected)
+                if _needs_projection(src, target, merge_mode, axis_to_concat):
+                    src = project(src, target, proj_name)
+                if merge_mode == "concat":
+                    target = layers.Concatenate(axis=axis_to_concat, name=skip_name)([src, target])
+                else:
+                    target = layers.Add(name=skip_name)([src, target])
+        return target
 
     updated = list(layers_list)
     for j in range(1, N):
-        sources = []
+        target = updated[j]
         for i in range(j):
             include = trial.suggest_categorical(
                 f"skip_from_{names[i]}_to_{names[j]}", [False, True]
             )
             if include:
-                name = _unique_name(
-                    f"{name_prefix}_from_{names[i]}_to_{names[j]}"
-                )
+                skip_name = f"skip_from_{names[i]}_to_{names[j]}"
+                proj_name = _unique_name(f"{name_prefix}_from_{names[i]}_to_{names[j]}")
                 src = updated[i]
-                if _needs_projection(src, updated[j], merge_mode, axis_to_concat):
-                    src = project(src, updated[j], name)
-                sources.append(src)
-        if not sources:
-            continue
-        sources.append(updated[j])
-        if merge_mode == "concat":
-            layer_name = _unique_name(f"{name_prefix}_concat_{j}")
-            
-            # Print sources for debugging
-            if verbose > 1:
-                print(
-                    f"Concatenating sources for skip_to_{names[j]}: {[s.shape for s in sources]}"
-                )
-            
-            updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
-        else:
-            layer_name = _unique_name(f"{name_prefix}_add_{j}")
-            updated[j] = layers.Add(name=layer_name)(sources)
+                if _needs_projection(src, target, merge_mode, axis_to_concat):
+                    src = project(src, target, proj_name)
+                if merge_mode == "concat":
+                    if verbose > 1:
+                        print(
+                            f"Concatenating sources for {skip_name}: {[s.shape for s in [src, target]]}"
+                        )
+                    target = layers.Concatenate(axis=axis_to_concat, name=skip_name)([src, target])
+                else:
+                    target = layers.Add(name=skip_name)([src, target])
+        updated[j] = target
 
     return updated[-1]
 
