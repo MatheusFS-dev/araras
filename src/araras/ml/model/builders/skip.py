@@ -31,22 +31,26 @@ def _unique_name(base: str) -> str:
     return f"{base}_{tf.keras.backend.get_uid(base)}"
 
 
-def _sanitize_tensor_name(tensor: tf.Tensor, index: int) -> str:
-    """Create a safe layer-based name for a tensor.
+def _tensor_layer_name(tensor: tf.Tensor, index: int) -> str:
+    """Return the originating layer name for ``tensor``.
 
-    The function extracts the base layer name from ``tensor`` by removing any
-    TensorFlow port suffixes (e.g., ``":0"``) and everything after a ``"/"``
-    separator (commonly the operation name). Remaining characters outside the
-    ``[0-9A-Za-z_]`` set are replaced with underscores to generate a valid
-    identifier.
+    The helper inspects ``tensor`` for a Keras history to retrieve the original
+    layer's ``name`` attribute (for example, ``"dnn1"``). If no such metadata is
+    present, the TensorFlow ``tensor.name`` attribute or a fallback string
+    ``"tensor_{index}"`` is used. Characters outside ``[0-9A-Za-z_]`` are
+    replaced with underscores to ensure the result forms a valid identifier.
 
     Notes:
-        The returned string reflects the original layer name as declared in the
-        model, enabling clearer skip-connection labels.
+        Using the layer's declared name makes skip-connection labels mirror the
+        model definition, e.g. ``"skip_dnn1_dnn2"``.
+
+    Warnings:
+        None.
 
     Args:
-        tensor: Tensor from which to derive the base name.
-        index: Fallback index used when ``tensor`` lacks a ``name`` attribute.
+        tensor: Tensor whose producing layer name is required.
+        index: Fallback index used when ``tensor`` lacks a ``_keras_history`` or
+            ``name`` attribute.
 
     Returns:
         Sanitized layer name suitable for embedding within new layer names.
@@ -58,15 +62,19 @@ def _sanitize_tensor_name(tensor: tf.Tensor, index: int) -> str:
     if index < 0:
         raise ValueError("index must be non-negative.")
 
-    name = getattr(tensor, "name", f"tensor_{index}")
+    try:
+        name = tensor._keras_history.layer.name  # type: ignore[attr-defined]
+    except AttributeError:
+        name = getattr(tensor, "name", f"tensor_{index}")
+
     if isinstance(name, bytes):
         name = name.decode()
-    name = name.split(":")[0].split("/")[0]
+
     return re.sub(r"[^0-9a-zA-Z_]", "_", name)
 
 
 def _collect_unique_layer_names(layers_list: Sequence[tf.Tensor]) -> list[str]:
-    """Sanitize tensor names and ensure uniqueness.
+    """Extract layer names from tensors and ensure uniqueness.
 
     Notes:
         Duplicate layer names are suffixed with incremental indices starting at
@@ -76,7 +84,8 @@ def _collect_unique_layer_names(layers_list: Sequence[tf.Tensor]) -> list[str]:
         None.
 
     Args:
-        layers_list: Sequence of tensors whose layer names will be extracted.
+        layers_list: Sequence of tensors whose producing layer names will be
+            extracted.
 
     Returns:
         List of sanitized and unique layer names corresponding to
@@ -89,7 +98,7 @@ def _collect_unique_layer_names(layers_list: Sequence[tf.Tensor]) -> list[str]:
     names: list[str] = []
     counts: dict[str, int] = {}
     for idx, tensor in enumerate(layers_list):
-        base = _sanitize_tensor_name(tensor, idx)
+        base = _tensor_layer_name(tensor, idx)
         if base in counts:
             counts[base] += 1
             base = f"{base}_{counts[base]}"
