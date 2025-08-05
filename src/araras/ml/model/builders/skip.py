@@ -2,6 +2,7 @@ from araras.core import *
 
 from collections.abc import Callable, Sequence
 import itertools
+import re
 import optuna
 import tensorflow as tf
 from tensorflow.keras import layers
@@ -28,6 +29,74 @@ def _unique_name(base: str) -> str:
     if not base:
         raise ValueError("base must be a non-empty string.")
     return f"{base}_{tf.keras.backend.get_uid(base)}"
+
+
+def _sanitize_tensor_name(tensor: tf.Tensor, index: int) -> str:
+    """Create a safe layer-based name for a tensor.
+
+    The function extracts the base layer name from ``tensor`` by removing any
+    TensorFlow port suffixes (e.g., ``":0"``) and everything after a ``"/"``
+    separator (commonly the operation name). Remaining characters outside the
+    ``[0-9A-Za-z_]`` set are replaced with underscores to generate a valid
+    identifier.
+
+    Notes:
+        The returned string reflects the original layer name as declared in the
+        model, enabling clearer skip-connection labels.
+
+    Args:
+        tensor: Tensor from which to derive the base name.
+        index: Fallback index used when ``tensor`` lacks a ``name`` attribute.
+
+    Returns:
+        Sanitized layer name suitable for embedding within new layer names.
+
+    Raises:
+        ValueError: If ``index`` is negative.
+    """
+
+    if index < 0:
+        raise ValueError("index must be non-negative.")
+
+    name = getattr(tensor, "name", f"tensor_{index}")
+    if isinstance(name, bytes):
+        name = name.decode()
+    name = name.split(":")[0].split("/")[0]
+    return re.sub(r"[^0-9a-zA-Z_]", "_", name)
+
+
+def _collect_unique_layer_names(layers_list: Sequence[tf.Tensor]) -> list[str]:
+    """Sanitize tensor names and ensure uniqueness.
+
+    Notes:
+        Duplicate layer names are suffixed with incremental indices starting at
+        ``_1`` to avoid collisions when generating skip-connection labels.
+
+    Warnings:
+        None.
+
+    Args:
+        layers_list: Sequence of tensors whose layer names will be extracted.
+
+    Returns:
+        List of sanitized and unique layer names corresponding to
+        ``layers_list``.
+
+    Raises:
+        None.
+    """
+
+    names: list[str] = []
+    counts: dict[str, int] = {}
+    for idx, tensor in enumerate(layers_list):
+        base = _sanitize_tensor_name(tensor, idx)
+        if base in counts:
+            counts[base] += 1
+            base = f"{base}_{counts[base]}"
+        else:
+            counts[base] = 0
+        names.append(base)
+    return names
 
 
 def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
@@ -333,11 +402,22 @@ def _trial_skip_connections_projected(
 ) -> tf.Tensor:
     """Generic skip connections that project mismatched tensors.
 
-    Layer names are automatically suffixed with unique identifiers so the
-    function can be invoked multiple times in the same model without causing
-    naming collisions. Projection is only applied to source tensors and only
-    when their shapes differ from the target (respecting ``axis_to_concat`` in
-    concatenation mode).
+    Names for projection and merge layers are generated from the source and
+    target layer names, allowing the resulting model to clearly indicate which
+    layers participate in each skip connection. Unique identifiers are appended
+    to avoid naming collisions when the function is invoked multiple times.
+    Projection is only applied to source tensors and only when their shapes
+    differ from the target (respecting ``axis_to_concat`` in concatenation
+    mode).
+
+    Notes:
+        Layer names are extracted from each tensor by removing TensorFlow
+        operation suffixes and any invalid characters. Duplicate names are
+        suffixed with incremental indices to guarantee uniqueness.
+
+    Warnings:
+        Setting ``verbose`` to ``2`` can produce very large amounts of console
+        output for models with many layers.
 
     Args:
         trial: Optuna trial for selecting which skips are active.
@@ -369,6 +449,8 @@ def _trial_skip_connections_projected(
 
     last_idx = N - 1
 
+    base_names = _collect_unique_layer_names(layers_list)
+
     if strategy == "any":
         pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
     elif strategy == "final":
@@ -391,48 +473,62 @@ def _trial_skip_connections_projected(
 
     if strategy == "final":
         selected = []
+        selected_names = []
         for i in range(last_idx):
             include = trial.suggest_categorical(f"skip_{i}_{last_idx}", [False, True])
             if include:
-                name = _unique_name(f"{name_prefix}_{i}_{last_idx}")
+                src_name = base_names[i]
+                tgt_name = base_names[last_idx]
+                name = _unique_name(f"{name_prefix}_{src_name}_{tgt_name}")
                 src = layers_list[i]
                 if _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat):
                     src = project(src, layers_list[-1], name)
                 selected.append(src)
+                selected_names.append(src_name)
         if not selected:
             return layers_list[-1]
         selected.append(layers_list[-1])
+        sources_tag = "_".join(selected_names)
+        tgt_name = base_names[last_idx]
+        base = f"{name_prefix}_{sources_tag}_{tgt_name}"
+        layer_name = _unique_name(base)
         if merge_mode == "concat":
-            layer_name = _unique_name(f"{name_prefix}_concat_final")
             return layers.Concatenate(axis=axis_to_concat, name=layer_name)(selected)
-        layer_name = _unique_name(f"{name_prefix}_add_final")
         return layers.Add(name=layer_name)(selected)
 
     updated = list(layers_list)
+    names_updated = list(base_names)
     for j in range(1, N):
         sources = []
+        source_names = []
         for i in range(j):
             include = trial.suggest_categorical(f"skip_{i}_{j}", [False, True])
             if include:
-                name = _unique_name(f"{name_prefix}_{i}_{j}")
+                src_name = names_updated[i]
+                tgt_name = names_updated[j]
+                name = _unique_name(f"{name_prefix}_{src_name}_{tgt_name}")
                 src = updated[i]
                 if _needs_projection(src, updated[j], merge_mode, axis_to_concat):
                     src = project(src, updated[j], name)
                 sources.append(src)
+                source_names.append(src_name)
         if not sources:
             continue
         sources.append(updated[j])
+        src_tag = "_".join(sorted(source_names))
+        tgt_name = names_updated[j]
+        base = f"{name_prefix}_{src_tag}_{tgt_name}"
+        layer_name = _unique_name(base)
         if merge_mode == "concat":
-            layer_name = _unique_name(f"{name_prefix}_concat_{j}")
-            
+
             # Print sources for debugging
             if verbose > 1:
                 print(f"Concatenating sources for skip_{j}: {[s.shape for s in sources]}")
-            
+
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
         else:
-            layer_name = _unique_name(f"{name_prefix}_add_{j}")
             updated[j] = layers.Add(name=layer_name)(sources)
+        names_updated[j] = layer_name
 
     return updated[-1]
 
@@ -468,7 +564,7 @@ def trial_skip_3d_tensors(
             number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"`` to select candidate skip pairs.
         merge_mode: ``"add"`` or ``"concat"``.
-        name_prefix: Prefix for projection layer names. Defaults to
+        name_prefix: Prefix for generated skip layer names. Defaults to
             ``"skip_cnn1d"``.
 
     Returns:
@@ -524,7 +620,8 @@ def trial_skip_2d_tensors(
             number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
-        name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
+        name_prefix: Prefix for generated skip layer names, defaults to
+            ``"skip_dnn"``.
 
     Returns:
         Output tensor after applying skip connections.
@@ -581,7 +678,7 @@ def trial_skip_4d_tensors(
             number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"``.
         merge_mode: ``"add"`` or ``"concat"``.
-        name_prefix: Prefix for projection layer names, defaults to
+        name_prefix: Prefix for generated skip layer names, defaults to
             ``"skip_cnn2d"``.
 
     Returns:
