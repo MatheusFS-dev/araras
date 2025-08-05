@@ -25,9 +25,19 @@ def base_name(t: tf.Tensor) -> str:
         ValueError: If ``t`` does not have a valid ``name`` attribute.
     """
 
-    if not getattr(t, "name", None):
-        raise ValueError("Tensor must have a non-empty 'name' attribute.")
-    return t.name.split("/", 1)[0]
+    # 1) If it’s a Keras tensor, grab its originating layer
+    history = getattr(t, "_keras_history", None)
+    if history is not None:
+        layer = history[0]  # (layer, node_index, tensor_index)
+        return layer.name
+
+    # 2) Fallback: strip any TF op suffixes
+    name = t.name  # e.g. "foo_layer/BiasAdd:0"
+    if "/" in name:
+        name = name.split("/", 1)[0]  # -> "foo_layer"
+    if ":" in name:
+        name = name.split(":", 1)[0]  # -> strip ":0"
+    return name
 
 
 def _unique_name(base: str) -> str:
