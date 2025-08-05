@@ -1,4 +1,3 @@
-
 from araras.core import *
 
 import numpy as np
@@ -41,6 +40,37 @@ def print_warning_jit():
             print(f"{ORANGE}{cmd}{RESET}")
         print(f"{YELLOW}=============================================================={RESET}")
         PRINT_ONCE_JIT = False
+
+
+def discard_tensor_mask(x: tf.Tensor) -> tf.Tensor:
+    """Remove any Keras mask attached to a tensor.
+
+    Some layers propagate a mask via the ``_keras_mask`` attribute. This
+    helper deletes that attribute to prevent downstream layers from seeing the
+    mask information.
+
+    Warning:
+        The mask is permanently removed and cannot be recovered.
+
+    Args:
+        x: Tensor potentially carrying a mask. Must not be ``None``.
+
+    Returns:
+        tf.Tensor: The same tensor without a mask.
+
+    Raises:
+        ValueError: If ``x`` is ``None``.
+
+    """
+
+    if x is None:
+        raise ValueError("Input tensor cannot be None")
+    if hasattr(x, "_keras_mask"):
+        try:
+            x._keras_mask = None
+        except AttributeError:
+            pass
+    return x
 
 
 def check_gpu_limit(knn_list, K_list, units_list, n=20 * 200, save_path=None):
