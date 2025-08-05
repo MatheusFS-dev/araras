@@ -400,7 +400,7 @@ def _trial_skip_connections_projected(
             layer_name = _unique_name(f"{name_prefix}_concat_{j}")
             
             # Print sources for debugging
-            if verbose > 2:
+            if verbose > 0:
                 print(f"Concatenating sources for skip_{j}: {[s.shape for s in sources]}")
             
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
