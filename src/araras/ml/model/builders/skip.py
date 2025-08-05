@@ -1,5 +1,6 @@
 from araras.core import *
 
+from collections.abc import Callable, Sequence
 import itertools
 import optuna
 import tensorflow as tf
@@ -294,6 +295,31 @@ def _project_dense(
     return x
 
 
+def _validate_tensor_ranks(
+    layers_list: Sequence[tf.Tensor], expected_rank: int, func_name: str
+) -> None:
+    """Ensure every tensor has the expected rank.
+
+    Args:
+        layers_list: Sequence of tensors to validate.
+        expected_rank: Required tensor rank.
+        func_name: Name of the caller function for error messages.
+
+    Raises:
+        ValueError: If any tensor does not have ``expected_rank`` dimensions.
+    """
+
+    for idx, tensor in enumerate(layers_list):
+        rank = len(tensor.shape)
+        if rank != expected_rank:
+            layer_name = getattr(tensor, "name", f"layers_list[{idx}]")
+            raise ValueError(
+                f"{func_name} supports only {expected_rank}-D tensors; "
+                f"tensor at index {idx} ({layer_name}) has rank {rank} and shape {tensor.shape}. "
+                f"Check preceding layers to ensure they output {expected_rank}-D tensors."
+            )
+
+
 def _trial_skip_connections_projected(
     trial: optuna.trial.Trial,
     layers_list: Sequence[tf.Tensor],
@@ -421,15 +447,15 @@ def trial_skip_3d_tensors(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn1d",
 ) -> tf.Tensor:
-    """
-    Apply projected skips for 3D tensors. This function can be used for convs 1D
-    or graph layers that produce 3D outputs.
+    """Apply projected skips for 3D tensors.
 
     Notes:
-        Tensors are expected to have shape ``(batch, features, channels)``. The
-        projection branch uses ``Conv1D(1)`` layers to adjust channels and, when
-        possible, the temporal dimension. If the lengths still differ, a resize
-        operation is applied.
+        Only tensors with shape ``(batch, features, channels)`` are supported.
+        Although only a subset of layers is provided via ``layers_list``,
+        upstream layers with incompatible ranks may propagate invalid tensors
+        that trigger an early ``ValueError``. The projection branch uses
+        ``Conv1D(1)`` layers to adjust channels and, when possible, the temporal
+        dimension. If the lengths still differ, a resize operation is applied.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -449,9 +475,12 @@ def trial_skip_3d_tensors(
         The merged output tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
-            ``merge_mode`` are invalid.
+        ValueError: If any tensor in ``layers_list`` is not 3-D, if ``verbose``
+            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` are
+            invalid.
     """
+
+    _validate_tensor_ranks(layers_list, 3, "trial_skip_3d_tensors")
 
     return _trial_skip_connections_projected(
         trial=trial,
@@ -478,10 +507,12 @@ def trial_skip_2d_tensors(
     """Skip connections for 2D tensors with feature projection.
 
     Notes:
-        This function is designed for tensors with shape ``(batch, features)``.
-        It applies a :class:`~keras.layers.Dense` layer to project the source
-        tensor's features to match the target tensor's features. If the shapes
-        differ, a resize operation is applied.
+        Only tensors with shape ``(batch, features)`` are supported. Although
+        only a subset of layers is passed through ``layers_list``, preceding
+        layers emitting tensors of other ranks may lead to an early
+        ``ValueError``. A :class:`~keras.layers.Dense` layer projects the
+        source tensor's features to match the target. If shapes still differ, a
+        resize operation is applied.
 
     Args:
         trial: Optuna trial controlling which connections are active.
@@ -499,9 +530,12 @@ def trial_skip_2d_tensors(
         Output tensor after applying skip connections.
 
     Raises:
-        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
-            ``merge_mode`` are invalid.
+        ValueError: If any tensor in ``layers_list`` is not 2-D, if ``verbose``
+            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` are
+            invalid.
     """
+
+    _validate_tensor_ranks(layers_list, 2, "trial_skip_2d_tensors")
 
     return _trial_skip_connections_projected(
         trial=trial,
@@ -525,13 +559,15 @@ def trial_skip_4d_tensors(
     merge_mode: str = "add",
     name_prefix: str = "skip_cnn2d",
 ) -> tf.Tensor:
-    """Apply projected skip connections 4D tensors.
+    """Apply projected skip connections for 4D tensors.
 
     Notes:
-        This function is designed for tensors with shape ``(batch, height, width, channels)``.
-        It applies a :class:`~keras.layers.Conv2D` layer with kernel size ``1``
-        to project the source tensor's channels to match the target tensor's
-        channels. If the spatial dimensions differ, a resize operation is applied.
+        Only tensors with shape ``(batch, height, width, channels)`` are
+        supported. Because ``layers_list`` may include only some of the model's
+        layers, mismatched ranks from preceding layers can still propagate and
+        trigger an early ``ValueError``. A :class:`~keras.layers.Conv2D` layer
+        with kernel size ``1`` projects the source tensor's channels to match the
+        target, and a resize operation addresses spatial mismatches when needed.
 
     Args:
         trial: Optuna trial for selecting which skips to include.
@@ -552,9 +588,12 @@ def trial_skip_4d_tensors(
         The merged output tensor after applying the selected skip connections.
 
     Raises:
-        ValueError: If ``verbose`` not in ``{0, 1, 2}`` or if ``strategy`` or
-            ``merge_mode`` contain invalid values.
+        ValueError: If any tensor in ``layers_list`` is not 4-D, if ``verbose``
+            not in ``{0, 1, 2}``, or if ``strategy`` or ``merge_mode`` contain
+            invalid values.
     """
+
+    _validate_tensor_ranks(layers_list, 4, "trial_skip_4d_tensors")
 
     return _trial_skip_connections_projected(
         trial=trial,
