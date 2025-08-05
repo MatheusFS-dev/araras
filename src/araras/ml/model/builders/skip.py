@@ -418,14 +418,16 @@ def _trial_skip_connections_projected(
             merged_shapes = [s.shape for s in sources]
             print(f"Merging at layer {j} with shapes: {merged_shapes}")
         if merge_mode == "concat":
-            
+
             # Print all shapes and ranks for debugging
             if verbose > 0:
                 print(f"Concatenating sources for skip_{j}: {[s.shape for s in sources]}")
-            
-            
+
             layer_name = _unique_name(f"{name_prefix}_concat_{j}")
+
+            print("All good 1")
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
+            print("All good 2")
         else:
             layer_name = _unique_name(f"{name_prefix}_add_{j}")
             updated[j] = layers.Add(name=layer_name)(sources)
