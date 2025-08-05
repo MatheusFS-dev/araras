@@ -224,25 +224,50 @@ def _project_dense(
 ) -> tf.Tensor:
     """Project a tensor along its last axis to match a target's features.
 
-    Notes:
-        This function is compatible with tensors of rank ≥2. It applies a
-        :class:`~keras.layers.Dense` layer to adjust the feature dimension while
-        keeping all other dimensions intact. When ``use_batch_norm`` is ``True``
-        a :class:`~keras.layers.BatchNormalization` layer is appended.
+    This helper is primarily used by :func:`trial_skip_2d_tensors` where the
+    target tensor is 2‑D.  When the ``source`` tensor has a higher rank than the
+    target, any trailing singleton dimensions are first removed and the tensor is
+    flattened to match the target's rank before applying the dense projection.
 
     Args:
-        source: Input tensor whose last dimension will be projected.
+        source: Tensor to be projected.
         target: Tensor providing the desired feature dimension.
-        use_batch_norm: Apply batch normalization after the dense layer when
-            set to ``True``.
+        use_batch_norm: If ``True``, append a batch-normalization layer after the
+            projection.
         name: Base name used for created layers.
 
     Returns:
-        Tensor with its last dimension matching that of ``target``.
+        Tensor whose last dimension equals that of ``target``.
+
+    Raises:
+        ValueError: If the rank of ``source`` is lower than the rank of
+            ``target`` or the mismatch cannot be resolved.
+
+    Notes:
+        Higher-rank ``source`` tensors are automatically flattened, which may
+        collapse spatial or temporal structure. Use with caution if that
+        information is required elsewhere.
     """
 
+    x = source
+    if len(x.shape) != len(target.shape):
+        if len(target.shape) == 2 and len(x.shape) > len(target.shape):
+            squeeze_axes = [i for i, d in enumerate(x.shape[1:], start=1) if d == 1]
+            if squeeze_axes:
+                x = layers.Lambda(
+                    lambda t: tf.squeeze(t, axis=squeeze_axes),
+                    name=f"{name}_squeeze",
+                )(x)
+            if len(x.shape) > 2:
+                x = layers.Flatten(name=f"{name}_flatten")(x)
+        else:
+            raise ValueError(
+                "Cannot project tensor of rank "
+                f"{len(source.shape)} to target rank {len(target.shape)}."
+            )
+
     units = target.shape[-1]
-    x = layers.Dense(units, name=f"{name}_dense")(source)
+    x = layers.Dense(units, name=f"{name}_dense")(x)
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name}_bn")(x)
