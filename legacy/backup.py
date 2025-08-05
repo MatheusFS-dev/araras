@@ -397,12 +397,6 @@ def _trial_skip_connections_projected(
             continue
         sources.append(updated[j])
         if merge_mode == "concat":
-            
-            # Print all shapes and ranks for debugging
-            if verbose > 0:
-                print(f"Concatenating sources for skip_{j}: {[s.shape for s in sources]}")
-            
-            
             layer_name = _unique_name(f"{name_prefix}_concat_{j}")
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
         else:
