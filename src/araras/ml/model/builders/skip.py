@@ -231,7 +231,7 @@ def _project_conv1d(
         kernel_size=1,
         strides=stride,
         padding="same",
-        name=f"{name}_conv",
+        name=f"{name}_proj_conv",
     )(source)
 
     if use_batch_norm:
@@ -280,7 +280,7 @@ def _project_conv2d(
         kernel_size=1,
         strides=(stride_h, stride_w),
         padding="same",
-        name=f"{name}_conv",
+        name=f"{name}_proj_conv",
     )(source)
 
     if use_batch_norm:
@@ -320,7 +320,7 @@ def _project_dense(
     """
 
     units = target.shape[-1]
-    x = layers.Dense(units, name=f"{name}_dense")(source)
+    x = layers.Dense(units, name=f"{name}_proj_dense")(source)
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name}_bn")(x)
@@ -362,7 +362,7 @@ def _trial_skip_connections_projected(
     verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
-    name_prefix: str = "skip_proj",
+    name_prefix: str = "skip",
     nickname: Sequence[str] | None = None,
     projection_mode: str = "conv",
 ) -> tf.Tensor:
@@ -536,7 +536,7 @@ def trial_skip_3d_tensors(
     verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
-    name_prefix: str = "skip_cnn1d",
+    name_prefix: str = "skip",
     nickname: Sequence[str] | None = None,
     projection_mode: str = "conv",
 ) -> tf.Tensor:
@@ -564,7 +564,7 @@ def trial_skip_3d_tensors(
         strategy: ``"final"`` or ``"any"`` to select candidate skip pairs.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names. Defaults to
-            ``"skip_cnn1d"``.
+            ``"skip"``.
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and overrides automatic name
             inference.
@@ -606,7 +606,7 @@ def trial_skip_2d_tensors(
     verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
-    name_prefix: str = "skip_dnn",
+    name_prefix: str = "skip",
     nickname: Sequence[str] | None = None,
     projection_mode: str = "conv",
 ) -> tf.Tensor:
@@ -631,7 +631,7 @@ def trial_skip_2d_tensors(
             number plus every combination. Defaults to ``1``.
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
-        name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
+        name_prefix: Prefix for projection layers, defaults to ``"skip"``.
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and replaces automatic name
             inference.
@@ -674,7 +674,7 @@ def trial_skip_4d_tensors(
     verbose: int = 1,
     strategy: str = "any",
     merge_mode: str = "add",
-    name_prefix: str = "skip_cnn2d",
+    name_prefix: str = "skip",
     nickname: Sequence[str] | None = None,
     projection_mode: str = "conv",
 ) -> tf.Tensor:
@@ -702,7 +702,7 @@ def trial_skip_4d_tensors(
         strategy: ``"final"`` or ``"any"``.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layer names, defaults to
-            ``"skip_cnn2d"``.
+            ``"skip"``.
         nickname: Optional sequence of layer nicknames. When provided, must
             match ``layers_list`` in length and overrides automatic name
             inference.
