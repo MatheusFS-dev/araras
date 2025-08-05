@@ -469,7 +469,6 @@ def trial_skip_2d_tensors(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
-    auto_squeeze: bool = True,
 ) -> tf.Tensor:
     """Skip connections for 2D tensors with feature projection.
 
@@ -490,9 +489,6 @@ def trial_skip_2d_tensors(
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
-        auto_squeeze: If ``True``, automatically squeeze the source tensor to
-            match the target's rank before applying the projection. Careful with
-            this option as it may collapse spatial or temporal structure.
 
     Returns:
         Output tensor after applying skip connections.
@@ -505,7 +501,7 @@ def trial_skip_2d_tensors(
     return _trial_skip_connections_projected(
         trial=trial,
         layers_list=layers_list,
-        project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name, auto_squeeze),
+        project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
         axis_to_concat=axis_to_concat,
         verbose=verbose,
         strategy=strategy,
