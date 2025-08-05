@@ -32,26 +32,24 @@ def _unique_name(base: str) -> str:
 
 
 def _sanitize_tensor_name(tensor: tf.Tensor, index: int) -> str:
-    """Create a safe name for a tensor when building skip connections.
+    """Create a safe layer-based name for a tensor.
 
-    The function extracts the tensor's ``name`` attribute, removes TensorFlow
-    port suffixes (e.g., ``":0"``), and replaces any character other than
-    letters, digits or underscores with ``"_"``. This sanitized name is then
-    suitable for composing new Keras layer names.
+    The function extracts the base layer name from ``tensor`` by removing any
+    TensorFlow port suffixes (e.g., ``":0"``) and everything after a ``"/"``
+    separator (commonly the operation name). Remaining characters outside the
+    ``[0-9A-Za-z_]`` set are replaced with underscores to generate a valid
+    identifier.
 
     Notes:
-        This helper is essential to build descriptive yet valid Keras layer
-        names based on arbitrary tensor names provided by the caller.
-
-    Warnings:
-        None.
+        The returned string reflects the original layer name as declared in the
+        model, enabling clearer skip-connection labels.
 
     Args:
         tensor: Tensor from which to derive the base name.
         index: Fallback index used when ``tensor`` lacks a ``name`` attribute.
 
     Returns:
-        A cleaned string that can be safely embedded within new layer names.
+        Sanitized layer name suitable for embedding within new layer names.
 
     Raises:
         ValueError: If ``index`` is negative.
@@ -63,8 +61,42 @@ def _sanitize_tensor_name(tensor: tf.Tensor, index: int) -> str:
     name = getattr(tensor, "name", f"tensor_{index}")
     if isinstance(name, bytes):
         name = name.decode()
-    name = name.split(":")[0]
+    name = name.split(":")[0].split("/")[0]
     return re.sub(r"[^0-9a-zA-Z_]", "_", name)
+
+
+def _collect_unique_layer_names(layers_list: Sequence[tf.Tensor]) -> list[str]:
+    """Sanitize tensor names and ensure uniqueness.
+
+    Notes:
+        Duplicate layer names are suffixed with incremental indices starting at
+        ``_1`` to avoid collisions when generating skip-connection labels.
+
+    Warnings:
+        None.
+
+    Args:
+        layers_list: Sequence of tensors whose layer names will be extracted.
+
+    Returns:
+        List of sanitized and unique layer names corresponding to
+        ``layers_list``.
+
+    Raises:
+        None.
+    """
+
+    names: list[str] = []
+    counts: dict[str, int] = {}
+    for idx, tensor in enumerate(layers_list):
+        base = _sanitize_tensor_name(tensor, idx)
+        if base in counts:
+            counts[base] += 1
+            base = f"{base}_{counts[base]}"
+        else:
+            counts[base] = 0
+        names.append(base)
+    return names
 
 
 def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
@@ -332,9 +364,7 @@ def _project_dense(
     return x
 
 
-def _validate_tensor_ranks(
-    layers_list: Sequence[tf.Tensor], expected_rank: int, func_name: str
-) -> None:
+def _validate_tensor_ranks(layers_list: Sequence[tf.Tensor], expected_rank: int, func_name: str) -> None:
     """Ensure every tensor has the expected rank.
 
     Args:
@@ -379,8 +409,9 @@ def _trial_skip_connections_projected(
     mode).
 
     Notes:
-        Layer names are sanitized to remove invalid characters and to strip
-        TensorFlow port suffixes such as ``":0"``.
+        Layer names are extracted from each tensor by removing TensorFlow
+        operation suffixes and any invalid characters. Duplicate names are
+        suffixed with incremental indices to guarantee uniqueness.
 
     Warnings:
         Setting ``verbose`` to ``2`` can produce very large amounts of console
@@ -416,7 +447,7 @@ def _trial_skip_connections_projected(
 
     last_idx = N - 1
 
-    base_names = [_sanitize_tensor_name(t, i) for i, t in enumerate(layers_list)]
+    base_names = _collect_unique_layer_names(layers_list)
 
     if strategy == "any":
         pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
@@ -446,7 +477,7 @@ def _trial_skip_connections_projected(
             if include:
                 src_name = base_names[i]
                 tgt_name = base_names[last_idx]
-                name = _unique_name(f"{name_prefix}_{src_name}_to_{tgt_name}")
+                name = _unique_name(f"{name_prefix}_{src_name}_{tgt_name}")
                 src = layers_list[i]
                 if _needs_projection(src, layers_list[-1], merge_mode, axis_to_concat):
                     src = project(src, layers_list[-1], name)
@@ -457,14 +488,10 @@ def _trial_skip_connections_projected(
         selected.append(layers_list[-1])
         sources_tag = "_".join(selected_names)
         tgt_name = base_names[last_idx]
+        base = f"{name_prefix}_{sources_tag}_{tgt_name}"
+        layer_name = _unique_name(base)
         if merge_mode == "concat":
-            layer_name = _unique_name(
-                f"{name_prefix}_concat_{sources_tag}_to_{tgt_name}"
-            )
             return layers.Concatenate(axis=axis_to_concat, name=layer_name)(selected)
-        layer_name = _unique_name(
-            f"{name_prefix}_add_{sources_tag}_to_{tgt_name}"
-        )
         return layers.Add(name=layer_name)(selected)
 
     updated = list(layers_list)
@@ -477,7 +504,7 @@ def _trial_skip_connections_projected(
             if include:
                 src_name = names_updated[i]
                 tgt_name = names_updated[j]
-                name = _unique_name(f"{name_prefix}_{src_name}_to_{tgt_name}")
+                name = _unique_name(f"{name_prefix}_{src_name}_{tgt_name}")
                 src = updated[i]
                 if _needs_projection(src, updated[j], merge_mode, axis_to_concat):
                     src = project(src, updated[j], name)
@@ -488,10 +515,9 @@ def _trial_skip_connections_projected(
         sources.append(updated[j])
         src_tag = "_".join(sorted(source_names))
         tgt_name = names_updated[j]
+        base = f"{name_prefix}_{src_tag}_{tgt_name}"
+        layer_name = _unique_name(base)
         if merge_mode == "concat":
-            layer_name = _unique_name(
-                f"{name_prefix}_concat_{src_tag}_to_{tgt_name}"
-            )
 
             # Print sources for debugging
             if verbose > 1:
@@ -499,9 +525,6 @@ def _trial_skip_connections_projected(
 
             updated[j] = layers.Concatenate(axis=axis_to_concat, name=layer_name)(sources)
         else:
-            layer_name = _unique_name(
-                f"{name_prefix}_add_{src_tag}_to_{tgt_name}"
-            )
             updated[j] = layers.Add(name=layer_name)(sources)
         names_updated[j] = layer_name
 
