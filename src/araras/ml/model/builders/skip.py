@@ -221,6 +221,7 @@ def _project_dense(
     target: tf.Tensor,
     use_batch_norm: bool,
     name: str,
+    auto_squeeze: bool,
 ) -> tf.Tensor:
     """Project a tensor along its last axis to match a target's features.
 
@@ -235,6 +236,9 @@ def _project_dense(
         use_batch_norm: If ``True``, append a batch-normalization layer after the
             projection.
         name: Base name used for created layers.
+        auto_squeeze: If ``True``, automatically squeeze the source tensor to
+            match the target's rank before applying the projection. Careful with
+            this option as it may collapse spatial or temporal structure.
 
     Returns:
         Tensor whose last dimension equals that of ``target``.
@@ -250,20 +254,21 @@ def _project_dense(
     """
 
     x = source
-    if len(x.shape) != len(target.shape):
+    if len(x.shape) != len(target.shape) and auto_squeeze:
         if len(target.shape) == 2 and len(x.shape) > len(target.shape):
             squeeze_axes = [i for i, d in enumerate(x.shape[1:], start=1) if d == 1]
             if squeeze_axes:
                 x = layers.Lambda(
                     lambda t: tf.squeeze(t, axis=squeeze_axes),
+                    #! Lambda has deserialization issues, so providing the output shape is necessary
+                    output_shape=x.shape[1:],
                     name=f"{name}_squeeze",
                 )(x)
             if len(x.shape) > 2:
                 x = layers.Flatten(name=f"{name}_flatten")(x)
         else:
             raise ValueError(
-                "Cannot project tensor of rank "
-                f"{len(source.shape)} to target rank {len(target.shape)}."
+                "Cannot project tensor of rank " f"{len(source.shape)} to target rank {len(target.shape)}."
             )
 
     units = target.shape[-1]
@@ -404,7 +409,7 @@ def trial_skip_3d_tensors(
     Notes:
         Tensors are expected to have shape ``(batch, features, channels)``. The
         projection branch uses ``Conv1D(1)`` layers to adjust channels and, when
-        possible, the temporal dimension. If the lengths still differ, a resize 
+        possible, the temporal dimension. If the lengths still differ, a resize
         operation is applied.
 
     Args:
@@ -450,9 +455,10 @@ def trial_skip_2d_tensors(
     strategy: str = "any",
     merge_mode: str = "add",
     name_prefix: str = "skip_dnn",
+    auto_squeeze: bool = True,
 ) -> tf.Tensor:
     """Skip connections for 2D tensors with feature projection.
-    
+
     Notes:
         This function is designed for tensors with shape ``(batch, features)``.
         It applies a :class:`~keras.layers.Dense` layer to project the source
@@ -470,6 +476,9 @@ def trial_skip_2d_tensors(
         strategy: ``"final"`` or ``"any"`` to define the skip topology.
         merge_mode: ``"add"`` or ``"concat"``.
         name_prefix: Prefix for projection layers, defaults to ``"skip_dnn"``.
+        auto_squeeze: If ``True``, automatically squeeze the source tensor to
+            match the target's rank before applying the projection. Careful with
+            this option as it may collapse spatial or temporal structure.
 
     Returns:
         Output tensor after applying skip connections.
@@ -482,7 +491,7 @@ def trial_skip_2d_tensors(
     return _trial_skip_connections_projected(
         trial=trial,
         layers_list=layers_list,
-        project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
+        project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name, auto_squeeze),
         axis_to_concat=axis_to_concat,
         verbose=verbose,
         strategy=strategy,
