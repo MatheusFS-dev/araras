@@ -108,9 +108,12 @@ def get_memory_and_time(
     warning in red.
 
     Notes:
-        The Keras Functional API may emit a ``UserWarning`` when the provided
-        input structure does not exactly match the model's expected structure.
-        This function suppresses that warning to keep console output tidy.
+        - The Keras Functional API may emit a ``UserWarning`` when the provided
+          input structure does not exactly match the model's expected structure.
+          This function suppresses that warning to keep console output tidy.
+        - Model outputs may be nested structures (e.g., dict or list). Each
+          tensor is converted to a NumPy array to synchronize execution across
+          devices.
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -120,6 +123,9 @@ def get_memory_and_time(
         warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
         test_runs (int): Number of runs to measure average inference time. Defaults to 50.
         verbose (bool): If True, displays a progress bar during test runs.
+
+    Raises:
+        RuntimeError: If the specified GPU or CPU device cannot be found.
 
     Returns:
         Tuple[int, float]:
@@ -170,7 +176,7 @@ def get_memory_and_time(
         for _ in progress_iter:
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
-            _ = out.numpy()
+            tf.nest.map_structure(lambda t: t.numpy(), out)
             times.append(time.perf_counter() - t0)
         avg_time = sum(times) / len(times)
 
@@ -206,7 +212,7 @@ def get_memory_and_time(
             for _ in progress_iter:
                 t0 = time.perf_counter()
                 out = infer(*dummy_inputs)
-                _ = out.numpy()
+                tf.nest.map_structure(lambda t: t.numpy(), out)
                 times.append(time.perf_counter() - t0)
                 rss = proc.memory_info().rss
                 if rss > peak_rss:
