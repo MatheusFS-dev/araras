@@ -7,7 +7,8 @@ import tensorflow as tf
 
 
 def get_callbacks_model(
-    backup_dir: str,
+    backup_dir: str | None = None,
+    checkpoint_dir: str | None = None,
     tensorboard_logs: str | None = None,
     early_stopping_patience: int | None = 10,
     reduce_lr_patience: int | None = 5,
@@ -26,7 +27,10 @@ def get_callbacks_model(
         drastically increases memory consumption, especially with large models.
 
     Args:
-        backup_dir: Directory where the backup files will be stored.
+        backup_dir: Directory where the backup files will be stored. If
+            ``None``, the backup callback is omitted.
+        checkpoint_dir: Directory where the checkpoint files will be stored. If
+            ``None``, the checkpoint callback is omitted.
         tensorboard_logs: Directory where TensorBoard logs will be stored. If
             ``None``, the TensorBoard callback is omitted.
         early_stopping_patience: Number of epochs with no improvement after
@@ -66,13 +70,14 @@ def get_callbacks_model(
         )
         callbacks_list.append(reduce_lr)
 
-    checkpoint = callbacks.ModelCheckpoint(
-        filepath=os.path.join(backup_dir, ".weights.h5"),
-        monitor=monitor,
-        save_best_only=True,
-        save_weights_only=True,
-    )
-    callbacks_list.append(checkpoint)
+    if checkpoint_dir is not None:
+        checkpoint = callbacks.ModelCheckpoint(
+            filepath=os.path.join(checkpoint_dir, ".weights.h5"),
+            monitor=monitor,
+            save_best_only=True,
+            save_weights_only=True,
+        )
+        callbacks_list.append(checkpoint)
 
     if tensorboard_logs is not None:
         tensorboard_cb = callbacks.TensorBoard(
@@ -83,5 +88,13 @@ def get_callbacks_model(
             update_freq="epoch",
         )
         callbacks_list.append(tensorboard_cb)
+
+    if backup_dir is not None:
+        backup_cb = callbacks.BackupAndRestore(
+            backup_dir=backup_dir,
+            save_freq="epoch",
+            delete_checkpoint=True,
+        )
+        callbacks_list.append(backup_cb)
 
     return callbacks_list
