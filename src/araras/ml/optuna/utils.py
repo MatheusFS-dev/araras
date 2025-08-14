@@ -280,7 +280,7 @@ def log_trial_error(
     logs_dir,
     prune_on=None,
     propagate=None,
-    min_consecutive_oom_failures=None,
+    force_crash_oom=None,
 ):
     """Log and manage trial errors, optionally aborting after repeated OOMs.
 
@@ -303,10 +303,9 @@ def log_trial_error(
         propagate (dict | None): Mapping of exception types to substrings that
             trigger propagation. If ``None``, defaults to
             ``{optuna.exceptions.TrialPruned: None}``.
-        min_consecutive_oom_failures (int | None): Minimum number of consecutive
-            ``tf.errors.ResourceExhaustedError`` exceptions before the original
-            exception is re-raised to abort the study. ``None`` disables this
-            check.
+        force_crash_oom (int | None): Minimum number of consecutive
+            ``tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError`` exceptions before the process is aborted.
+            ``None`` disables this check.
 
     Returns:
         None
@@ -364,19 +363,19 @@ def log_trial_error(
         log_file.write(traceback.format_exc())
 
     global _CONSECUTIVE_OOM_ERRORS
-    if isinstance(exc, tf.errors.ResourceExhaustedError):
+    if isinstance(exc, (tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError)):
         _CONSECUTIVE_OOM_ERRORS += 1
     else:
         _CONSECUTIVE_OOM_ERRORS = 0
 
     if (
-        min_consecutive_oom_failures is not None
-        and _CONSECUTIVE_OOM_ERRORS >= min_consecutive_oom_failures
+        force_crash_oom is not None
+        and _CONSECUTIVE_OOM_ERRORS >= force_crash_oom
     ):
         logger.error(
             f"{RED}Reached {_CONSECUTIVE_OOM_ERRORS} consecutive OOM errors. Aborting.{RESET}"
         )
-        raise exc
+        os.abort() # Crash the process
 
     # Check each prune rule
     for exc_type, msg_substr in prune_on.items():
