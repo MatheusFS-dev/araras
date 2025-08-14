@@ -12,6 +12,7 @@ def get_callbacks_model(
     tensorboard_logs: str | None = None,
     early_stopping_patience: int | None = 10,
     reduce_lr_patience: int | None = 5,
+    restore_best_weights: bool = True,
 ) -> List[tf.keras.callbacks.Callback]:
     """Return commonly used training callbacks.
 
@@ -39,26 +40,43 @@ def get_callbacks_model(
         reduce_lr_patience: Number of epochs with no improvement before the
             learning rate is reduced. Set to ``None`` to disable the
             ``ReduceLROnPlateau`` callback. Defaults to ``5``.
+        restore_best_weights: Whether to restore model weights from the epoch
+            with the best monitored metric. When ``True`` and
+            ``early_stopping_patience`` is ``None``, ``checkpoint_dir`` **must**
+            be provided so the best weights can be reloaded at the end of
+            training. Defaults to ``True``.
 
     Returns:
         A list of callbacks to pass into ``model.fit``.
 
     Raises:
-        None.
+        ValueError: If ``restore_best_weights`` is ``True`` while both
+            ``early_stopping_patience`` and ``checkpoint_dir`` are ``None``.
     """
     # Metric to monitor for early stopping and checkpointing
     monitor: str = "val_loss"
 
     callbacks_list: List[tf.keras.callbacks.Callback] = []
 
+    if restore_best_weights and early_stopping_patience is None and checkpoint_dir is None:
+        raise ValueError(
+            "checkpoint_dir must be provided when restore_best_weights is True and early_stopping_patience is None"
+        )
+
     if early_stopping_patience is not None:
         early_stopping = callbacks.EarlyStopping(
             monitor=monitor,
             patience=early_stopping_patience,
-            restore_best_weights=True,
+            restore_best_weights=restore_best_weights,
             verbose=1,
         )
         callbacks_list.append(early_stopping)
+    elif restore_best_weights:
+        class RestoreBestWeights(callbacks.Callback):
+            def on_train_end(self, logs=None):
+                self.model.load_weights(os.path.join(checkpoint_dir, ".weights.h5"))
+
+        callbacks_list.append(RestoreBestWeights())
 
     if reduce_lr_patience is not None:
         reduce_lr = callbacks.ReduceLROnPlateau(
