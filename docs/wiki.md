@@ -929,9 +929,11 @@ selected; otherwise `target`.`
 ```python
 get_callbacks_model(
     backup_dir,
+    checkpoint_dir,
     tensorboard_logs,
     early_stopping_patience,
     reduce_lr_patience,
+    restore_best_weights,
 )
 ```
 Constructs and returns a list of Keras callbacks for model training.
@@ -943,16 +945,18 @@ Constructs and returns a list of Keras callbacks for model training.
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| backup_dir | `str` | Directory where the backup files will be stored. |
-| tensorboard_logs | `str` | Directory where TensorBoard logs will be stored. |
+| backup_dir | `str, optional` | Directory where the backup files will be stored. |
+| checkpoint_dir | `str, optional` | Directory for saving model checkpoints. Required when `restore_best_weights` is `True` and `early_stopping_patience` is `None`. |
+| tensorboard_logs | `str, optional` | Directory where TensorBoard logs will be stored. |
 | early_stopping_patience | `int, optional` | Epochs to wait before stopping training. Set to `None` to disable `EarlyStopping`. |
 | reduce_lr_patience | `int, optional` | Epochs to wait before reducing the learning rate. Set to `None` to disable `ReduceLROnPlateau`. |
+| restore_best_weights | `bool, optional` | Whether to restore the best model weights after training. Defaults to `True`. |
 
 **Returns**
 ` List[tf.keras.callbacks.Callback]: A list of callbacks to pass into `model.fit()`.`
 
 **Raises**
-- None
+- `ValueError`: If `restore_best_weights` is `True` while both `early_stopping_patience` and `checkpoint_dir` are `None`.
 
 ## ml.model.stats
 
