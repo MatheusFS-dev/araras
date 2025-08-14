@@ -8,6 +8,9 @@ from araras.utils.misc import format_number, format_bytes, format_scientific, fo
 from araras.utils.system import _get_nvidia_smi_data
 
 
+_CONSECUTIVE_OOM_ERRORS = 0
+
+
 def get_remaining_trials(study: optuna.Study, num_trials: int) -> list[optuna.trial.FrozenTrial]:
     """
     Returns a list of completed trials from the given Optuna study.
@@ -271,37 +274,48 @@ def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
     return study_dir, *subdirectory_paths
 
 
-def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
-    """
-    Log an error that occurred during a trial and handle pruning or propagation.
-    If the error matches any pruning rules, it raises a TrialPruned exception and logs the error.
-    If the error matches any propagation rules, it re-raises the exception.
-    If no rules match, it logs the error to a file and re-raises the exception.
-    It also collects GPU statistics using nvidia-smi and includes them in the log.
+def log_trial_error(
+    trial,
+    exc,
+    logs_dir,
+    prune_on=None,
+    propagate=None,
+    min_consecutive_oom_failures=None,
+):
+    """Log and manage trial errors, optionally aborting after repeated OOMs.
+
+    The function records information about a failed Optuna trial and decides
+    whether to prune or propagate the exception. It can also terminate the
+    process after a configurable number of consecutive
+    ``tf.errors.ResourceExhaustedError`` occurrences, which typically indicate
+    Out-Of-Memory (OOM) issues.
+
+    Notes:
+        Setting ``min_consecutive_oom_failures`` to ``None`` disables the crash
+        mechanism.
 
     Args:
         trial (optuna.trial.FrozenTrial): The trial that encountered the error.
         exc (Exception): The exception that occurred during the trial.
         logs_dir (str): Directory where the error log file should be saved.
-        prune_on (dict, optional): Dictionary mapping exception types to substrings that trigger pruning.
-                                   If None, defaults to:
-                                    {
-                                        tf.errors.ResourceExhaustedError: None,
-                                        tf.errors.InternalError: None,
-                                        tf.errors.UnavailableError: None,
-                                    }
-        propagate (dict, optional): Dictionary mapping exception types to substrings that trigger propagation.
-                                    If None, defaults to:
-                                    {
-                                        optuna.exceptions.TrialPruned: None,
-                                    }
+        prune_on (dict | None): Mapping of exception types to substrings that
+            trigger pruning. If ``None``, defaults to ``{tf.errors.ResourceExhaustedError: None, tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
+        propagate (dict | None): Mapping of exception types to substrings that
+            trigger propagation. If ``None``, defaults to
+            ``{optuna.exceptions.TrialPruned: None}``.
+        min_consecutive_oom_failures (int | None): Minimum number of consecutive
+            ``tf.errors.ResourceExhaustedError`` exceptions before the original
+            exception is re-raised to abort the study. ``None`` disables this
+            check.
 
     Returns:
         None
 
     Raises:
         optuna.TrialPruned: If the error matches any pruning rules.
-        Exception: If the error matches any propagation rules or if no rules match.
+        Exception: If the error matches any propagation rules, if the number of
+            consecutive OOM errors reaches ``min_consecutive_oom_failures`` or if
+            no rules match.
     """
 
     if prune_on is None:
@@ -317,7 +331,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
             optuna.exceptions.TrialPruned: None,
         }
 
-    # If exception should just propagate, re‑raise now
+    # If exception should just propagate, re-raise now
     for exc_type, msg_substr in propagate.items():
         if isinstance(exc, exc_type) and (msg_substr is None or msg_substr in str(exc)):
             raise exc
@@ -349,6 +363,21 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
         log_file.write("Traceback:\n")
         log_file.write(traceback.format_exc())
 
+    global _CONSECUTIVE_OOM_ERRORS
+    if isinstance(exc, tf.errors.ResourceExhaustedError):
+        _CONSECUTIVE_OOM_ERRORS += 1
+    else:
+        _CONSECUTIVE_OOM_ERRORS = 0
+
+    if (
+        min_consecutive_oom_failures is not None
+        and _CONSECUTIVE_OOM_ERRORS >= min_consecutive_oom_failures
+    ):
+        logger.error(
+            f"{RED}Reached {_CONSECUTIVE_OOM_ERRORS} consecutive OOM errors. Aborting.{RESET}"
+        )
+        raise exc
+
     # Check each prune rule
     for exc_type, msg_substr in prune_on.items():
         if isinstance(exc, exc_type) and (msg_substr is None or msg_substr in str(exc)):
@@ -358,7 +387,7 @@ def log_trial_error(trial, exc, logs_dir, prune_on=None, propagate=None):
             )
             raise optuna.TrialPruned() from exc
 
-    raise exc  # Otherwise re‑raise
+    raise exc  # Otherwise re-raise
 
 
 def run_study(

@@ -1711,13 +1711,16 @@ log_trial_error(
     logs_dir,
     prune_on=None,
     propagate=None,
+    min_consecutive_oom_failures=None,
 )
 ```
-Log a JSON file for a failed trial and decide whether to prune.
+Log a JSON file for a failed trial and decide whether to prune or crash.
 
 Exceptions listed in ``prune_on`` cause the trial to be pruned after logging.
 Those in ``propagate`` are immediately re-raised. All others are saved to
-``logs_dir`` for later inspection.
+``logs_dir`` for later inspection. When ``min_consecutive_oom_failures`` is set,
+the process aborts after that many consecutive
+``tf.errors.ResourceExhaustedError`` instances.
 
 **Parameters**
 | Name | Type | Description |
@@ -1727,7 +1730,7 @@ Those in ``propagate`` are immediately re-raised. All others are saved to
 | logs_dir | `str` | Directory where the log file is written. |
 | prune_on | `Iterable[Exception], optional` | Exception types that trigger pruning. |
 | propagate | `Iterable[Exception], optional` | Exception types that are simply re-raised. |
-
+| min_consecutive_oom_failures | `int, optional` | Minimum number of consecutive OOM errors before forcing a crash. Defaults to `None`. | 
 **Returns**
 ` None`
 
