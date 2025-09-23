@@ -4,11 +4,119 @@ import psutil
 import subprocess
 from datetime import datetime
 from threading import Thread
-from typing import Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import tensorflow as tf
 
 from araras.core import *
+
+
+def _collect_cpu_usage() -> Dict[str, Any]:
+    """Return current aggregate and per-core CPU usage percentages."""
+    per_core_percent = psutil.cpu_percent(interval=0.1, percpu=True)
+    if per_core_percent:
+        overall_percent = sum(per_core_percent) / len(per_core_percent)
+    else:
+        overall_percent = psutil.cpu_percent(interval=None)
+        per_core_percent = []
+
+    return {
+        "metric": "cpu",
+        "percent": overall_percent,
+        "per_core_percent": per_core_percent,
+    }
+
+
+def _collect_ram_usage() -> Dict[str, Any]:
+    """Return current RAM utilisation details in bytes and percent."""
+    memory = psutil.virtual_memory()
+    return {
+        "metric": "ram",
+        "total_bytes": memory.total,
+        "used_bytes": memory.used,
+        "available_bytes": memory.available,
+        "percent": memory.percent,
+    }
+
+
+def _collect_disk_usage(path: str = os.sep) -> Dict[str, Any]:
+    """Return disk usage statistics for the provided mount point."""
+    usage = psutil.disk_usage(path)
+    return {
+        "metric": "disk",
+        "path": path,
+        "total_bytes": usage.total,
+        "used_bytes": usage.used,
+        "free_bytes": usage.free,
+        "percent": usage.percent,
+    }
+
+
+def _collect_gpu_memory() -> Dict[str, Any]:
+    """Return GPU memory utilisation for devices reported by nvidia-smi."""
+    gpu_data = _get_nvidia_smi_data()
+    formatted_gpus = []
+    for gpu in gpu_data:
+        total_mb = gpu.get("total_mb")
+        used_mb = gpu.get("used_mb")
+        free_mb = gpu.get("free_mb")
+        percent = (used_mb / total_mb * 100) if total_mb else None
+        formatted_gpus.append(
+            {
+                "index": gpu.get("index"),
+                "name": gpu.get("name"),
+                "total_mb": total_mb,
+                "used_mb": used_mb,
+                "free_mb": free_mb,
+                "percent": percent,
+            }
+        )
+
+    return {"metric": "gpu_ram", "gpus": formatted_gpus}
+
+
+def measure_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> List[Dict[str, Any]]:
+    """Collect system resource usage measurements for requested metrics.
+
+    Args:
+        metrics: Comma-separated list of metrics to collect. Supported values
+            are ``cpu``, ``ram``, ``disk``, ``gpu_ram`` and ``all``. Values are
+            case-insensitive and surrounding whitespace is ignored.
+
+    Returns:
+        A list containing one dictionary per requested metric. When a metric
+        cannot be collected, the corresponding entry contains an ``error`` key
+        with the failure reason.
+    """
+
+    metric_collectors: Dict[str, Callable[[], Dict[str, Any]]] = {
+        "cpu": _collect_cpu_usage,
+        "ram": _collect_ram_usage,
+        "disk": _collect_disk_usage,
+        "gpu_ram": _collect_gpu_memory,
+    }
+
+    normalized = {item.strip().lower() for item in metrics.split(",") if item.strip()}
+    if not normalized:
+        normalized = {"cpu", "ram", "disk", "gpu_ram"}
+    if "all" in normalized:
+        normalized = set(metric_collectors.keys())
+
+    results: List[Dict[str, Any]] = []
+
+    for metric_name in normalized:
+        collector = metric_collectors.get(metric_name)
+        if not collector:
+            results.append({"metric": metric_name, "error": "unsupported metric"})
+            continue
+
+        try:
+            results.append(collector())
+        except Exception as exc:  # pragma: no cover - defensive safeguard
+            logger_error.error(f"Failed to collect {metric_name}: {exc}")
+            results.append({"metric": metric_name, "error": str(exc)})
+
+    return results
 
 
 def get_user_gpu_choice():
