@@ -402,6 +402,7 @@ def run_study(
     patience: int = 100,
     prune_threshold: int = 50,
     variance_threshold: float = 1e-10,
+    **kwargs: Any,
 ) -> optuna.study.Study:
     """Run an Optuna hyperparameter optimization study.
 
@@ -437,6 +438,14 @@ def run_study(
             stopping. ``None`` disables this check.
         variance_threshold: Improvement variance threshold used to detect
             stagnation. ``None`` disables this check.
+        **kwargs: Additional keyword arguments passed to the objective.
+            This is merged with default args:
+                - backup_dir: Directory for temporary trial backups.
+                - model_dir: Directory to save trained models.
+                - fig_dir: Directory to save training figures.
+                - logs_dir: Directory to save training logs.
+                - tensorboard_dir: Directory for TensorBoard logs.
+                - history_dir: Directory to save training history CSV files.
 
     Returns:
         optuna.study.Study: The completed study object.
@@ -492,19 +501,22 @@ def run_study(
         if patience is not None:
             callbacks_list.append(StopWhenNoValueImprovement(patience=patience))
 
+        default_objective_kwargs = {
+            "backup_dir": backup_dir,
+            "model_dir": model_dir,
+            "fig_dir": fig_dir,
+            "logs_dir": logs_dir,
+            "tensorboard_dir": tensorboard_dir,
+            "history_dir": history_dir,
+        }
+        objective_kwargs = {**default_objective_kwargs, **kwargs}
+
         study.optimize(
             lambda trial: objective(
                 trial,
                 epochs=epochs,
                 size_penalizer=None,
-                **{
-                    "backup_dir": backup_dir,
-                    "model_dir": model_dir,
-                    "fig_dir": fig_dir,
-                    "logs_dir": logs_dir,
-                    "tensorboard_dir": tensorboard_dir,
-                    "history_dir": history_dir,
-                },
+                **objective_kwargs,
             ),
             n_trials=get_remaining_trials(study, num_trials),
             callbacks=callbacks_list,
