@@ -1,9 +1,11 @@
 from araras.core import *
 
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+
 import time
+import warnings
 import tensorflow as tf
 import pynvml
-import psutil
 
 from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
@@ -16,6 +18,10 @@ from araras.utils.misc import (
     format_scientific,
     format_number_commas,
 )
+from araras.utils.system import measure_system_resources
+
+ResourceMetricValue = Union[str, Dict[str, Union[int, float]]]
+ResourceMetrics = Dict[str, ResourceMetricValue]
 
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
@@ -84,10 +90,10 @@ def get_memory_and_time(
     warmup_runs: int = 10,
     test_runs: int = 50,
     verbose: bool = True,
-) -> Tuple[int, float]:
+) -> Tuple[ResourceMetrics, float]:
     """
-    Measures the peak memory usage and average inference time of a Keras model
-    on GPU or CPU.
+    Measure the exclusive resource footprint and average inference time of a
+    ``tf.keras.Model`` on GPU or CPU.
 
     Observations:
         Warmup runs exclude one-time initialization costs from your measurements. On GPU
@@ -101,11 +107,6 @@ def get_memory_and_time(
         and memory on the “cold” run. Warmup runs let TensorFlow complete tracing and
         graph compilation once, so your timed loop measures only the optimized graph
         execution path.
-
-    The CPU memory probe occasionally reports zero usage. When this happens, the
-    measurement is retried up to two additional times. If all attempts still
-    report zero memory, the function returns ``0`` for the peak usage and emits a
-    warning in red.
 
     Notes:
         - The Keras Functional API may emit a ``UserWarning`` when the provided
@@ -128,10 +129,13 @@ def get_memory_and_time(
         RuntimeError: If the specified GPU or CPU device cannot be found.
 
     Returns:
-        Tuple[int, float]:
-            - peak memory usage in bytes (0 if CPU measurement fails after
-              several attempts)
-            - average inference time in seconds
+        Tuple[ResourceMetrics, float]:
+            - Dictionary with the average per-inference resource statistics. Keys are
+              ``system_ram``, ``gpu_ram``, ``gpu_usage`` and ``cpu_usage``. For each
+              key the value is either ``"Not measured"`` or a mapping containing the
+              average ``before`` value, the ``current`` value and their ``difference``.
+              RAM measurements are expressed in bytes; usage values are percentages.
+            - Average inference time in seconds.
     """
     # Prepare dummy inputs matching model.inputs
     shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
@@ -149,6 +153,99 @@ def get_memory_and_time(
 
     use_gpu = device >= 0
     device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
+
+    metric_keys = ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage")
+    ram_metrics = {"system_ram", "gpu_ram"}
+
+    def _safe_float(value: Any) -> Optional[float]:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _capture_snapshot() -> Dict[str, Optional[float]]:
+        metrics = ["ram"]
+        if use_gpu:
+            metrics.append("gpu_ram")
+        else:
+            metrics.append("cpu")
+
+        snapshot = {key: None for key in metric_keys}
+
+        try:
+            raw_results = measure_system_resources(",".join(metrics))
+        except Exception:  # pragma: no cover - defensive safeguard
+            return snapshot
+
+        for entry in raw_results:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("error"):
+                continue
+
+            metric_name = entry.get("metric")
+            if metric_name == "ram":
+                snapshot["system_ram"] = _safe_float(entry.get("used_bytes"))
+            elif metric_name == "cpu":
+                snapshot["cpu_usage"] = _safe_float(entry.get("percent"))
+            elif metric_name == "gpu_ram":
+                gpus = entry.get("gpus", [])
+                for gpu in gpus:
+                    if gpu.get("index") != device:
+                        continue
+                    used_mb = _safe_float(gpu.get("used_mb"))
+                    if used_mb is not None:
+                        snapshot["gpu_ram"] = used_mb * 1024 * 1024
+                    snapshot["gpu_usage"] = _safe_float(gpu.get("utilization_percent"))
+                    break
+
+        return snapshot
+
+    totals = {
+        key: {"before": 0.0, "current": 0.0, "difference": 0.0}
+        for key in metric_keys
+    }
+    counts = {key: 0 for key in metric_keys}
+
+    def _update_metrics(
+        before: Dict[str, Optional[float]],
+        after: Dict[str, Optional[float]],
+    ) -> None:
+        for key in metric_keys:
+            before_val = before.get(key)
+            after_val = after.get(key)
+            if before_val is None or after_val is None:
+                continue
+
+            diff = after_val - before_val
+            if diff < 0:
+                diff = 0.0
+
+            totals[key]["before"] += before_val
+            totals[key]["current"] += after_val
+            totals[key]["difference"] += diff
+            counts[key] += 1
+
+    def _cast_metric_value(key: str, value: float) -> Union[int, float]:
+        if key in ram_metrics:
+            return int(round(value))
+        return value
+
+    def _finalize_metrics() -> ResourceMetrics:
+        final: ResourceMetrics = {}
+        for key in metric_keys:
+            count = counts[key]
+            if count == 0:
+                final[key] = "Not measured"
+                continue
+
+            final[key] = {
+                "before": _cast_metric_value(key, totals[key]["before"] / count),
+                "current": _cast_metric_value(key, totals[key]["current"] / count),
+                "difference": _cast_metric_value(key, totals[key]["difference"] / count),
+            }
+
+        return final
 
     if use_gpu:
         # Verify GPU exists
@@ -174,67 +271,50 @@ def get_memory_and_time(
                 total=test_runs,
             )
         for _ in progress_iter:
+            before_snapshot = _capture_snapshot()
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             tf.nest.map_structure(lambda t: t.numpy(), out)
             times.append(time.perf_counter() - t0)
-        avg_time = sum(times) / len(times)
+            after_snapshot = _capture_snapshot()
+            _update_metrics(before_snapshot, after_snapshot)
 
-        peak_mem = tf.config.experimental.get_memory_info(device_str)["peak"]
-        return peak_mem, avg_time
+        avg_time = sum(times) / len(times)
+        resource_metrics = _finalize_metrics()
+        return resource_metrics, avg_time
 
     # CPU path
     if not tf.config.list_physical_devices("CPU"):
         raise RuntimeError("No CPU device found")
 
-    def _measure_cpu() -> Tuple[int, float]:
-        """Run the CPU measurement loop and return (peak_mem, avg_time)."""
-        proc = psutil.Process()
-        baseline = proc.memory_info().rss
-
-        # warmup on CPU
-        cpu_index = 0
-        with tf.device(f"/CPU:{cpu_index}"):
+    cpu_index = 0
+    with tf.device(f"/CPU:{cpu_index}"):
+        _ = infer(*dummy_inputs)
+        for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
-            for _ in range(warmup_runs - 1):
-                _ = infer(*dummy_inputs)
 
-        peak_rss = baseline
-        times = []
+    times = []
+    progress_iter = range(test_runs)
+    if verbose:
+        progress_iter = white_track(
+            progress_iter,
+            description="Measuring CPU",
+            total=test_runs,
+        )
+
+    for _ in progress_iter:
+        before_snapshot = _capture_snapshot()
         with tf.device(f"/CPU:{cpu_index}"):
-            progress_iter = range(test_runs)
-            if verbose:
-                progress_iter = white_track(
-                    progress_iter,
-                    description="Measuring CPU",
-                    total=test_runs,
-                )
-            for _ in progress_iter:
-                t0 = time.perf_counter()
-                out = infer(*dummy_inputs)
-                tf.nest.map_structure(lambda t: t.numpy(), out)
-                times.append(time.perf_counter() - t0)
-                rss = proc.memory_info().rss
-                if rss > peak_rss:
-                    peak_rss = rss
+            t0 = time.perf_counter()
+            out = infer(*dummy_inputs)
+            tf.nest.map_structure(lambda t: t.numpy(), out)
+        times.append(time.perf_counter() - t0)
+        after_snapshot = _capture_snapshot()
+        _update_metrics(before_snapshot, after_snapshot)
 
-        avg_time = sum(times) / len(times)
-        peak_mem = peak_rss - baseline
-        return peak_mem, avg_time
-
-    max_retries = 2
-    peak_mem = 0
-    avg_time = 0.0
-    for attempt in range(max_retries + 1):
-        peak_mem, avg_time = _measure_cpu()
-        if peak_mem != 0:
-            break
-        if attempt < max_retries:
-            logger.warning(f"{YELLOW}CPU memory usage measured as 0 bytes, retrying measurement...{RESET}")
-        else:
-            logger.error(f"{RED}CPU memory usage could not be measured, returning 0.{RESET}")
-
-    return peak_mem, avg_time
+    avg_time = sum(times) / len(times)
+    resource_metrics = _finalize_metrics()
+    return resource_metrics, avg_time
 
 
 def get_model_usage_stats(
@@ -450,7 +530,7 @@ def write_model_stats_to_file(
         - Model size in bits
         - FLOPs (Floating Point Operations)
         - MACs (Multiply-Accumulate operations)
-        - Peak memory usage
+        - Average per-inference resource deltas (system RAM, GPU RAM, GPU usage %, CPU usage %)
         - Inference time
         - Average power consumption
         - Average energy consumption
@@ -466,10 +546,76 @@ def write_model_stats_to_file(
         verbose (bool): If True, print detailed information.
     """
     params = model.count_params()
-    peak_mem_usage, inference_time = get_memory_and_time(
+    resource_usage_metrics, inference_time = get_memory_and_time(
         model, batch_size=batch_size, device=device, verbose=verbose
     )
     _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
+
+    ram_metrics = {"system_ram", "gpu_ram"}
+
+    def _resource_component(metric: str, component: str) -> Union[str, int, float]:
+        value = resource_usage_metrics.get(metric, "Not measured")
+        if isinstance(value, str):
+            return value
+        component_value = value.get(component)
+        if component_value is None:
+            return "Not measured"
+        return component_value
+
+    def _format_resource(metric: str, component: str, is_ram: bool) -> str:
+        value = _resource_component(metric, component)
+        if isinstance(value, str):
+            return value
+        if is_ram:
+            return format_bytes(value)
+        return f"{value:.2f}%"
+
+    resource_usage_diff = {}
+    resource_usage_display: Dict[str, Any] = {}
+    for metric, value in resource_usage_metrics.items():
+        if isinstance(value, str):
+            resource_usage_diff[metric] = value
+            if metric in ram_metrics:
+                resource_usage_display[metric] = value
+            continue
+
+        diff_value = value.get("difference")
+        resource_usage_diff[metric] = diff_value if diff_value is not None else "Not measured"
+
+        if metric in ram_metrics:
+            display_components: Dict[str, str] = {}
+            for component in ("before", "current", "difference"):
+                component_value = _resource_component(metric, component)
+                if isinstance(component_value, str):
+                    display_components[component] = component_value
+                else:
+                    raw_int = int(round(component_value))
+                    display_components[component] = f"{raw_int} B ({format_bytes(component_value)})"
+            resource_usage_display[metric] = display_components
+
+    def _format_resource_line(
+        metric: str,
+        label: str,
+        component: str,
+        component_label: str,
+        is_ram: bool,
+    ) -> str:
+        if is_ram:
+            display_source = resource_usage_display.get(metric)
+            if isinstance(display_source, dict):
+                text = display_source.get(component, "Not measured")
+            elif isinstance(display_source, str):
+                text = display_source
+            else:
+                value = _resource_component(metric, component)
+                if isinstance(value, str):
+                    text = value
+                else:
+                    raw_int = int(round(value))
+                    text = f"{raw_int} B ({format_bytes(value)})"
+            return f"{label} {component_label}: {text}"
+
+        return f"{label} {component_label}: {_format_resource(metric, component, is_ram)}"
 
     model_stats = {
         "num_params": params,
@@ -477,7 +623,9 @@ def write_model_stats_to_file(
         "flops": get_flops(model),
         "macs": get_macs(model),
         "model_summary": capture_model_summary(model),
-        "peak_memory_usage": peak_mem_usage,
+        "resource_usage": resource_usage_metrics,
+        "resource_usage_diff": resource_usage_diff,
+        "resource_usage_display": resource_usage_display,
         "inference_time": inference_time,
         "avg_power": avg_power,
         "avg_energy": avg_energy,
@@ -488,7 +636,18 @@ def write_model_stats_to_file(
         file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
         file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
         file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
-        file.write(f"Peak memory usage: {format_bytes(model_stats['peak_memory_usage'])}\n")
+        for metric, label, is_ram in (
+            ("system_ram", "System RAM", True),
+            ("gpu_ram", "GPU RAM", True),
+            ("gpu_usage", "GPU usage", False),
+            ("cpu_usage", "CPU usage", False),
+        ):
+            for component, component_label in (
+                ("before", "before"),
+                ("current", "current"),
+                ("difference", "delta"),
+            ):
+                file.write(f"{_format_resource_line(metric, label, component, component_label, is_ram)}\n")
         file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
         file.write(
             f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n"

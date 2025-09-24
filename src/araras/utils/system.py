@@ -61,6 +61,13 @@ def _collect_gpu_memory() -> Dict[str, Any]:
         used_mb = gpu.get("used_mb")
         free_mb = gpu.get("free_mb")
         percent = (used_mb / total_mb * 100) if total_mb else None
+        utilization_raw = gpu.get("utilization")
+        utilization_percent = None
+        if utilization_raw not in (None, "N/A"):
+            try:
+                utilization_percent = float(utilization_raw)
+            except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+                utilization_percent = None
         formatted_gpus.append(
             {
                 "index": gpu.get("index"),
@@ -69,6 +76,7 @@ def _collect_gpu_memory() -> Dict[str, Any]:
                 "used_mb": used_mb,
                 "free_mb": free_mb,
                 "percent": percent,
+                "utilization_percent": utilization_percent,
             }
         )
 

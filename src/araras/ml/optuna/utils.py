@@ -197,7 +197,96 @@ def save_top_k_trials(
         trial_model_size = trial.user_attrs.get("model_size", None)
         trial_flops = trial.user_attrs.get("flops", None)
         trial_macs = trial.user_attrs.get("macs", None)
-        trial_mem_usage = trial.user_attrs.get("peak_memory_usage", None)
+        trial_num_params_display = trial.user_attrs.get("num_params_display")
+        trial_model_size_display = trial.user_attrs.get("model_size_display")
+        trial_flops_display = trial.user_attrs.get("flops_display")
+        trial_macs_display = trial.user_attrs.get("macs_display")
+        trial_resource_usage = trial.user_attrs.get("resource_usage", {})
+        if not isinstance(trial_resource_usage, dict):
+            trial_resource_usage = trial.user_attrs.get("resource_usage_diff", {})
+        if not isinstance(trial_resource_usage, dict):
+            trial_resource_usage = {}
+        trial_resource_usage_display = trial.user_attrs.get("resource_usage_display", {})
+        if not isinstance(trial_resource_usage_display, dict):
+            trial_resource_usage_display = {}
+
+        def _resource_value(metric: str, component: str):
+            data = trial_resource_usage.get(metric)
+            if isinstance(data, dict):
+                value = data.get(component)
+                if value is None:
+                    return "Not measured"
+                return value
+            if isinstance(data, str):
+                # Legacy diff-only structure
+                return data if component == "difference" else "Not measured"
+
+            legacy_diff = trial.user_attrs.get("resource_usage_diff")
+            if isinstance(legacy_diff, dict) and component == "difference":
+                value = legacy_diff.get(metric)
+                if value is not None:
+                    return value
+
+            suffix_map = {"before": "before", "current": "current", "difference": "diff"}
+            attr_name = f"{metric}_{suffix_map[component]}"
+            attr_value = trial.user_attrs.get(attr_name)
+            if attr_value is None:
+                return "Not measured"
+            return attr_value
+
+        def _format_resource(metric: str, component: str, as_bytes: bool = False) -> str:
+            value = _resource_value(metric, component)
+            if isinstance(value, str):
+                return value
+            if value is None:
+                return "Not measured"
+            if as_bytes:
+                return format_bytes(value)
+            return f"{float(value):.2f}%"
+
+        def _extract_human(display_value):
+            if not isinstance(display_value, str):
+                return None
+            if " (" in display_value and display_value.endswith(")"):
+                return display_value.split(" (", 1)[1][:-1].strip()
+            return display_value.strip() or None
+
+        def _resource_display(metric: str, component: str):
+            data = trial_resource_usage_display.get(metric)
+            if isinstance(data, dict):
+                return data.get(component)
+            if isinstance(data, str):
+                return data
+            return None
+
+        def _format_dual(
+            label: str,
+            raw_value,
+            display_value,
+            raw_formatter,
+            human_formatter,
+        ) -> str:
+            if raw_value is None:
+                return f"{label}: Not measured\n"
+
+            if isinstance(raw_value, str):
+                if raw_value.lower() == "not measured":
+                    return f"{label}: Not measured\n"
+                text = raw_value
+                human_text = _extract_human(display_value)
+                if human_text and human_text.strip().lower() != text.strip().lower():
+                    return f"{label}: {text} ({human_text})\n"
+                return f"{label}: {text}\n"
+
+            raw_text = raw_formatter(raw_value)
+            human_text = _extract_human(display_value)
+            if not human_text:
+                human_text = human_formatter(raw_value)
+
+            if human_text and human_text.strip().lower() != raw_text.strip().lower():
+                return f"{label}: {raw_text} ({human_text})\n"
+            return f"{label}: {raw_text}\n"
+
         trial_inference_time = trial.user_attrs.get("inference_time", None)
         trial_avg_power = trial.user_attrs.get("avg_power", None)
         trial_avg_energy = trial.user_attrs.get("avg_energy", None)
@@ -217,11 +306,69 @@ def save_top_k_trials(
             file.write(f"Rank: {rank + 1}\n")
             file.write(f"Trial ID: {trial_id}\n")
             file.write(f"Loss: {format_scientific(trial_loss, max_precision=12)}\n")
-            file.write(f"Number of parameters: {format_number_commas(trial_num_params)}\n")
-            file.write(f"Model size: {format_bytes(trial_model_size)}\n")
-            file.write(f"FLOPs: {format_number(trial_flops)}FLOPs\n")
-            file.write(f"MACs: {format_number(trial_macs)}MACs\n")
-            file.write(f"Peak memory usage: {format_bytes(trial_mem_usage)}\n")
+            file.write(
+                _format_dual(
+                    "Number of parameters",
+                    trial_num_params,
+                    trial_num_params_display,
+                    lambda v: f"{format_number_commas(v)} parameters",
+                    lambda v: f"{format_number(v)} parameters",
+                )
+            )
+            file.write(
+                _format_dual(
+                    "Model size",
+                    trial_model_size,
+                    trial_model_size_display,
+                    lambda v: f"{format_number_commas(v)} B",
+                    format_bytes,
+                )
+            )
+            file.write(
+                _format_dual(
+                    "FLOPs",
+                    trial_flops,
+                    trial_flops_display,
+                    lambda v: f"{format_number_commas(v)} FLOPs",
+                    lambda v: f"{format_number(v)} FLOPs",
+                )
+            )
+            file.write(
+                _format_dual(
+                    "MACs",
+                    trial_macs,
+                    trial_macs_display,
+                    lambda v: f"{format_number_commas(v)} MACs",
+                    lambda v: f"{format_number(v)} MACs",
+                )
+            )
+            for metric, label, is_ram in (
+                ("system_ram", "System RAM", True),
+                ("gpu_ram", "GPU RAM", True),
+                ("gpu_usage", "GPU usage", False),
+                ("cpu_usage", "CPU usage", False),
+            ):
+                for component, component_label in (
+                    ("before", "before"),
+                    ("current", "current"),
+                    ("difference", "delta"),
+                ):
+                    if is_ram:
+                        raw_value = _resource_value(metric, component)
+                        display_value = _resource_display(metric, component)
+                        file.write(
+                            _format_dual(
+                                f"{label} {component_label}",
+                                raw_value,
+                                display_value,
+                                lambda v: f"{format_number_commas(int(round(v)))} B",
+                                format_bytes,
+                            )
+                        )
+                    else:
+                        file.write(
+                            f"{label} {component_label}: {_format_resource(metric, component)}\n"
+                        )
             file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)} s\n")
             file.write(
                 f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n"

@@ -1,5 +1,7 @@
 from araras.core import *
 
+from typing import Any, Dict
+
 import optuna
 import matplotlib.pyplot as plt
 import tensorflow as tf
@@ -12,6 +14,7 @@ import os
 
 from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
 from araras.ml.model.utils import capture_model_summary
+from araras.utils.misc import format_number, format_bytes
 
 from araras.visualization.configs import config_plt
 
@@ -461,7 +464,7 @@ def set_user_attr_model_stats(
     n_trials: int = 10000,
     device: int = 0,
     verbose: bool = False,
-) -> Dict[str, float]:
+) -> Dict[str, Any]:
     """
     Extract and return model statistics from the given Optuna trial.
     
@@ -471,7 +474,7 @@ def set_user_attr_model_stats(
         - FLOPs (floating-point operations)
         - MACs (multiply-accumulate operations)
         - Model summary
-        - Peak memory usage during inference
+        - Average per-inference resource stats (before, current, delta for system RAM, GPU RAM, GPU usage %, CPU usage %)
         - Inference time
         - Average power consumption
         - Average energy consumption
@@ -486,31 +489,131 @@ def set_user_attr_model_stats(
         verbose (bool): If True, print detailed information.
 
     Returns:
-        Dict[str, float]: A dictionary containing model statistics
+        Dict[str, Any]: A dictionary containing model statistics and formatted strings
     """
     params = model.count_params()
-    peak_mem_usage, inference_time = get_memory_and_time(
+    model_size_bytes = params * bytes_per_param
+    flops = get_flops(model)
+    macs = get_macs(model)
+    model_summary = capture_model_summary(model)
+
+    resource_usage_metrics, inference_time = get_memory_and_time(
         model, batch_size=batch_size, device=device, verbose=verbose
     )
     _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
 
+    def _metric_component(metric: str, component: str):
+        value = resource_usage_metrics.get(metric, "Not measured")
+        if isinstance(value, str):
+            return value
+        component_value = value.get(component)
+        if component_value is None:
+            return "Not measured"
+        return component_value
+
+    ram_metrics = {"system_ram", "gpu_ram"}
+    resource_usage_diff: Dict[str, Any] = {}
+    resource_usage_display: Dict[str, Any] = {}
+
+    def _format_ram_display(value: float) -> str:
+        raw_int = int(round(value))
+        return f"{raw_int} B ({format_bytes(value)})"
+
+    for metric, value in resource_usage_metrics.items():
+        if isinstance(value, str):
+            resource_usage_diff[metric] = value
+            if metric in ram_metrics:
+                resource_usage_display[metric] = value
+            continue
+
+        diff_value = value.get("difference")
+        resource_usage_diff[metric] = diff_value if diff_value is not None else "Not measured"
+
+        if metric in ram_metrics:
+            display_components: Dict[str, str] = {}
+            for component in ("before", "current", "difference"):
+                component_value = value.get(component)
+                if component_value is None:
+                    display_components[component] = "Not measured"
+                elif isinstance(component_value, str):
+                    display_components[component] = component_value
+                else:
+                    display_components[component] = _format_ram_display(component_value)
+            resource_usage_display[metric] = display_components
+
+    def _format_metric_with_suffix(value: int, unit: str, joiner: str = "") -> str:
+        formatted = format_number(value)
+        if formatted.startswith("Invalid input"):
+            return f"{value} {unit}"
+
+        sign = ""
+        body = formatted
+        if formatted.startswith("-"):
+            sign = "-"
+            body = formatted[1:].lstrip()
+
+        parts = body.split()
+        if len(parts) == 2:
+            magnitude, prefix = parts
+            formatted_with_unit = f"{sign}{magnitude} {prefix}{joiner}{unit}".strip()
+        else:
+            formatted_with_unit = f"{formatted} {unit}".strip()
+
+        return f"{value} {unit} ({formatted_with_unit})"
+
+    def _format_bytes_with_suffix(value: int) -> str:
+        human_readable = format_bytes(value)
+        if human_readable.startswith("Invalid input"):
+            return f"{value} B"
+        return f"{value} B ({human_readable})"
+
+    num_params_display = _format_metric_with_suffix(params, "parameters", joiner=" ")
+    model_size_display = _format_bytes_with_suffix(model_size_bytes)
+    flops_display = _format_metric_with_suffix(flops, "FLOPs")
+    macs_display = _format_metric_with_suffix(macs, "MACs")
+
     trial.set_user_attr("num_params", params)
-    trial.set_user_attr("model_size", params * bytes_per_param)
-    trial.set_user_attr("flops", get_flops(model))
-    trial.set_user_attr("macs", get_macs(model))
-    trial.set_user_attr("model_summary", capture_model_summary(model))
-    trial.set_user_attr("peak_memory_usage", peak_mem_usage)
+    trial.set_user_attr("num_params_display", num_params_display)
+    trial.set_user_attr("model_size", model_size_bytes)
+    trial.set_user_attr("model_size_display", model_size_display)
+    trial.set_user_attr("flops", flops)
+    trial.set_user_attr("flops_display", flops_display)
+    trial.set_user_attr("macs", macs)
+    trial.set_user_attr("macs_display", macs_display)
+    trial.set_user_attr("model_summary", model_summary)
+    trial.set_user_attr("resource_usage", resource_usage_metrics)
+    trial.set_user_attr("resource_usage_diff", resource_usage_diff)
+    if resource_usage_display:
+        trial.set_user_attr("resource_usage_display", resource_usage_display)
+    for metric in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
+        trial.set_user_attr(f"{metric}_before", _metric_component(metric, "before"))
+        trial.set_user_attr(f"{metric}_current", _metric_component(metric, "current"))
+        trial.set_user_attr(f"{metric}_diff", resource_usage_diff.get(metric, "Not measured"))
+        if metric in ram_metrics:
+            display_source = resource_usage_display.get(metric)
+            if isinstance(display_source, dict):
+                trial.set_user_attr(f"{metric}_before_display", display_source.get("before", "Not measured"))
+                trial.set_user_attr(f"{metric}_current_display", display_source.get("current", "Not measured"))
+                trial.set_user_attr(f"{metric}_diff_display", display_source.get("difference", "Not measured"))
+            elif isinstance(display_source, str):
+                trial.set_user_attr(f"{metric}_display", display_source)
     trial.set_user_attr("inference_time", inference_time)
     trial.set_user_attr("avg_power", avg_power)
     trial.set_user_attr("avg_energy", avg_energy)
 
     return {
         "num_params": params,
-        "model_size": params * bytes_per_param,
-        "flops": get_flops(model),
-        "macs": get_macs(model),
-        "model_summary": capture_model_summary(model),
-        "peak_memory_usage": peak_mem_usage,
+        "num_params_display": num_params_display,
+        "model_size": model_size_bytes,
+        "model_size_display": model_size_display,
+        "flops": flops,
+        "flops_display": flops_display,
+        "macs": macs,
+        "macs_display": macs_display,
+        "model_summary": model_summary,
+        "resource_usage": resource_usage_metrics,
+        "resource_usage_diff": resource_usage_diff,
+        "resource_usage_display": resource_usage_display,
         "inference_time": inference_time,
         "avg_power": avg_power,
         "avg_energy": avg_energy,
