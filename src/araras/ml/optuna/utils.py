@@ -278,9 +278,16 @@ def log_trial_error(
     trial,
     exc,
     logs_dir,
-    prune_on=None,
-    propagate=None,
-    force_crash_oom=None,
+    prune_on={
+        tf.errors.ResourceExhaustedError: None,
+        tf.errors.InternalError: None,
+        tf.errors.UnavailableError: None,
+        # tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
+    },
+    propagate={
+        optuna.exceptions.TrialPruned: None,
+    },
+    force_crash_oom: int | None = 10,
 ):
     """Log and manage trial errors, optionally aborting after repeated OOMs.
 
@@ -291,7 +298,7 @@ def log_trial_error(
     Out-Of-Memory (OOM) issues.
 
     Notes:
-        Setting ``min_consecutive_oom_failures`` to ``None`` disables the crash
+        Setting ``force_crash_oom`` to ``None`` disables the crash
         mechanism.
 
     Args:
@@ -299,13 +306,12 @@ def log_trial_error(
         exc (Exception): The exception that occurred during the trial.
         logs_dir (str): Directory where the error log file should be saved.
         prune_on (dict | None): Mapping of exception types to substrings that
-            trigger pruning. If ``None``, defaults to ``{tf.errors.ResourceExhaustedError: None, tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
+            trigger pruning. Defaults to ``{tf.errors.ResourceExhaustedError: None, tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
         propagate (dict | None): Mapping of exception types to substrings that
-            trigger propagation. If ``None``, defaults to
-            ``{optuna.exceptions.TrialPruned: None}``.
+            trigger propagation. Defaults to ``{optuna.exceptions.TrialPruned: None}``.
         force_crash_oom (int | None): Minimum number of consecutive
             ``tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError`` exceptions before the process is aborted.
-            ``None`` disables this check.
+            Defaults to ``10``. ``None`` disables this check.
 
     Returns:
         None
@@ -313,22 +319,12 @@ def log_trial_error(
     Raises:
         optuna.TrialPruned: If the error matches any pruning rules.
         Exception: If the error matches any propagation rules, if the number of
-            consecutive OOM errors reaches ``min_consecutive_oom_failures`` or if
+            consecutive OOM errors reaches ``force_crash_oom`` or if
             no rules match.
     """
 
-    if prune_on is None:
-        prune_on = {
-            tf.errors.ResourceExhaustedError: None,
-            tf.errors.InternalError: None,
-            tf.errors.UnavailableError: None,
-            # tf.errors.UnknownError: "CUDNN failed to allocate the scratch space",
-        }
-
-    if propagate is None:
-        propagate = {
-            optuna.exceptions.TrialPruned: None,
-        }
+    prune_on = {} if prune_on is None else prune_on
+    propagate = {} if propagate is None else propagate
 
     # If exception should just propagate, re-raise now
     for exc_type, msg_substr in propagate.items():

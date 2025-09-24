@@ -9,9 +9,9 @@ def build_tcnn1d(
     kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
-    filters_step: int,
     kernel_size_range: Union[int, tuple[int, int]],
-    kernel_size_step: int,
+    filters_step: int = 10,
+    kernel_size_step: int = 1,
     data_format: str = "channels_last",
     padding: str = "same",
     strides: int = 1,
@@ -37,9 +37,9 @@ def build_tcnn1d(
         kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, tuple[int, int]]): Fixed or tunable number of filters.
-        filters_step (int): Step size for filter tuning.
         kernel_size_range (Union[int, tuple[int, int]]): Fixed or tunable kernel size.
-        kernel_size_step (int): Step size for kernel size tuning.
+        filters_step (int): Step size for filter tuning. Defaults to ``10``.
+        kernel_size_step (int): Step size for kernel size tuning. Defaults to ``1``.
         data_format (str): Format of the input data (e.g., "channels_last").
         padding (str): Type of padding to use in the convolution (e.g., "same" or "valid").
         strides (int): Stride length of the convolution.
@@ -131,9 +131,9 @@ def build_tcnn2d(
     kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, tuple[int, int]],
-    filters_step: int,
     kernel_size_range: Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]],
-    kernel_size_step: int,
+    filters_step: int = 10,
+    kernel_size_step: int = 1,
     data_format: str = "channels_last",
     padding: str = "same",
     strides: tuple[int, int] = (1, 1),
@@ -159,10 +159,10 @@ def build_tcnn2d(
         kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, tuple[int, int]]): Fixed or tunable number of filters.
-        filters_step (int): Step size for filter tuning.
         kernel_size_range (Union[tuple[int, int], tuple[tuple[int, int], tuple[int, int]]]):
             Fixed (height, width) or ranges ((h_min, h_max), (w_min, w_max)) for tuning.
-        kernel_size_step (int): Step size for kernel size tuning.
+        filters_step (int): Step size for filter tuning. Defaults to ``10``.
+        kernel_size_step (int): Step size for kernel size tuning. Defaults to ``1``.
         data_format (str): Format of the input data (e.g., "channels_last").
         padding (str): Type of padding to use in the convolution (e.g., "same" or "valid").
         strides (tuple[int, int]): Stride length for height and width.
@@ -255,12 +255,12 @@ def build_tcnn3d(
     kparams: KParams,
     x: layers.Layer,
     filters_range: Union[int, Tuple[int, int]],
-    filters_step: int,
     kernel_size_range: Union[
         Tuple[int, int, int],
         Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]],
     ],
-    kernel_size_step: int,
+    filters_step: int = 10,
+    kernel_size_step: int = 1,
     data_format: str = "channels_last",
     padding: str = "same",
     strides: Tuple[int, int, int] = (1, 1, 1),
@@ -286,12 +286,12 @@ def build_tcnn3d(
         kparams (KParams): Hyperparameter manager providing activation and regularizer configurations.
         x (layers.Layer): Input layer/tensor to process.
         filters_range (Union[int, Tuple[int, int]]): Fixed or tunable number of filters.
-        filters_step (int): Step size for filter tuning.
         kernel_size_range (Union[
             Tuple[int, int, int],
             Tuple[Tuple[int, int], Tuple[int, int], Tuple[int, int]]
         ]): Fixed (depth, height, width) or ranges ((d_min, d_max), (h_min, h_max), (w_min, w_max)) for tuning.
-        kernel_size_step (int): Step size for kernel size tuning.
+        filters_step (int): Step size for filter tuning. Defaults to ``10``.
+        kernel_size_step (int): Step size for kernel size tuning. Defaults to ``1``.
         data_format (str): Format of the input data (e.g., "channels_last").
         padding (str): Type of padding to use in the convolution (e.g., "same" or "valid").
         strides (Tuple[int, int, int]): Stride length for depth, height, and width.
