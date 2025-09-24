@@ -4,6 +4,9 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import time
 import warnings
+from threading import Event, Lock, Thread
+
+import psutil
 import tensorflow as tf
 import pynvml
 
@@ -18,8 +21,6 @@ from araras.utils.misc import (
     format_scientific,
     format_number_commas,
 )
-from araras.utils.system import measure_system_resources
-
 ResourceMetricValue = Union[str, Dict[str, Union[int, float]]]
 ResourceMetrics = Dict[str, ResourceMetricValue]
 
@@ -133,8 +134,11 @@ def get_memory_and_time(
             - Dictionary with the average per-inference resource statistics. Keys are
               ``system_ram``, ``gpu_ram``, ``gpu_usage`` and ``cpu_usage``. For each
               key the value is either ``"Not measured"`` or a mapping containing the
-              average ``before`` value, the ``current`` value and their ``difference``.
-              RAM measurements are expressed in bytes; usage values are percentages.
+              average baseline before running inference (``before``), the peak value
+              observed while inference was active (``current``), the difference
+              between them (``difference``) and, when available, the reading captured
+              immediately after inference completed (``final``). RAM measurements are
+              expressed in bytes; usage values are percentages.
             - Average inference time in seconds.
     """
     # Prepare dummy inputs matching model.inputs
@@ -157,74 +161,174 @@ def get_memory_and_time(
     metric_keys = ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage")
     ram_metrics = {"system_ram", "gpu_ram"}
 
-    def _safe_float(value: Any) -> Optional[float]:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
+    class ResourceMonitor:
+        """Collect system and accelerator metrics while inference is running."""
 
-    def _capture_snapshot() -> Dict[str, Optional[float]]:
-        metrics = ["ram"]
-        if use_gpu:
-            metrics.append("gpu_ram")
-        else:
-            metrics.append("cpu")
+        def __init__(self, sample_interval: float = 0.005) -> None:
+            self.sample_interval = sample_interval
+            self.use_gpu = use_gpu
+            self.gpu_index = device
+            self.baseline: Dict[str, Optional[float]] = {}
+            self.peak: Dict[str, Optional[float]] = {}
+            self.latest: Dict[str, Optional[float]] = {}
+            self._gpu_handle: Optional[Any] = None
+            self._thread: Optional[Thread] = None
+            self._start_event = Event()
+            self._stop_event = Event()
+            self._lock = Lock()
 
-        snapshot = {key: None for key in metric_keys}
+        def start(self) -> None:
+            psutil.cpu_percent(interval=None)
+            if self.use_gpu:
+                try:
+                    pynvml.nvmlInit()
+                    self._gpu_handle = pynvml.nvmlDeviceGetHandleByIndex(self.gpu_index)
+                except pynvml.NVMLError:
+                    self._gpu_handle = None
 
-        try:
-            raw_results = measure_system_resources(",".join(metrics))
-        except Exception:  # pragma: no cover - defensive safeguard
+            baseline_samples: List[Dict[str, Optional[float]]] = []
+            for idx in range(3):
+                snapshot = self._read_snapshot()
+                baseline_samples.append(snapshot)
+                if idx < 2:
+                    time.sleep(self.sample_interval)
+
+            self.baseline = self._average_samples(baseline_samples)
+            with self._lock:
+                for key, value in self.baseline.items():
+                    if value is None:
+                        continue
+                    self.peak[key] = value
+                    self.latest[key] = value
+
+            self._thread = Thread(target=self._run, daemon=True)
+            self._thread.start()
+
+        def begin(self) -> None:
+            self._start_event.set()
+
+        def finish(self) -> Dict[str, Dict[str, Union[int, float]]]:
+            self._stop_event.set()
+            if self._thread:
+                self._thread.join()
+                self._thread = None
+            return self._build_result()
+
+        def _run(self) -> None:
+            self._start_event.wait()
+            self._sample_once()
+            while not self._stop_event.is_set():
+                time.sleep(self.sample_interval)
+                self._sample_once()
+            self._sample_once()
+
+        def _average_samples(
+            self, samples: List[Dict[str, Optional[float]]]
+        ) -> Dict[str, Optional[float]]:
+            sums: Dict[str, float] = {}
+            counts: Dict[str, int] = {}
+            for snapshot in samples:
+                for key, value in snapshot.items():
+                    if value is None:
+                        continue
+                    sums[key] = sums.get(key, 0.0) + value
+                    counts[key] = counts.get(key, 0) + 1
+
+            averaged: Dict[str, Optional[float]] = {}
+            for key in metric_keys:
+                if counts.get(key):
+                    averaged[key] = sums[key] / counts[key]
+                else:
+                    averaged[key] = None
+            return averaged
+
+        def _read_snapshot(self) -> Dict[str, Optional[float]]:
+            snapshot: Dict[str, Optional[float]] = {key: None for key in metric_keys}
+            memory = psutil.virtual_memory()
+            snapshot["system_ram"] = float(memory.used)
+            snapshot["cpu_usage"] = float(psutil.cpu_percent(interval=None))
+            if self.use_gpu and self._gpu_handle is not None:
+                try:
+                    mem_info = pynvml.nvmlDeviceGetMemoryInfo(self._gpu_handle)
+                    snapshot["gpu_ram"] = float(mem_info.used)
+                    util = pynvml.nvmlDeviceGetUtilizationRates(self._gpu_handle)
+                    snapshot["gpu_usage"] = float(util.gpu)
+                except pynvml.NVMLError:
+                    snapshot["gpu_ram"] = None
+                    snapshot["gpu_usage"] = None
             return snapshot
 
-        for entry in raw_results:
-            if not isinstance(entry, dict):
-                continue
-            if entry.get("error"):
-                continue
-
-            metric_name = entry.get("metric")
-            if metric_name == "ram":
-                snapshot["system_ram"] = _safe_float(entry.get("used_bytes"))
-            elif metric_name == "cpu":
-                snapshot["cpu_usage"] = _safe_float(entry.get("percent"))
-            elif metric_name == "gpu_ram":
-                gpus = entry.get("gpus", [])
-                for gpu in gpus:
-                    if gpu.get("index") != device:
+        def _sample_once(self) -> None:
+            snapshot = self._read_snapshot()
+            with self._lock:
+                for key, value in snapshot.items():
+                    if value is None:
                         continue
-                    used_mb = _safe_float(gpu.get("used_mb"))
-                    if used_mb is not None:
-                        snapshot["gpu_ram"] = used_mb * 1024 * 1024
-                    snapshot["gpu_usage"] = _safe_float(gpu.get("utilization_percent"))
-                    break
+                    self.latest[key] = value
+                    peak_value = self.peak.get(key)
+                    if peak_value is None or value > peak_value:
+                        self.peak[key] = value
 
-        return snapshot
+        def _build_result(self) -> Dict[str, Dict[str, Union[int, float]]]:
+            results: Dict[str, Dict[str, Union[int, float]]] = {}
+            with self._lock:
+                baseline = dict(self.baseline)
+                peak = dict(self.peak)
+                latest = dict(self.latest)
+
+            for key in metric_keys:
+                base = baseline.get(key)
+                current = peak.get(key)
+                if base is None or current is None:
+                    continue
+
+                diff = current - base
+                if diff < 0:
+                    diff = 0.0
+
+                entry: Dict[str, Union[int, float]] = {
+                    "before": self._cast(key, base),
+                    "current": self._cast(key, current),
+                    "difference": self._cast(key, diff),
+                }
+
+                final_val = latest.get(key)
+                if final_val is not None:
+                    entry["final"] = self._cast(key, final_val)
+
+                results[key] = entry
+
+            return results
+
+        def _cast(self, key: str, value: float) -> Union[int, float]:
+            if key in ram_metrics:
+                return int(round(value))
+            return float(value)
 
     totals = {
-        key: {"before": 0.0, "current": 0.0, "difference": 0.0}
+        key: {"before": 0.0, "current": 0.0, "difference": 0.0, "final": 0.0}
         for key in metric_keys
     }
     counts = {key: 0 for key in metric_keys}
+    final_counts = {key: 0 for key in metric_keys}
 
-    def _update_metrics(
-        before: Dict[str, Optional[float]],
-        after: Dict[str, Optional[float]],
-    ) -> None:
-        for key in metric_keys:
-            before_val = before.get(key)
-            after_val = after.get(key)
-            if before_val is None or after_val is None:
+    def _record_iteration(measured: Dict[str, Dict[str, Union[int, float]]]) -> None:
+        for key, values in measured.items():
+            before = values.get("before")
+            current = values.get("current")
+            difference = values.get("difference")
+            if before is None or current is None or difference is None:
                 continue
 
-            diff = after_val - before_val
-            if diff < 0:
-                diff = 0.0
-
-            totals[key]["before"] += before_val
-            totals[key]["current"] += after_val
-            totals[key]["difference"] += diff
+            totals[key]["before"] += before
+            totals[key]["current"] += current
+            totals[key]["difference"] += difference
             counts[key] += 1
+
+            final_val = values.get("final")
+            if final_val is not None:
+                totals[key]["final"] += final_val
+                final_counts[key] += 1
 
     def _cast_metric_value(key: str, value: float) -> Union[int, float]:
         if key in ram_metrics:
@@ -239,11 +343,17 @@ def get_memory_and_time(
                 final[key] = "Not measured"
                 continue
 
-            final[key] = {
+            entry: Dict[str, Union[int, float]] = {
                 "before": _cast_metric_value(key, totals[key]["before"] / count),
                 "current": _cast_metric_value(key, totals[key]["current"] / count),
                 "difference": _cast_metric_value(key, totals[key]["difference"] / count),
             }
+
+            final_count = final_counts[key]
+            if final_count:
+                entry["final"] = _cast_metric_value(key, totals[key]["final"] / final_count)
+
+            final[key] = entry
 
         return final
 
@@ -271,13 +381,22 @@ def get_memory_and_time(
                 total=test_runs,
             )
         for _ in progress_iter:
-            before_snapshot = _capture_snapshot()
+            monitor = ResourceMonitor()
+            monitor.start()
+            monitor.begin()
+
             t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            tf.nest.map_structure(lambda t: t.numpy(), out)
-            times.append(time.perf_counter() - t0)
-            after_snapshot = _capture_snapshot()
-            _update_metrics(before_snapshot, after_snapshot)
+            try:
+                out = infer(*dummy_inputs)
+                tf.nest.map_structure(lambda t: t.numpy(), out)
+                elapsed = time.perf_counter() - t0
+            except Exception:
+                monitor.finish()
+                raise
+
+            measured = monitor.finish()
+            times.append(elapsed)
+            _record_iteration(measured)
 
         avg_time = sum(times) / len(times)
         resource_metrics = _finalize_metrics()
@@ -303,14 +422,23 @@ def get_memory_and_time(
         )
 
     for _ in progress_iter:
-        before_snapshot = _capture_snapshot()
+        monitor = ResourceMonitor()
+        monitor.start()
+        monitor.begin()
+
         with tf.device(f"/CPU:{cpu_index}"):
             t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            tf.nest.map_structure(lambda t: t.numpy(), out)
-        times.append(time.perf_counter() - t0)
-        after_snapshot = _capture_snapshot()
-        _update_metrics(before_snapshot, after_snapshot)
+            try:
+                out = infer(*dummy_inputs)
+                tf.nest.map_structure(lambda t: t.numpy(), out)
+                elapsed = time.perf_counter() - t0
+            except Exception:
+                monitor.finish()
+                raise
+
+        measured = monitor.finish()
+        times.append(elapsed)
+        _record_iteration(measured)
 
     avg_time = sum(times) / len(times)
     resource_metrics = _finalize_metrics()
