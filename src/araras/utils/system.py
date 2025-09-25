@@ -4,7 +4,7 @@ import psutil
 import subprocess
 from datetime import datetime
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import tensorflow as tf
 
@@ -83,17 +83,17 @@ def _collect_gpu_memory() -> Dict[str, Any]:
     return {"metric": "gpu_ram", "gpus": formatted_gpus}
 
 
-def measure_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> List[Dict[str, Any]]:
+def measure_current_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> List[Dict[str, Any]]:
     """Collect system resource usage measurements for requested metrics.
 
     Args:
-        metrics: Comma-separated list of metrics to collect. Supported values
-            are ``cpu``, ``ram``, ``disk``, ``gpu_ram`` and ``all``. Values are
-            case-insensitive and surrounding whitespace is ignored.
+        metrics: Comma-separated list of metric identifiers to collect. Supported
+            values are ``cpu``, ``ram``, ``disk``, ``gpu_ram`` and ``all``.
+            Values are case-insensitive and surrounding whitespace is ignored.
 
     Returns:
-        A list containing one dictionary per requested metric. When a metric
-        cannot be collected, the corresponding entry contains an ``error`` key
+        List[Dict[str, Any]]: One dictionary per requested metric. When a metric
+        cannot be collected, the respective dictionary contains an ``error`` key
         with the failure reason.
     """
 
@@ -125,6 +125,299 @@ def measure_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> List[Dict
             results.append({"metric": metric_name, "error": str(exc)})
 
     return results
+
+
+MetricSnapshot = Dict[str, Optional[float]]
+MetricTotals = Dict[str, Dict[str, float]]
+MetricExtractors = Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]
+TCallableReturn = TypeVar("TCallableReturn")
+
+
+class ResourceMonitor:
+    """Utility class to capture and summarize system resource usage.
+
+    The monitor samples the system state before and after executing callables,
+    aggregates the collected values and provides averaged statistics. By
+    default, the class tracks RAM consumption, GPU utilisation (if available)
+    and CPU utilisation, but the extraction logic can be fully customized.
+
+    Args:
+        metrics: Sequence of metric identifiers to request from
+            :func:`measure_current_system_resources`. If ``None`` the monitor
+            requests CPU, RAM and GPU memory information.
+        target_gpu_index: Specific GPU index to summarise when multiple devices
+            are available. ``None`` summarises the first GPU reported by
+            ``nvidia-smi``.
+        metric_extractors: Optional mapping defining how to translate the raw
+            :func:`measure_current_system_resources` payload into scalar values
+            for aggregation. The keys of this mapping are used as the metric
+            identifiers within the resulting summary.
+        byte_metrics: Iterable containing the metric identifiers that should be
+            cast to integers because they represent quantities in bytes. Defaults
+            to ``("system_ram", "gpu_ram")``.
+
+    Raises:
+        ValueError: If ``metric_extractors`` is empty after initialisation.
+    """
+
+    _DEFAULT_METRICS: Sequence[str] = ("cpu", "ram", "gpu_ram")
+
+    def __init__(
+        self,
+        metrics: Optional[Sequence[str]] = None,
+        *,
+        target_gpu_index: Optional[int] = None,
+        metric_extractors: Optional[MetricExtractors] = None,
+        byte_metrics: Optional[Iterable[str]] = None,
+    ) -> None:
+        self._metrics: Sequence[str] = metrics or self._DEFAULT_METRICS
+        self._metric_extractors = (
+            metric_extractors
+            if metric_extractors is not None
+            else self._build_default_extractors(target_gpu_index)
+        )
+
+        if not self._metric_extractors:
+            raise ValueError("ResourceMonitor requires at least one metric extractor")
+
+        self._tracked_metrics: Tuple[str, ...] = tuple(self._metric_extractors.keys())
+        self._byte_metrics = set(byte_metrics or ("system_ram", "gpu_ram"))
+
+        self._totals: MetricTotals = {}
+        self._counts: Dict[str, int] = {}
+        self.reset()
+
+    @staticmethod
+    def _build_default_extractors(
+        target_gpu_index: Optional[int],
+    ) -> MetricExtractors:
+        """Create default extractors for CPU, RAM and GPU metrics.
+
+        Args:
+            target_gpu_index: GPU index to focus on when summarising GPU metrics.
+
+        Returns:
+            Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]: Mapping of
+            metric names to extractor callables.
+        """
+
+        def _safe_float(value: Any) -> Optional[float]:
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _system_ram_extractor(raw: List[Dict[str, Any]]) -> Optional[float]:
+            for entry in raw:
+                if entry.get("metric") == "ram" and not entry.get("error"):
+                    return _safe_float(entry.get("used_bytes"))
+            return None
+
+        def _cpu_usage_extractor(raw: List[Dict[str, Any]]) -> Optional[float]:
+            for entry in raw:
+                if entry.get("metric") == "cpu" and not entry.get("error"):
+                    return _safe_float(entry.get("percent"))
+            return None
+
+        def _gpu_ram_extractor(raw: List[Dict[str, Any]]) -> Optional[float]:
+            for entry in raw:
+                if entry.get("metric") != "gpu_ram" or entry.get("error"):
+                    continue
+                for gpu in entry.get("gpus", []):
+                    index = gpu.get("index")
+                    if target_gpu_index is not None and index != target_gpu_index:
+                        continue
+                    used_mb = _safe_float(gpu.get("used_mb"))
+                    if used_mb is None:
+                        return None
+                    return used_mb * 1024 * 1024
+            return None
+
+        def _gpu_util_extractor(raw: List[Dict[str, Any]]) -> Optional[float]:
+            for entry in raw:
+                if entry.get("metric") != "gpu_ram" or entry.get("error"):
+                    continue
+                for gpu in entry.get("gpus", []):
+                    index = gpu.get("index")
+                    if target_gpu_index is not None and index != target_gpu_index:
+                        continue
+                    return _safe_float(gpu.get("utilization_percent"))
+            return None
+
+        return {
+            "system_ram": _system_ram_extractor,
+            "cpu_usage": _cpu_usage_extractor,
+            "gpu_ram": _gpu_ram_extractor,
+            "gpu_usage": _gpu_util_extractor,
+        }
+
+    def reset(self) -> None:
+        """Reset the internal aggregation buffers."""
+
+        self._totals = {
+            key: {"before": 0.0, "current": 0.0, "difference": 0.0}
+            for key in self._tracked_metrics
+        }
+        self._counts = {key: 0 for key in self._tracked_metrics}
+
+    def capture_snapshot(self) -> MetricSnapshot:
+        """Collect a snapshot of the configured metrics.
+
+        Returns:
+            Dict[str, Optional[float]]: Mapping from tracked metric identifier to
+            the extracted scalar value. Missing or failed metrics are represented
+            as ``None``.
+        """
+
+        snapshot: MetricSnapshot = {key: None for key in self._tracked_metrics}
+        try:
+            raw_results = measure_current_system_resources(",".join(self._metrics))
+        except Exception:  # pragma: no cover - defensive safeguard
+            return snapshot
+
+        for key, extractor in self._metric_extractors.items():
+            try:
+                snapshot[key] = extractor(raw_results)
+            except Exception as exc:  # pragma: no cover - defensive safeguard
+                logger_error.error(f"Failed to extract metric '{key}': {exc}")
+                snapshot[key] = None
+
+        return snapshot
+
+    def record(self, before: MetricSnapshot, after: MetricSnapshot) -> None:
+        """Update aggregate statistics using two snapshots.
+
+        Args:
+            before: Snapshot captured immediately before running the workload.
+            after: Snapshot captured immediately after running the workload.
+        """
+
+        for key in self._tracked_metrics:
+            before_val = before.get(key)
+            after_val = after.get(key)
+            if before_val is None or after_val is None:
+                continue
+
+            diff = after_val - before_val
+            if diff < 0:
+                diff = 0.0
+
+            self._totals[key]["before"] += before_val
+            self._totals[key]["current"] += after_val
+            self._totals[key]["difference"] += diff
+            self._counts[key] += 1
+
+    def _cast_metric_value(self, key: str, value: float) -> Union[int, float]:
+        if key in self._byte_metrics:
+            return int(round(value))
+        return value
+
+    def finalize(self) -> Dict[str, Union[str, Dict[str, Union[int, float]]]]:
+        """Compute the averaged resource usage summary.
+
+        Returns:
+            Dict[str, Union[str, Dict[str, Union[int, float]]]]: Aggregated metrics
+            with ``before``, ``current`` and ``difference`` values for every tracked
+            metric. Metrics without valid samples return ``"Not measured"``.
+        """
+
+        summary: Dict[str, Union[str, Dict[str, Union[int, float]]]] = {}
+        for key in self._tracked_metrics:
+            count = self._counts[key]
+            if count == 0:
+                summary[key] = "Not measured"
+                continue
+
+            summary[key] = {
+                "before": self._cast_metric_value(
+                    key, self._totals[key]["before"] / count
+                ),
+                "current": self._cast_metric_value(
+                    key, self._totals[key]["current"] / count
+                ),
+                "difference": self._cast_metric_value(
+                    key, self._totals[key]["difference"] / count
+                ),
+            }
+
+        return summary
+
+    def measure_callable(
+        self,
+        func: Callable[..., TCallableReturn],
+        *args: Any,
+        repeat: int = 1,
+        **kwargs: Any,
+    ) -> Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
+        """Execute a callable and summarise the resource usage.
+
+        Args:
+            func: Callable to execute.
+            *args: Positional arguments forwarded to ``func``.
+            repeat: Number of times ``func`` should be executed for measurement.
+            **kwargs: Keyword arguments forwarded to ``func``.
+
+        Returns:
+            Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], Any]:
+            A tuple containing the aggregated metrics and the result returned by
+            the last invocation of ``func``.
+
+        Raises:
+            ValueError: If ``repeat`` is less than 1.
+        """
+
+        if repeat < 1:
+            raise ValueError("repeat must be at least 1")
+
+        self.reset()
+        result: TCallableReturn = cast(TCallableReturn, None)
+        for _ in range(repeat):
+            before_snapshot = self.capture_snapshot()
+            result = func(*args, **kwargs)
+            after_snapshot = self.capture_snapshot()
+            self.record(before_snapshot, after_snapshot)
+
+        metrics_summary = self.finalize()
+        return metrics_summary, result
+
+
+def measure_callable_resource_usage(
+    func: Callable[..., TCallableReturn],
+    *args: Any,
+    metrics: Optional[Sequence[str]] = None,
+    target_gpu_index: Optional[int] = None,
+    repeat: int = 1,
+    metric_extractors: Optional[MetricExtractors] = None,
+    byte_metrics: Optional[Iterable[str]] = None,
+    **kwargs: Any,
+) -> Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
+    """Measure system resource usage for an arbitrary callable.
+
+    Args:
+        func: Callable object to execute.
+        *args: Positional arguments forwarded to ``func``.
+        metrics: Sequence of metric identifiers to request from
+            :func:`measure_current_system_resources`. ``None`` uses the default
+            configuration from :class:`ResourceMonitor`.
+        target_gpu_index: GPU index to focus on for GPU-related metrics.
+        repeat: Number of times the callable should be executed for sampling.
+        metric_extractors: Optional custom extractor mapping for the monitor.
+        byte_metrics: Iterable of metric identifiers that should be rounded to
+            integers when summarising results.
+        **kwargs: Keyword arguments forwarded to ``func``.
+
+    Returns:
+        Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], Any]:
+        Aggregated metric summary and the callable's final return value.
+    """
+
+    monitor = ResourceMonitor(
+        metrics=metrics,
+        target_gpu_index=target_gpu_index,
+        metric_extractors=metric_extractors,
+        byte_metrics=byte_metrics,
+    )
+    return monitor.measure_callable(func, *args, repeat=repeat, **kwargs)
 
 
 def get_user_gpu_choice():
