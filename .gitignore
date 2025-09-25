@@ -21,4 +21,3 @@ build/*
 *.egg-info/
 
 # Others
-tests/

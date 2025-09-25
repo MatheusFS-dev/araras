@@ -9,6 +9,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tupl
 import tensorflow as tf
 
 from araras.core import *
+from araras.utils.misc import format_bytes, format_number_commas
 
 
 def _collect_cpu_usage() -> Dict[str, Any]:
@@ -131,6 +132,90 @@ MetricSnapshot = Dict[str, Optional[float]]
 MetricTotals = Dict[str, Dict[str, float]]
 MetricExtractors = Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]
 TCallableReturn = TypeVar("TCallableReturn")
+
+
+def format_metric_summary_line(
+    label: str,
+    before: Union[None, str, int, float],
+    current: Union[None, str, int, float],
+    difference: Union[None, str, int, float],
+    *,
+    is_byte_metric: bool = False,
+    percent_precision: int = 2,
+) -> str:
+    """Format metric snapshots into a single descriptive line.
+
+    Args:
+        label: Human readable label for the metric (e.g. ``"System RAM"``).
+        before: Baseline value captured before executing the workload.
+        current: Peak or final value captured during the workload.
+        difference: Delta between ``current`` and ``before``.
+        is_byte_metric: Flag indicating whether the values represent bytes.
+        percent_precision: Decimal precision when formatting percentage metrics.
+
+    Returns:
+        str: A formatted single-line summary such as::
+
+            System RAM: 14,828,216,975 B (13.81 GB) - 14,834,859,049 B (13.82 GB) = 6,642,074 B (6.33 MB)
+
+        Metrics lacking numeric data return ``"<label>: Not measured"``.
+    """
+
+    def _is_not_measured(value: Union[None, str, int, float]) -> bool:
+        if value is None:
+            return True
+        if isinstance(value, str) and value.strip().lower() == "not measured":
+            return True
+        return False
+
+    def _format_component(value: Union[None, str, int, float]) -> str:
+        if isinstance(value, str):
+            text = value.strip()
+            return text or "Not measured"
+        if value is None:
+            return "Not measured"
+        if is_byte_metric:
+            raw_int = int(round(float(value)))
+            raw_text = f"{format_number_commas(raw_int)} B"
+            human_text = format_bytes(value)
+            if human_text.lower().startswith("invalid input"):
+                return raw_text
+            return f"{raw_text} ({human_text})"
+        try:
+            return f"{float(value):.{percent_precision}f}%"
+        except (TypeError, ValueError):
+            return "Not measured"
+
+    before_missing = _is_not_measured(before)
+    current_missing = _is_not_measured(current)
+    difference_missing = _is_not_measured(difference)
+
+    if before_missing and current_missing and difference_missing:
+        return f"{label}: Not measured"
+
+    fragments: List[str] = []
+
+    def _append_fragment(text: str, operator: Optional[str] = None) -> None:
+        if not text:
+            return
+        if operator and fragments:
+            fragments.append(f"{operator} {text}")
+        else:
+            fragments.append(text)
+
+    if not current_missing:
+        _append_fragment(_format_component(current))
+
+    if not before_missing:
+        _append_fragment(_format_component(before), "-")
+
+    if not difference_missing:
+        _append_fragment(_format_component(difference), "=")
+
+    if not fragments:
+        return f"{label}: Not measured"
+
+    return f"{label}: {' '.join(fragments)}"
 
 
 class ResourceMonitor:

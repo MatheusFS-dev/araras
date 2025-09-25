@@ -21,7 +21,11 @@ from araras.utils.misc import (
     format_scientific,
     format_number_commas,
 )
-from araras.utils.system import ResourceMonitor, measure_current_system_resources
+from araras.utils.system import (
+    ResourceMonitor,
+    format_metric_summary_line,
+    measure_current_system_resources,
+)
 
 ResourceMetricValue = Union[str, Dict[str, Union[int, float]]]
 ResourceMetrics = Dict[str, ResourceMetricValue]
@@ -535,30 +539,6 @@ def write_model_stats_to_file(
                     display_components[component] = f"{raw_int} B ({format_bytes(component_value)})"
             resource_usage_display[metric] = display_components
 
-    def _format_resource_line(
-        metric: str,
-        label: str,
-        component: str,
-        component_label: str,
-        is_ram: bool,
-    ) -> str:
-        if is_ram:
-            display_source = resource_usage_display.get(metric)
-            if isinstance(display_source, dict):
-                text = display_source.get(component, "Not measured")
-            elif isinstance(display_source, str):
-                text = display_source
-            else:
-                value = _resource_component(metric, component)
-                if isinstance(value, str):
-                    text = value
-                else:
-                    raw_int = int(round(value))
-                    text = f"{raw_int} B ({format_bytes(value)})"
-            return f"{label} {component_label}: {text}"
-
-        return f"{label} {component_label}: {_format_resource(metric, component, is_ram)}"
-
     model_stats = {
         "num_params": params,
         "model_size": params * bytes_per_param,
@@ -584,12 +564,12 @@ def write_model_stats_to_file(
             ("gpu_usage", "GPU usage", False),
             ("cpu_usage", "CPU usage", False),
         ):
-            for component, component_label in (
-                ("before", "before"),
-                ("current", "current"),
-                ("difference", "delta"),
-            ):
-                file.write(f"{_format_resource_line(metric, label, component, component_label, is_ram)}\n")
+            before_value = _resource_component(metric, "before")
+            current_value = _resource_component(metric, "current")
+            diff_value = _resource_component(metric, "difference")
+            file.write(
+                f"{format_metric_summary_line(label, before_value, current_value, diff_value, is_byte_metric=is_ram)}\n"
+            )
         file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
         file.write(
             f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n"

@@ -5,7 +5,7 @@ import math
 import optuna
 import tensorflow as tf
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
-from araras.utils.system import _get_nvidia_smi_data
+from araras.utils.system import _get_nvidia_smi_data, format_metric_summary_line
 
 
 _CONSECUTIVE_OOM_ERRORS = 0
@@ -206,10 +206,6 @@ def save_top_k_trials(
             trial_resource_usage = trial.user_attrs.get("resource_usage_diff", {})
         if not isinstance(trial_resource_usage, dict):
             trial_resource_usage = {}
-        trial_resource_usage_display = trial.user_attrs.get("resource_usage_display", {})
-        if not isinstance(trial_resource_usage_display, dict):
-            trial_resource_usage_display = {}
-
         def _resource_value(metric: str, component: str):
             data = trial_resource_usage.get(metric)
             if isinstance(data, dict):
@@ -234,30 +230,12 @@ def save_top_k_trials(
                 return "Not measured"
             return attr_value
 
-        def _format_resource(metric: str, component: str, as_bytes: bool = False) -> str:
-            value = _resource_value(metric, component)
-            if isinstance(value, str):
-                return value
-            if value is None:
-                return "Not measured"
-            if as_bytes:
-                return format_bytes(value)
-            return f"{float(value):.2f}%"
-
         def _extract_human(display_value):
             if not isinstance(display_value, str):
                 return None
             if " (" in display_value and display_value.endswith(")"):
                 return display_value.split(" (", 1)[1][:-1].strip()
             return display_value.strip() or None
-
-        def _resource_display(metric: str, component: str):
-            data = trial_resource_usage_display.get(metric)
-            if isinstance(data, dict):
-                return data.get(component)
-            if isinstance(data, str):
-                return data
-            return None
 
         def _format_dual(
             label: str,
@@ -348,27 +326,12 @@ def save_top_k_trials(
                 ("gpu_usage", "GPU usage", False),
                 ("cpu_usage", "CPU usage", False),
             ):
-                for component, component_label in (
-                    ("before", "before"),
-                    ("current", "current"),
-                    ("difference", "delta"),
-                ):
-                    if is_ram:
-                        raw_value = _resource_value(metric, component)
-                        display_value = _resource_display(metric, component)
-                        file.write(
-                            _format_dual(
-                                f"{label} {component_label}",
-                                raw_value,
-                                display_value,
-                                lambda v: f"{format_number_commas(int(round(v)))} B",
-                                format_bytes,
-                            )
-                        )
-                    else:
-                        file.write(
-                            f"{label} {component_label}: {_format_resource(metric, component)}\n"
-                        )
+                before_value = _resource_value(metric, "before")
+                current_value = _resource_value(metric, "current")
+                diff_value = _resource_value(metric, "difference")
+                file.write(
+                    f"{format_metric_summary_line(label, before_value, current_value, diff_value, is_byte_metric=is_ram)}\n"
+                )
             file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)} s\n")
             file.write(
                 f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n"
