@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Dict
+from typing import Any, Dict, Iterable, Tuple, Union
 
 import optuna
 import matplotlib.pyplot as plt
@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import traceback
 import os
+import math
 
 from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
 from araras.ml.model.utils import capture_model_summary
@@ -26,112 +27,193 @@ from araras.ml.model.tools import save_model_plot
 
 def _get_model_trainable_params(model: keras.Model) -> int:
     """Get number of trainable parameters in the model."""
-    return sum([tf.keras.backend.count_params(w) for w in model.trainable_weights])
+    return sum(tf.keras.backend.count_params(w) for w in model.trainable_weights)
 
 
-def _get_precision_bytes(model: keras.Model) -> int:
-    """Determine bytes per parameter based on model's actual dtype."""
-    if hasattr(model, "dtype"):
-        dtype = str(model.dtype)
-    else:
-        # Check first layer's dtype
-        for layer in model.layers:
-            if hasattr(layer, "dtype"):
-                dtype = str(layer.dtype)
-                break
-        else:
-            dtype = "float32"  # default
-
-    if "float16" in dtype or "half" in dtype:
-        return 2
-    elif "float32" in dtype:
-        return 4
-    elif "float64" in dtype:
-        return 8
-    else:
-        return 4  # default to fp32
+def _get_model_non_trainable_params(model: keras.Model) -> int:
+    """Get number of non-trainable parameters in the model."""
+    return sum(tf.keras.backend.count_params(w) for w in model.non_trainable_weights)
 
 
-def _get_optimizer_state_factor(model: keras.Model) -> int:
-    """Determine optimizer state factor from compiled model."""
-    if not hasattr(model, "optimizer") or model.optimizer is None:
-        return 3  # default to Adam-like
-
-    optimizer_name = model.optimizer.__class__.__name__.lower()
-
-    if "adam" in optimizer_name:
-        return 3  # param + momentum + velocity
-    elif "sgd" in optimizer_name:
-        # Check if momentum is used
-        if hasattr(model.optimizer, "momentum") and model.optimizer.momentum > 0:
-            return 2  # param + momentum
-        else:
-            return 1  # param only
-    elif "rmsprop" in optimizer_name:
-        return 3  # param + accumulator + momentum
-    elif "adagrad" in optimizer_name:
-        return 2  # param + accumulator
-    elif "adadelta" in optimizer_name:
-        return 3  # param + accumulator + delta
-    else:
-        return 3  # default to Adam-like
-
-
-def _calculate_activation_memory(model: keras.Model, bytes_per_param: int) -> int:
-    """Calculate activation memory needed during forward/backward pass."""
+def _resolve_dtype_bytes(dtype: Union[str, tf.dtypes.DType]) -> int:
+    """Return byte-width for the provided TensorFlow dtype."""
     try:
-        # Get input shape from model
-        if hasattr(model, "input_shape") and model.input_shape:
-            input_shape = model.input_shape
-            if isinstance(input_shape, list):
-                input_shape = input_shape[0]
+        tf_dtype = tf.as_dtype(dtype)
+        # ``size`` returns the number of bytes occupied by the dtype.
+        size = tf_dtype.size
+        if size is None:
+            return 4
+        return int(size)
+    except TypeError:
+        return 4
 
-            # Use batch size of 1 to get per-sample memory, then multiply by actual batch
-            if input_shape[0] is None:
-                dummy_shape = (1,) + input_shape[1:]
-            else:
-                dummy_shape = input_shape
+
+def _get_precision_bytes(model: keras.Model) -> Tuple[int, int]:
+    """Return (variable_bytes, compute_bytes) for the model."""
+
+    policy = getattr(model, "dtype_policy", None)
+    variable_dtype = getattr(policy, "variable_dtype", None)
+    compute_dtype = getattr(policy, "compute_dtype", None)
+
+    if variable_dtype is None:
+        # Fallback to the dtype of the first weight tensor.
+        for weight in model.weights:
+            variable_dtype = weight.dtype
+            break
+
+    if compute_dtype is None:
+        if hasattr(model, "compute_dtype") and model.compute_dtype:
+            compute_dtype = model.compute_dtype
+        elif hasattr(model, "dtype") and model.dtype:
+            compute_dtype = model.dtype
         else:
-            # Fallback: estimate based on total parameters
-            return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+            for layer in model.layers:
+                if hasattr(layer, "dtype") and layer.dtype:
+                    compute_dtype = layer.dtype
+                    break
 
-        # Create dummy input and trace through model
-        dummy_input = tf.random.normal(dummy_shape)
-        total_elements = 0
-        x = dummy_input
+    variable_bytes = _resolve_dtype_bytes(variable_dtype or "float32")
+    compute_bytes = _resolve_dtype_bytes(compute_dtype or variable_dtype or "float32")
 
-        for layer in model.layers:
-            try:
-                x = layer(x)
-                if hasattr(x, "shape"):
-                    elements = tf.reduce_prod(
-                        x.shape[1:]
-                    ).numpy()  # Exclude batch dimension
-                    total_elements += elements
-            except:
+    return variable_bytes, compute_bytes
+
+
+def _get_optimizer_slot_factor(model: keras.Model) -> int:
+    """Return the number of optimizer slot tensors kept per parameter."""
+
+    optimizer = getattr(model, "optimizer", None)
+    if optimizer is None:
+        # Assume SGD without momentum plus gradient tensor handled elsewhere.
+        return 0
+
+    optimizer_name = optimizer.__class__.__name__.lower()
+
+    if "adam" in optimizer_name or "nadam" in optimizer_name or "adamax" in optimizer_name:
+        return 2  # first and second moments
+    if "adafactor" in optimizer_name:
+        # Adafactor keeps factored second moment states in practice (approx 2 slots)
+        return 2
+    if "rmsprop" in optimizer_name:
+        # mean_square plus momentum (if enabled)
+        has_momentum = getattr(optimizer, "momentum", 0) > 0
+        return 2 if has_momentum else 1
+    if "adagrad" in optimizer_name:
+        return 1
+    if "adadelta" in optimizer_name:
+        return 2
+    if "ftrl" in optimizer_name:
+        # accumulators + linear slots
+        return 2
+    if "sgd" in optimizer_name:
+        return 1 if getattr(optimizer, "momentum", 0) > 0 else 0
+
+    # Default to two slots for unknown adaptive optimizers.
+    return 2
+
+
+def _iter_tensor_shapes(shapes: Union[tf.TensorShape, Iterable, None]) -> Iterable[tf.TensorShape]:
+    """Yield TensorShape objects from possibly nested iterables."""
+
+    if shapes is None:
+        return
+
+    if isinstance(shapes, tf.TensorShape):
+        yield shapes
+        return
+
+    if isinstance(shapes, (tuple, list)):
+        # Distinguish between a single shape tuple ``(None, 128)`` and a list of shapes.
+        if not shapes:
+            return
+
+        if all(isinstance(dim, (int, type(None))) for dim in shapes):
+            yield tf.TensorShape(shapes)
+            return
+
+        for item in shapes:
+            yield from _iter_tensor_shapes(item)
+        return
+
+    # Fallback: best effort conversion.
+    yield tf.TensorShape(shapes)
+
+
+def _estimate_activation_elements(model: keras.Model, batch_size: int) -> int:
+    """Estimate how many activation elements are kept in memory per training batch."""
+
+    total_elements = 0
+    for layer in model.layers:
+        # ``output_shape`` is preferred because it does not trigger graph execution.
+        shapes = getattr(layer, "output_shape", None)
+        if shapes is None and hasattr(layer, "output"):
+            # Fall back to inferring the shape from symbolic tensors.
+            shapes = tf.keras.backend.int_shape(layer.output)
+
+        for shape in _iter_tensor_shapes(shapes):
+            if shape.rank is None:
+                continue
+            dims = list(shape)
+            if not dims:
                 continue
 
-        # Memory per sample * 2 (for gradients) * bytes_per_param
-        return int(total_elements * 2 * bytes_per_param)
+            resolved_dims = []
+            for index, dim in enumerate(dims):
+                if dim is None:
+                    if index == 0:
+                        resolved_dims.append(batch_size)
+                    else:
+                        resolved_dims.append(1)
+                else:
+                    resolved_dims.append(int(dim))
 
+            elements = math.prod(resolved_dims)
+            total_elements += elements
+
+    return total_elements
+
+
+def _calculate_activation_memory(
+    model: keras.Model,
+    batch_size: int,
+    activation_bytes: int,
+    gradient_bytes: int,
+) -> int:
+    """Estimate activation + activation-gradient memory for one training batch."""
+
+    try:
+        total_elements = _estimate_activation_elements(model, batch_size)
+        forward_memory = total_elements * activation_bytes
+        backward_memory = total_elements * gradient_bytes
+        return int(forward_memory + backward_memory)
     except Exception:
-        # Fallback calculation
-        return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+        # Fallback: proportional to parameter count.
+        params = _get_model_trainable_params(model)
+        return int(params * (activation_bytes + gradient_bytes) * 0.75)
 
 
-def _get_framework_overhead() -> int:
-    """Calculate framework overhead based on available GPU memory."""
+def _get_framework_overhead(base_bytes: int) -> int:
+    """Estimate framework and runtime overhead based on device availability."""
+
+    # Base floor to account for TensorFlow runtime, cuDNN kernels, and graph caches.
+    cpu_floor = 64 * 1024 * 1024  # 64 MB
+    gpu_floor = 128 * 1024 * 1024  # 128 MB
+
     try:
         gpus = tf.config.experimental.list_physical_devices("GPU")
         if gpus:
-            # Scale overhead based on GPU memory (roughly 5-10% of total memory)
-            gpu_details = tf.config.experimental.get_memory_info(gpus[0])
-            total_gpu_memory = gpu_details["total"]
-            return int(total_gpu_memory * 0.07)  # 7% of total GPU memory
-        else:
-            return 512 * 1024 * 1024  # 512 MB for CPU training
-    except:
-        return 1024 * 1024 * 1024  # 1 GB default
+            details = tf.config.experimental.get_device_details(gpus[0])
+            memory_limit = details.get("memory_limit") if isinstance(details, dict) else None
+            if memory_limit:
+                # Keep a buffer at ~4% of total VRAM, capped to avoid dwarfing small models.
+                overhead = max(base_bytes * 0.1, memory_limit * 0.04)
+            else:
+                overhead = base_bytes * 0.1
+            return int(max(overhead, gpu_floor))
+
+        # CPU-only training: reserve ~10% of model memory with a practical minimum.
+        return int(max(base_bytes * 0.1, cpu_floor))
+    except Exception:
+        return int(max(base_bytes * 0.1, cpu_floor))
 
 # ———————————————————————————————————————————————————————————————————————————— #
 
@@ -148,16 +230,33 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
     """
     # Get model characteristics
     trainable_params = _get_model_trainable_params(model)
-    bytes_per_param = _get_precision_bytes(model)
-    state_factor = _get_optimizer_state_factor(model)
+    non_trainable_params = _get_model_non_trainable_params(model)
+    variable_bytes, compute_bytes = _get_precision_bytes(model)
+    gradient_bytes_per_value = max(variable_bytes, compute_bytes)
+    slot_factor = _get_optimizer_slot_factor(model)
 
-    # Calculate memory components
-    param_memory = trainable_params * bytes_per_param * state_factor
-    activation_memory_per_sample = _calculate_activation_memory(model, bytes_per_param)
-    activation_memory = activation_memory_per_sample * batch_size
-    framework_overhead = _get_framework_overhead()
+    # Parameter tensors (weights)
+    weight_bytes = trainable_params * variable_bytes
+    non_trainable_bytes = non_trainable_params * variable_bytes
 
-    return param_memory + activation_memory + framework_overhead
+    # Gradient tensors are usually kept in compute dtype during backprop.
+    gradient_bytes = trainable_params * gradient_bytes_per_value
+
+    # Optimizer slots (e.g., Adam moments, momentum buffers)
+    optimizer_slot_bytes = trainable_params * variable_bytes * slot_factor
+
+    # Activations and their gradients scale with the batch size.
+    activation_memory = _calculate_activation_memory(
+        model,
+        batch_size,
+        activation_bytes=compute_bytes,
+        gradient_bytes=gradient_bytes_per_value,
+    )
+
+    base_memory = weight_bytes + non_trainable_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory
+    framework_overhead = _get_framework_overhead(base_memory)
+
+    return int(base_memory + framework_overhead)
 
 
 def prune_model_by_config(
@@ -460,7 +559,7 @@ def set_user_attr_model_stats(
     bytes_per_param: int,
     batch_size: int,
     n_trials: int = 10000,
-    device: int = 0,
+    device: Union[int, str] = "both",
     verbose: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -483,7 +582,9 @@ def set_user_attr_model_stats(
         policy (tf.keras.DTypePolicy): The precision policy used for the model.
         batch_size (int): The batch size to simulate for input.
         n_trials (int): Number of trials for power and energy measurement.
-        device (int): GPU index to run the model on. Use ``-1`` for CPU.
+        device (int | str): GPU index to run the model on. Use ``-1``/``"cpu"`` for
+            CPU measurements or ``"both"``/``"both:<index>"`` to profile CPU and GPU
+            sequentially (GPU index defaults to 0). Defaults to ``"both"``.
         verbose (bool): If True, print detailed information.
 
     Returns:
@@ -495,49 +596,292 @@ def set_user_attr_model_stats(
     macs = get_macs(model)
     model_summary = capture_model_summary(model)
 
-    resource_usage_metrics, inference_time = get_memory_and_time(
+    def _resolve_device_mode(device_spec: Union[int, str]) -> str:
+        if isinstance(device_spec, str):
+            normalized = device_spec.strip().lower()
+            if normalized.startswith("both"):
+                return "both"
+            if normalized in {"cpu", "-1"}:
+                return "cpu"
+            return "gpu"
+        return "cpu" if device_spec == -1 else "gpu"
+
+    device_mode = _resolve_device_mode(device)
+
+    resource_usage_raw, inference_time_raw = get_memory_and_time(
         model, batch_size=batch_size, device=device, verbose=verbose
     )
-    _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
+    usage_stats_raw = get_model_usage_stats(
+        model, device=device, n_trials=n_trials, verbose=verbose
+    )
 
-    def _metric_component(metric: str, component: str):
-        value = resource_usage_metrics.get(metric, "Not measured")
-        if isinstance(value, str):
-            return value
-        component_value = value.get(component)
-        if component_value is None:
-            return "Not measured"
-        return component_value
+    def _normalize_resource_usage(raw: Any) -> Dict[str, Any]:
+        if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
+            return {key: raw[key] for key in ("gpu", "cpu") if key in raw}
+        target = "cpu" if device_mode == "cpu" else "gpu"
+        return {target: raw}
+
+    def _normalize_inference_time(raw: Any) -> Dict[str, Any]:
+        if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
+            return {key: raw[key] for key in ("gpu", "cpu") if key in raw}
+        target = "cpu" if device_mode == "cpu" else "gpu"
+        return {target: raw}
+
+    def _normalize_usage_stats(raw: Any) -> Dict[str, Dict[str, Any]]:
+        normalized: Dict[str, Dict[str, Any]] = {}
+        if isinstance(raw, dict):
+            for key in ("gpu", "cpu"):
+                if key not in raw:
+                    continue
+                value = raw[key]
+                if isinstance(value, dict):
+                    normalized[key] = {
+                        "per_run_time": value.get("per_run_time", "Not measured"),
+                        "avg_power": value.get("avg_power", "Not measured"),
+                        "avg_energy": value.get("avg_energy", "Not measured"),
+                    }
+                else:
+                    normalized[key] = {
+                        "per_run_time": value,
+                        "avg_power": "Not measured",
+                        "avg_energy": "Not measured",
+                    }
+            return normalized
+        per_run_time_value, avg_power_value, avg_energy_value = raw
+        target = "cpu" if device_mode == "cpu" else "gpu"
+        normalized[target] = {
+            "per_run_time": per_run_time_value,
+            "avg_power": avg_power_value,
+            "avg_energy": avg_energy_value,
+        }
+        return normalized
+
+    per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
+    per_device_inference_time = _normalize_inference_time(inference_time_raw)
+    per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
 
     ram_metrics = {"system_ram", "gpu_ram"}
-    resource_usage_diff: Dict[str, Any] = {}
-    resource_usage_display: Dict[str, Any] = {}
 
     def _format_ram_display(value: float) -> str:
         raw_int = int(round(value))
         return f"{raw_int} B ({format_bytes(value)})"
 
-    for metric, value in resource_usage_metrics.items():
-        if isinstance(value, str):
-            resource_usage_diff[metric] = value
-            if metric in ram_metrics:
-                resource_usage_display[metric] = value
-            continue
+    def _build_resource_views(metrics_value: Any) -> Tuple[Any, Any]:
+        if isinstance(metrics_value, str):
+            return metrics_value, metrics_value
+        diff_payload: Dict[str, Any] = {}
+        display_payload: Dict[str, Any] = {}
+        for metric_name, metric_value in metrics_value.items():
+            if isinstance(metric_value, str):
+                diff_payload[metric_name] = metric_value
+                if metric_name in ram_metrics:
+                    display_payload[metric_name] = metric_value
+                continue
 
-        diff_value = value.get("difference")
-        resource_usage_diff[metric] = diff_value if diff_value is not None else "Not measured"
+            if isinstance(metric_value, dict) and metric_value.get("error"):
+                error_text = str(metric_value.get("error", "Unknown error"))
+                if not error_text.lower().startswith("error"):
+                    error_text = f"Error: {error_text}"
+                diff_payload[metric_name] = error_text
+                if metric_name in ram_metrics:
+                    display_payload[metric_name] = error_text
+                continue
 
-        if metric in ram_metrics:
-            display_components: Dict[str, str] = {}
-            for component in ("before", "current", "difference"):
-                component_value = value.get(component)
-                if component_value is None:
-                    display_components[component] = "Not measured"
-                elif isinstance(component_value, str):
-                    display_components[component] = component_value
-                else:
-                    display_components[component] = _format_ram_display(component_value)
-            resource_usage_display[metric] = display_components
+            component_diff = metric_value.get("difference")
+            diff_payload[metric_name] = (
+                component_diff if component_diff is not None else "Not measured"
+            )
+
+            if metric_name in ram_metrics:
+                component_display: Dict[str, str] = {}
+                for component_name in ("before", "current", "difference"):
+                    component_value = metric_value.get(component_name)
+                    if component_value is None:
+                        component_display[component_name] = "Not measured"
+                    elif isinstance(component_value, str):
+                        component_display[component_name] = component_value
+                    else:
+                        component_display[component_name] = _format_ram_display(component_value)
+                display_payload[metric_name] = component_display
+
+        return diff_payload, display_payload
+
+    resource_usage_diff_map: Dict[str, Any] = {}
+    resource_usage_display_map: Dict[str, Any] = {}
+
+    for device_label, metrics_value in per_device_resource_usage.items():
+        diff_payload, display_payload = _build_resource_views(metrics_value)
+        resource_usage_diff_map[device_label] = diff_payload
+        if isinstance(display_payload, dict) and display_payload:
+            resource_usage_display_map[device_label] = display_payload
+        elif isinstance(display_payload, str):
+            resource_usage_display_map[device_label] = display_payload
+
+    def _metric_component_for_device(
+        metrics_value: Any,
+        metric_name: str,
+        component_name: str,
+    ) -> Union[str, int, float]:
+        if isinstance(metrics_value, str):
+            return metrics_value
+        metric_block = metrics_value.get(metric_name, "Not measured")
+        if isinstance(metric_block, str):
+            return metric_block
+        if isinstance(metric_block, dict) and metric_block.get("error"):
+            error_text = str(metric_block.get("error", "Unknown error"))
+            if not error_text.lower().startswith("error"):
+                error_text = f"Error: {error_text}"
+            return error_text
+        component_value = metric_block.get(component_name)
+        if component_value is None:
+            return "Not measured"
+        return component_value
+
+    avg_power_map: Dict[str, Any] = {}
+    avg_energy_map: Dict[str, Any] = {}
+    per_run_time_map: Dict[str, Any] = {}
+    for device_label, stats_payload in per_device_usage_stats.items():
+        avg_power_map[device_label] = stats_payload.get("avg_power", "Not measured")
+        avg_energy_map[device_label] = stats_payload.get("avg_energy", "Not measured")
+        per_run_time_map[device_label] = stats_payload.get("per_run_time", "Not measured")
+
+    if device_mode == "cpu":
+        primary_order: Tuple[str, ...] = ("cpu", "gpu")
+    elif device_mode == "gpu":
+        primary_order = ("gpu", "cpu")
+    else:
+        primary_order = ("gpu", "cpu")
+
+    def _pick_primary(container: Dict[str, Any]) -> Any:
+        if not container:
+            return "Not measured"
+        for key in primary_order:
+            if key in container:
+                return container[key]
+        return next(iter(container.values()))
+
+    def _value_for(container: Dict[str, Any], key: str) -> Any:
+        return container.get(key, "Not measured")
+
+    multi_device = len(per_device_resource_usage) > 1
+
+    resource_usage_primary = _pick_primary(per_device_resource_usage)
+    resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
+    resource_usage_display_primary = (
+        _pick_primary(resource_usage_display_map) if resource_usage_display_map else {}
+    )
+
+    inference_time_primary = _pick_primary(per_device_inference_time)
+    avg_power_primary = _pick_primary(avg_power_map)
+    avg_energy_primary = _pick_primary(avg_energy_map)
+    per_run_time_primary = _pick_primary(per_run_time_map)
+
+    inference_time_gpu = _value_for(per_device_inference_time, "gpu")
+    inference_time_cpu = _value_for(per_device_inference_time, "cpu")
+    avg_power_gpu = _value_for(avg_power_map, "gpu")
+    avg_power_cpu = _value_for(avg_power_map, "cpu")
+    avg_energy_gpu = _value_for(avg_energy_map, "gpu")
+    avg_energy_cpu = _value_for(avg_energy_map, "cpu")
+    per_run_time_gpu = _value_for(per_run_time_map, "gpu")
+    per_run_time_cpu = _value_for(per_run_time_map, "cpu")
+
+    trial.set_user_attr("resource_usage", resource_usage_primary)
+    trial.set_user_attr("resource_usage_diff", resource_usage_diff_primary)
+    if resource_usage_display_primary not in (None, {}, "Not measured"):
+        trial.set_user_attr("resource_usage_display", resource_usage_display_primary)
+    trial.set_user_attr("resource_usage_details", per_device_resource_usage)
+    trial.set_user_attr("resource_usage_diff_details", resource_usage_diff_map)
+    trial.set_user_attr("resource_usage_display_details", resource_usage_display_map)
+    for device_label in ("gpu", "cpu"):
+        trial.set_user_attr(
+            f"resource_usage_{device_label}",
+            per_device_resource_usage.get(device_label, "Not measured"),
+        )
+        trial.set_user_attr(
+            f"resource_usage_diff_{device_label}",
+            resource_usage_diff_map.get(device_label, "Not measured"),
+        )
+        trial.set_user_attr(
+            f"resource_usage_display_{device_label}",
+            resource_usage_display_map.get(device_label, "Not measured"),
+        )
+
+    trial.set_user_attr("inference_time", inference_time_primary)
+    trial.set_user_attr("inference_time_details", per_device_inference_time)
+
+    for device_label, value in per_device_inference_time.items():
+        trial.set_user_attr(f"inference_time_{device_label}", value)
+
+    for device_label in ("gpu", "cpu"):
+        if device_label not in per_device_inference_time:
+            trial.set_user_attr(f"inference_time_{device_label}", "Not measured")
+
+    trial.set_user_attr("avg_power", avg_power_primary)
+    trial.set_user_attr("avg_energy", avg_energy_primary)
+    trial.set_user_attr("per_run_time", per_run_time_primary)
+    trial.set_user_attr("avg_power_details", avg_power_map)
+    trial.set_user_attr("avg_energy_details", avg_energy_map)
+    trial.set_user_attr("per_run_time_details", per_run_time_map)
+
+    for device_label in per_device_usage_stats:
+        trial.set_user_attr(f"avg_power_{device_label}", avg_power_map.get(device_label, "Not measured"))
+        trial.set_user_attr(f"avg_energy_{device_label}", avg_energy_map.get(device_label, "Not measured"))
+        trial.set_user_attr(
+            f"per_run_time_{device_label}",
+            per_run_time_map.get(device_label, "Not measured"),
+        )
+
+    for device_label in ("gpu", "cpu"):
+        if device_label not in per_device_usage_stats:
+            trial.set_user_attr(f"avg_power_{device_label}", "Not measured")
+            trial.set_user_attr(f"avg_energy_{device_label}", "Not measured")
+            trial.set_user_attr(f"per_run_time_{device_label}", "Not measured")
+
+    for device_label, metrics_value in per_device_resource_usage.items():
+        suffix = "" if not multi_device else ("" if device_label == "gpu" else f"_{device_label}")
+        diff_entry = resource_usage_diff_map.get(device_label, "Not measured")
+        display_entry = resource_usage_display_map.get(device_label)
+        for metric_name in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
+            before_value = _metric_component_for_device(metrics_value, metric_name, "before")
+            current_value = _metric_component_for_device(metrics_value, metric_name, "current")
+            if isinstance(diff_entry, dict):
+                diff_value = diff_entry.get(metric_name, "Not measured")
+            else:
+                diff_value = diff_entry
+
+            attr_prefix = metric_name if not suffix else f"{metric_name}{suffix}"
+            trial.set_user_attr(f"{attr_prefix}_before", before_value)
+            trial.set_user_attr(f"{attr_prefix}_current", current_value)
+            trial.set_user_attr(f"{attr_prefix}_diff", diff_value)
+
+            if metric_name in ram_metrics:
+                if isinstance(display_entry, dict):
+                    metric_display_entry = display_entry.get(metric_name)
+                    if isinstance(metric_display_entry, dict):
+                        trial.set_user_attr(
+                            f"{attr_prefix}_before_display",
+                            metric_display_entry.get("before", "Not measured"),
+                        )
+                        trial.set_user_attr(
+                            f"{attr_prefix}_current_display",
+                            metric_display_entry.get("current", "Not measured"),
+                        )
+                        trial.set_user_attr(
+                            f"{attr_prefix}_diff_display",
+                            metric_display_entry.get("difference", "Not measured"),
+                        )
+                    elif isinstance(metric_display_entry, str):
+                        trial.set_user_attr(f"{attr_prefix}_display", metric_display_entry)
+                elif isinstance(display_entry, str):
+                    trial.set_user_attr(f"{attr_prefix}_display", display_entry)
+
+    resource_usage_result = resource_usage_primary
+    resource_usage_diff_result = resource_usage_diff_primary
+    resource_usage_display_result = resource_usage_display_primary
+    inference_time_result = inference_time_primary
+    avg_power_result = avg_power_primary
+    avg_energy_result = avg_energy_primary
+    per_run_time_result = per_run_time_primary
 
     def _format_metric_with_suffix(value: int, unit: str, joiner: str = "") -> str:
         formatted = format_number(value)
@@ -579,25 +923,6 @@ def set_user_attr_model_stats(
     trial.set_user_attr("macs", macs)
     trial.set_user_attr("macs_display", macs_display)
     trial.set_user_attr("model_summary", model_summary)
-    trial.set_user_attr("resource_usage", resource_usage_metrics)
-    trial.set_user_attr("resource_usage_diff", resource_usage_diff)
-    if resource_usage_display:
-        trial.set_user_attr("resource_usage_display", resource_usage_display)
-    for metric in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
-        trial.set_user_attr(f"{metric}_before", _metric_component(metric, "before"))
-        trial.set_user_attr(f"{metric}_current", _metric_component(metric, "current"))
-        trial.set_user_attr(f"{metric}_diff", resource_usage_diff.get(metric, "Not measured"))
-        if metric in ram_metrics:
-            display_source = resource_usage_display.get(metric)
-            if isinstance(display_source, dict):
-                trial.set_user_attr(f"{metric}_before_display", display_source.get("before", "Not measured"))
-                trial.set_user_attr(f"{metric}_current_display", display_source.get("current", "Not measured"))
-                trial.set_user_attr(f"{metric}_diff_display", display_source.get("difference", "Not measured"))
-            elif isinstance(display_source, str):
-                trial.set_user_attr(f"{metric}_display", display_source)
-    trial.set_user_attr("inference_time", inference_time)
-    trial.set_user_attr("avg_power", avg_power)
-    trial.set_user_attr("avg_energy", avg_energy)
 
     return {
         "num_params": params,
@@ -609,10 +934,32 @@ def set_user_attr_model_stats(
         "macs": macs,
         "macs_display": macs_display,
         "model_summary": model_summary,
-        "resource_usage": resource_usage_metrics,
-        "resource_usage_diff": resource_usage_diff,
-        "resource_usage_display": resource_usage_display,
-        "inference_time": inference_time,
-        "avg_power": avg_power,
-        "avg_energy": avg_energy,
+        "resource_usage": resource_usage_result,
+        "resource_usage_diff": resource_usage_diff_result,
+        "resource_usage_display": resource_usage_display_result,
+        "resource_usage_details": per_device_resource_usage,
+        "resource_usage_diff_details": resource_usage_diff_map,
+        "resource_usage_display_details": resource_usage_display_map,
+        "resource_usage_gpu": per_device_resource_usage.get("gpu", "Not measured"),
+        "resource_usage_cpu": per_device_resource_usage.get("cpu", "Not measured"),
+        "resource_usage_diff_gpu": resource_usage_diff_map.get("gpu", "Not measured"),
+        "resource_usage_diff_cpu": resource_usage_diff_map.get("cpu", "Not measured"),
+        "resource_usage_display_gpu": resource_usage_display_map.get("gpu", "Not measured"),
+        "resource_usage_display_cpu": resource_usage_display_map.get("cpu", "Not measured"),
+        "inference_time": inference_time_result,
+        "inference_time_details": per_device_inference_time,
+        "inference_time_gpu": inference_time_gpu,
+        "inference_time_cpu": inference_time_cpu,
+        "avg_power": avg_power_result,
+        "avg_power_details": avg_power_map,
+        "avg_power_gpu": avg_power_gpu,
+        "avg_power_cpu": avg_power_cpu,
+        "avg_energy": avg_energy_result,
+        "avg_energy_details": avg_energy_map,
+        "avg_energy_gpu": avg_energy_gpu,
+        "avg_energy_cpu": avg_energy_cpu,
+        "per_run_time": per_run_time_result,
+        "per_run_time_details": per_run_time_map,
+        "per_run_time_gpu": per_run_time_gpu,
+        "per_run_time_cpu": per_run_time_cpu,
     }

@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, Literal
 
 import time
 import warnings
@@ -29,6 +29,61 @@ from araras.utils.system import (
 
 ResourceMetricValue = Union[str, Dict[str, Union[int, float]]]
 ResourceMetrics = Dict[str, ResourceMetricValue]
+DeviceKind = Literal["cpu", "gpu", "both"]
+
+
+def _parse_device_request(device: Union[int, str]) -> Tuple[DeviceKind, Optional[int]]:
+    """Normalize ``device`` into a device kind and optional GPU index."""
+
+    if isinstance(device, str):
+        text = device.strip().lower()
+        if not text:
+            raise ValueError("device cannot be empty")
+
+        if text.startswith("both"):
+            gpu_index = 0
+            if ":" in text:
+                _, candidate = text.split(":", 1)
+                candidate = candidate.strip()
+                if candidate:
+                    gpu_index = int(candidate)
+            if gpu_index < 0:
+                raise ValueError("GPU index for 'both' must be non-negative")
+            return "both", gpu_index
+
+        if text.startswith("gpu"):
+            gpu_index = 0
+            if ":" in text:
+                _, candidate = text.split(":", 1)
+                candidate = candidate.strip()
+                if candidate:
+                    gpu_index = int(candidate)
+            if gpu_index < 0:
+                raise ValueError("GPU index must be non-negative")
+            return "gpu", gpu_index
+
+        if text in {"cpu", "-1"}:
+            return "cpu", None
+
+        try:
+            index = int(text)
+        except ValueError as exc:  # pragma: no cover - defensive parsing
+            raise ValueError(f"Unsupported device specification: {device}") from exc
+
+        if index == -1:
+            return "cpu", None
+        if index < -1:
+            raise ValueError(f"Unsupported device index {index}")
+        return "gpu", index
+
+    if isinstance(device, int):
+        if device == -1:
+            return "cpu", None
+        if device < -1:
+            raise ValueError(f"Unsupported device index {device}")
+        return "gpu", device
+
+    raise TypeError("device must be specified as an int or string")
 
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
@@ -93,11 +148,11 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
 def get_memory_and_time(
     model: tf.keras.Model,
     batch_size: int = 1,
-    device: int = 0,
+    device: Union[int, str] = "both",
     warmup_runs: int = 10,
     test_runs: int = 50,
     verbose: bool = True,
-) -> Tuple[ResourceMetrics, float]:
+) -> Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
     """
     Measure the exclusive resource footprint and average inference time of a
     ``tf.keras.Model`` on GPU or CPU.
@@ -127,7 +182,10 @@ def get_memory_and_time(
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
             Measure with batch_size=1 to get base per-sample latency.
-        device (int): GPU index to run the model on. Use ``-1`` to run on CPU.
+        device (int | str):
+            Target device selection. Use ``-1`` or ``"cpu"`` to run on CPU,
+            a non-negative integer or ``"gpu[:index]"`` for a specific GPU, or
+            ``"both"``/``"both:<index>"`` to measure GPU and CPU sequentially.
         warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
         test_runs (int): Number of runs to measure average inference time. Defaults to 50.
         verbose (bool): If True, displays a progress bar during test runs.
@@ -136,16 +194,16 @@ def get_memory_and_time(
         RuntimeError: If the specified GPU or CPU device cannot be found.
 
     Returns:
-        Tuple[ResourceMetrics, float]:
-            - Dictionary with the average per-inference resource statistics. Keys are
-              ``system_ram``, ``gpu_ram``, ``gpu_usage`` and ``cpu_usage``. For each
-              key the value is either ``"Not measured"`` or a mapping containing the
-              average baseline before running inference (``before``), the peak value
-              observed while inference was active (``current``), the difference
-              between them (``difference``) and, when available, the reading captured
-              immediately after inference completed (``final``). RAM measurements are
-              expressed in bytes; usage values are percentages.
-            - Average inference time in seconds.
+        Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
+            - When a single device is measured, returns a ``ResourceMetrics`` mapping
+              ``system_ram``, ``gpu_ram``, ``gpu_usage`` and ``cpu_usage`` to their
+              respective statistics. When ``device`` requests both CPU and GPU, a
+              dictionary keyed by ``"gpu"`` and ``"cpu"`` is returned. Each value is
+              either a ``ResourceMetrics`` instance or ``"Error"`` if the measurement
+              failed.
+            - Average inference time in seconds for the measured device. When both
+              devices are measured, returns a dictionary keyed by ``"gpu"`` and
+              ``"cpu"`` with float values or ``"Error"`` if the run failed.
     """
     # Prepare dummy inputs matching model.inputs
     shapes = [(batch_size,) + tuple(K.int_shape(inp)[1:]) for inp in model.inputs]
@@ -161,30 +219,22 @@ def get_memory_and_time(
             )
             return model(list(args), training=False)
 
-    use_gpu = device >= 0
-    device_str = f"/GPU:{device}" if use_gpu else "/CPU:0"
+    device_kind, resolved_gpu_index = _parse_device_request(device)
 
-    monitor_metrics: Tuple[str, ...]
-    if use_gpu:
-        monitor_metrics = ("ram", "gpu_ram")
-    else:
-        monitor_metrics = ("ram", "cpu")
+    def _measure_gpu(gpu_index: int) -> Tuple[ResourceMetrics, float]:
+        monitor_metrics: Tuple[str, ...] = ("ram", "gpu_ram")
+        resource_monitor = ResourceMonitor(
+            metrics=monitor_metrics,
+            target_gpu_index=gpu_index,
+        )
 
-    resource_monitor = ResourceMonitor(
-        metrics=monitor_metrics,
-        target_gpu_index=device if use_gpu else None,
-    )
-
-    if use_gpu:
-        # Verify GPU exists
         gpus = tf.config.list_physical_devices("GPU")
-        if not gpus or device >= len(gpus):
-            raise RuntimeError(f"No GPU found for index {device}")
+        if not gpus or gpu_index >= len(gpus):
+            raise RuntimeError(f"No GPU found for index {gpu_index}")
 
-        # Reset tracked peak to include weights + graph
+        device_str = f"/GPU:{gpu_index}"
         tf.config.experimental.reset_memory_stats(device_str)
 
-        # Warm-up runs (first includes trace + alloc)
         _ = infer(*dummy_inputs)
         for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
@@ -220,56 +270,93 @@ def get_memory_and_time(
         avg_time = sum(times) / len(times) if times else 0.0
         return resource_metrics, avg_time
 
-    # CPU path
-    if not tf.config.list_physical_devices("CPU"):
-        raise RuntimeError("No CPU device found")
+    def _measure_cpu() -> Tuple[ResourceMetrics, float]:
+        if not tf.config.list_physical_devices("CPU"):
+            raise RuntimeError("No CPU device found")
 
-    cpu_index = 0
-    with tf.device(f"/CPU:{cpu_index}"):
-        _ = infer(*dummy_inputs)
-        for _ in range(warmup_runs - 1):
-            _ = infer(*dummy_inputs)
-
-    progress_iter = (
-        iter(
-            white_track(
-                range(test_runs),
-                description="Measuring CPU",
-                total=test_runs,
-            )
+        cpu_index = 0
+        monitor_metrics: Tuple[str, ...] = ("ram", "cpu")
+        resource_monitor = ResourceMonitor(
+            metrics=monitor_metrics,
+            target_gpu_index=None,
         )
-        if verbose
-        else iter(range(test_runs))
-    )
 
-    times: List[float] = []
-
-    def run_cpu_inference() -> float:
-        next(progress_iter, None)
         with tf.device(f"/CPU:{cpu_index}"):
-            t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            tf.nest.map_structure(lambda t: t.numpy(), out)
-        elapsed = time.perf_counter() - t0
-        times.append(elapsed)
-        return elapsed
+            _ = infer(*dummy_inputs)
+            for _ in range(warmup_runs - 1):
+                _ = infer(*dummy_inputs)
 
-    resource_metrics, _ = resource_monitor.measure_callable(
-        run_cpu_inference,
-        repeat=test_runs,
-    )
+        progress_iter = (
+            iter(
+                white_track(
+                    range(test_runs),
+                    description="Measuring CPU",
+                    total=test_runs,
+                )
+            )
+            if verbose
+            else iter(range(test_runs))
+        )
 
-    avg_time = sum(times) / len(times) if times else 0.0
-    return resource_metrics, avg_time
+        times: List[float] = []
+
+        def run_cpu_inference() -> float:
+            next(progress_iter, None)
+            with tf.device(f"/CPU:{cpu_index}"):
+                t0 = time.perf_counter()
+                out = infer(*dummy_inputs)
+                tf.nest.map_structure(lambda t: t.numpy(), out)
+            elapsed = time.perf_counter() - t0
+            times.append(elapsed)
+            return elapsed
+
+        resource_metrics, _ = resource_monitor.measure_callable(
+            run_cpu_inference,
+            repeat=test_runs,
+        )
+
+        avg_time = sum(times) / len(times) if times else 0.0
+        return resource_metrics, avg_time
+
+    def _safe_measure(
+        label: str,
+        fn: Callable[[], Tuple[ResourceMetrics, float]],
+    ) -> Tuple[Union[ResourceMetrics, str], Union[float, str]]:
+        try:
+            return fn()
+        except Exception as exc:  # pragma: no cover - defensive safeguard
+            error_text = f"Error ({exc.__class__.__name__}): {exc}"
+            if verbose:
+                logger_error.error(f"Failed to measure {label.upper()} inference: {exc}")
+            return error_text, error_text
+
+    if device_kind == "gpu":
+        if resolved_gpu_index is None:
+            raise RuntimeError("GPU device index could not be resolved")
+        return _safe_measure("gpu", lambda: _measure_gpu(resolved_gpu_index))
+
+    if device_kind == "cpu":
+        return _safe_measure("cpu", _measure_cpu)
+
+    if resolved_gpu_index is None:
+        raise RuntimeError("GPU device index could not be resolved")
+
+    gpu_metrics, gpu_time = _safe_measure("gpu", lambda: _measure_gpu(resolved_gpu_index))
+    cpu_metrics, cpu_time = _safe_measure("cpu", _measure_cpu)
+
+    return {"gpu": gpu_metrics, "cpu": cpu_metrics}, {"gpu": gpu_time, "cpu": cpu_time}
 
 
 def get_model_usage_stats(
     saved_model: str | tf.keras.Model,
     n_trials: int = 10000,
-    device: int = 0,
+    device: Union[int, str] = "both",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     verbose: bool = True,
-) -> Tuple[float, float, float]:
+) -> Union[
+    Tuple[Union[float, str], Union[float, str], Union[float, str]],
+    Dict[str, Dict[str, Union[float, str]]],
+]:
     """
     Estimate average power draw and energy usage.
     Careful with the RAPL path; it may vary by system.
@@ -293,7 +380,10 @@ def get_model_usage_stats(
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
             a .keras model file, or a Keras Model instance.
         n_trials (int): Number of inference trials to perform. Defaults to 100000.
-        device (int): GPU index for power measurement, or ``-1`` to use the CPU.
+        device (int | str):
+            GPU index for power measurement, ``-1``/``"cpu"`` for CPU, or
+            ``"both"``/``"both:<index>"`` to measure GPU and CPU sequentially
+            (defaults to ``"both"``).
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
         verbose (bool): If True, displays a progress bar during the trials.
 
@@ -302,15 +392,12 @@ def get_model_usage_stats(
         ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
 
     Returns:
-        Tuple[float, float, float]:
-            - per_run_time (float):
-                Average run time in seconds. Measures a mix of tracing, initialization,
-                asynchronous queuing, Python overhead, and power-reading delays,
-                so its “average” can be dominated by non-inference costs.
-            - avg_power (float): Average power draw in watts. If a negative value is
-              measured repeatedly, the function returns 0 after two retries.
-            - avg_energy (float): Average energy consumed per inference in joules. This
-              will also be ``0`` if ``avg_power`` could not be measured correctly.
+        Union[Tuple[Union[float, str], Union[float, str], Union[float, str]], Dict[str, Dict[str, Union[float, str]]]]:
+            - When a single device is measured, returns ``(per_run_time, avg_power, avg_energy)``.
+            - When both CPU and GPU are requested, returns a dictionary keyed by
+              ``"gpu"`` and ``"cpu"``. Each entry contains ``per_run_time``,
+              ``avg_power`` and ``avg_energy``. On failure the corresponding values
+              are set to ``"Error"``.
     """
     # Decide how we will run inference
     is_keras_model = False
@@ -389,73 +476,133 @@ def get_model_usage_stats(
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
-    MAX_RETRIES = 2
-    attempt = 0
-    while True:
-        powers: list[float] = []  # store measured power values
-        times: list[float] = []  # store inference durations
+    device_kind, resolved_gpu_index = _parse_device_request(device)
 
-        # Initialize NVML each attempt if required
-        if device >= 0:
+    def _measure_for_device(device_index: int) -> Tuple[float, float, float]:
+        MAX_RETRIES = 2
+        attempt = 0
+        while True:
+            powers: List[float] = []
+            times: List[float] = []
+            nvml_initialized = False
+            handle = None
+
             try:
-                pynvml.nvmlInit()
-                handle = pynvml.nvmlDeviceGetHandleByIndex(device)
-            except Exception as e:
-                raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(e))
+                if device_index >= 0:
+                    pynvml.nvmlInit()
+                    nvml_initialized = True
+                    handle = pynvml.nvmlDeviceGetHandleByIndex(device_index)
+            except Exception as exc:
+                if nvml_initialized:
+                    pynvml.nvmlShutdown()
+                raise RuntimeError(
+                    "Unable to initialize NVML for GPU power monitoring: " + str(exc)
+                ) from exc
 
-        progress_iter = range(n_trials)
-        if verbose:
-            progress_iter = white_track(
-                progress_iter,
-                description="Measuring usage",
-                total=n_trials,
+            try:
+                progress_iter = range(n_trials)
+                if verbose:
+                    progress_iter = white_track(
+                        progress_iter,
+                        description="Measuring usage",
+                        total=n_trials,
+                    )
+
+                for _ in progress_iter:
+                    start_time = time.time()
+                    start_energy: Optional[float] = None
+
+                    if device_index >= 0:
+                        if handle is None:
+                            raise RuntimeError("NVML handle not initialized")
+                        start_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
+                    elif device_index == -1:
+                        start_energy = read_cpu_power_rapl()
+                    else:  # pragma: no cover - defensive guard
+                        raise ValueError("Unsupported device index")
+
+                    _ = infer()
+
+                    elapsed = time.time() - start_time
+
+                    if device_index >= 0:
+                        if handle is None:
+                            raise RuntimeError("NVML handle not initialized")
+                        end_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
+                        avg_instant_power = (start_power + end_power) / 2
+                        powers.append(avg_instant_power)
+                    elif device_index == -1 and start_energy is not None:
+                        end_energy = read_cpu_power_rapl()
+                        if end_energy is not None:
+                            energy_used = end_energy - start_energy
+                            avg_power = energy_used / elapsed if elapsed > 0 else 0
+                            powers.append(avg_power)
+
+                    times.append(elapsed)
+            finally:
+                if device_index >= 0 and nvml_initialized:
+                    pynvml.nvmlShutdown()
+
+            per_run_time = sum(times) / len(times) if times else 0.0
+            avg_power = sum(powers) / len(powers) if powers else 0.0
+            avg_energy = (
+                sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0.0
             )
-        for _ in progress_iter:
 
-            start_time = time.time()
+            if avg_power >= 0:
+                return per_run_time, avg_power, avg_energy
 
-            if device >= 0:
-                start_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-            elif device == -1:
-                start_energy = read_cpu_power_rapl()
-            else:
-                raise ValueError("Unsupported device index")
+            attempt += 1
+            if attempt > MAX_RETRIES:
+                logger_error.error(
+                    f"{RED}Average power measurement failed after {MAX_RETRIES} attempts, returning 0.{RESET}"
+                )
+                return per_run_time, 0.0, 0.0
 
-            _ = infer()
-
-            elapsed = time.time() - start_time
-
-            if device >= 0:
-                end_power = pynvml.nvmlDeviceGetPowerUsage(handle) / 1000.0
-                avg_instant_power = (start_power + end_power) / 2
-                powers.append(avg_instant_power)
-            elif device == -1 and start_energy is not None:
-                end_energy = read_cpu_power_rapl()
-                if end_energy is not None:
-                    energy_used = end_energy - start_energy
-                    avg_power = energy_used / elapsed if elapsed > 0 else 0
-                    powers.append(avg_power)
-
-            times.append(elapsed)
-
-        if device >= 0:
-            pynvml.nvmlShutdown()
-
-        per_run_time = sum(times) / len(times)
-        avg_power = sum(powers) / len(powers) if powers else 0
-        avg_energy = sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0
-
-        if avg_power >= 0:
-            return per_run_time, avg_power, avg_energy
-
-        attempt += 1
-        if attempt > MAX_RETRIES:
-            logger_error.error(
-                f"{RED}Average power measurement failed after {MAX_RETRIES} attempts, returning 0.{RESET}"
+            logger.warning(
+                f"{YELLOW}Negative average power measured, retrying measurement...{RESET}"
             )
 
-            return per_run_time, 0.0, 0.0
-        logger.warning(f"{YELLOW}Negative average power measured, retrying measurement...{RESET}")
+    def _safe_measure(
+        label: str,
+        fn: Callable[[], Tuple[float, float, float]],
+    ) -> Tuple[Union[float, str], Union[float, str], Union[float, str]]:
+        try:
+            return fn()
+        except Exception as exc:  # pragma: no cover - defensive safeguard
+            error_text = f"Error ({exc.__class__.__name__}): {exc}"
+            if verbose:
+                logger_error.error(f"Failed to measure {label.upper()} usage: {exc}")
+            return error_text, error_text, error_text
+
+    if device_kind == "gpu":
+        if resolved_gpu_index is None:
+            raise RuntimeError("GPU device index could not be resolved")
+        return _safe_measure("gpu", lambda: _measure_for_device(resolved_gpu_index))
+
+    if device_kind == "cpu":
+        return _safe_measure("cpu", lambda: _measure_for_device(-1))
+
+    if resolved_gpu_index is None:
+        raise RuntimeError("GPU device index could not be resolved")
+
+    gpu_time, gpu_power, gpu_energy = _safe_measure(
+        "gpu", lambda: _measure_for_device(resolved_gpu_index)
+    )
+    cpu_time, cpu_power, cpu_energy = _safe_measure("cpu", lambda: _measure_for_device(-1))
+
+    return {
+        "gpu": {
+            "per_run_time": gpu_time,
+            "avg_power": gpu_power,
+            "avg_energy": gpu_energy,
+        },
+        "cpu": {
+            "per_run_time": cpu_time,
+            "avg_power": cpu_power,
+            "avg_energy": cpu_energy,
+        },
+    }
 
 
 def write_model_stats_to_file(
@@ -463,9 +610,9 @@ def write_model_stats_to_file(
     file_path: str,
     bytes_per_param: int,
     batch_size: int,
-    device: int = 0,
+    device: Union[int, str] = "both",
     n_trials: int = 1000,
-    extra_attrs: Optional[List[str]] = None,
+    extra_attrs: Optional[Dict[str, Any]] = None,
     verbose: bool = False,
 ) -> None:
     """
@@ -486,58 +633,166 @@ def write_model_stats_to_file(
         file_path (str): The path to the output file.
         bytes_per_param (int): Number of bytes per parameter for model size calculation.
         batch_size (int): The batch size to simulate for input.
-        device (int): GPU index to run the model on. Use ``-1`` for CPU.
+        device (int | str): GPU index to run the model on. Use ``-1``/``"cpu"`` for
+            CPU measurements or ``"both"``/``"both:<index>"`` to profile CPU and GPU
+            sequentially (defaults to ``"both"``).
         n_trials (int): Number of trials for power and energy measurement.
-        extra_attrs (Optional[List[str]]): Additional attributes to write to the file.
+        extra_attrs (Optional[Dict[str, Any]]): Additional attributes to write to the file.
         verbose (bool): If True, print detailed information.
     """
     params = model.count_params()
-    resource_usage_metrics, inference_time = get_memory_and_time(
+    device_kind, _ = _parse_device_request(device)
+
+    resource_usage_raw, inference_time_raw = get_memory_and_time(
         model, batch_size=batch_size, device=device, verbose=verbose
     )
-    _, avg_power, avg_energy = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
+    usage_stats_raw = get_model_usage_stats(
+        model, device=device, n_trials=n_trials, verbose=verbose
+    )
+
+    def _normalize_resource_usage(raw: Any) -> Dict[str, Any]:
+        if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
+            return {key: raw[key] for key in ("gpu", "cpu") if key in raw}
+        target = "cpu" if device_kind == "cpu" else "gpu"
+        return {target: raw}
+
+    def _normalize_inference_time(raw: Any) -> Dict[str, Any]:
+        if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
+            return {key: raw[key] for key in ("gpu", "cpu") if key in raw}
+        target = "cpu" if device_kind == "cpu" else "gpu"
+        return {target: raw}
+
+    def _normalize_usage_stats(raw: Any) -> Dict[str, Dict[str, Any]]:
+        normalized: Dict[str, Dict[str, Any]] = {}
+        if isinstance(raw, dict):
+            for key in ("gpu", "cpu"):
+                if key not in raw:
+                    continue
+                value = raw[key]
+                if isinstance(value, dict):
+                    normalized[key] = {
+                        "per_run_time": value.get("per_run_time", "Not measured"),
+                        "avg_power": value.get("avg_power", "Not measured"),
+                        "avg_energy": value.get("avg_energy", "Not measured"),
+                    }
+                else:
+                    normalized[key] = {
+                        "per_run_time": value,
+                        "avg_power": "Not measured",
+                        "avg_energy": "Not measured",
+                    }
+            return normalized
+        per_run_time_value, avg_power_value, avg_energy_value = raw
+        target = "cpu" if device_kind == "cpu" else "gpu"
+        normalized[target] = {
+            "per_run_time": per_run_time_value,
+            "avg_power": avg_power_value,
+            "avg_energy": avg_energy_value,
+        }
+        return normalized
+
+    per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
+    per_device_inference_time = _normalize_inference_time(inference_time_raw)
+    per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
 
     ram_metrics = {"system_ram", "gpu_ram"}
 
-    def _resource_component(metric: str, component: str) -> Union[str, int, float]:
-        value = resource_usage_metrics.get(metric, "Not measured")
-        if isinstance(value, str):
-            return value
-        component_value = value.get(component)
-        if component_value is None:
+    def _build_resource_views(metrics_value: Any) -> Tuple[Any, Any]:
+        if isinstance(metrics_value, str):
+            return metrics_value, metrics_value
+        diff_payload: Dict[str, Any] = {}
+        display_payload: Dict[str, Any] = {}
+        for metric_name, metric_value in metrics_value.items():
+            if isinstance(metric_value, str):
+                diff_payload[metric_name] = metric_value
+                if metric_name in ram_metrics:
+                    display_payload[metric_name] = metric_value
+                continue
+
+            if isinstance(metric_value, dict) and metric_value.get("error"):
+                error_text = str(metric_value.get("error", "Unknown error"))
+                if not error_text.lower().startswith("error"):
+                    error_text = f"Error: {error_text}"
+                diff_payload[metric_name] = error_text
+                if metric_name in ram_metrics:
+                    display_payload[metric_name] = error_text
+                continue
+
+            component_diff = metric_value.get("difference")
+            diff_payload[metric_name] = (
+                component_diff if component_diff is not None else "Not measured"
+            )
+
+            if metric_name in ram_metrics:
+                component_display: Dict[str, str] = {}
+                for component_name in ("before", "current", "difference"):
+                    component_value = metric_value.get(component_name)
+                    if component_value is None:
+                        component_display[component_name] = "Not measured"
+                    elif isinstance(component_value, str):
+                        component_display[component_name] = component_value
+                    else:
+                        component_display[component_name] = f"{int(round(component_value))} B ({format_bytes(component_value)})"
+                display_payload[metric_name] = component_display
+
+        return diff_payload, display_payload
+
+    resource_usage_diff_map: Dict[str, Any] = {}
+    resource_usage_display_map: Dict[str, Any] = {}
+
+    for device_label, metrics_value in per_device_resource_usage.items():
+        diff_payload, display_payload = _build_resource_views(metrics_value)
+        resource_usage_diff_map[device_label] = diff_payload
+        if isinstance(display_payload, dict) and display_payload:
+            resource_usage_display_map[device_label] = display_payload
+        elif isinstance(display_payload, str):
+            resource_usage_display_map[device_label] = display_payload
+
+    avg_power_map: Dict[str, Any] = {}
+    avg_energy_map: Dict[str, Any] = {}
+    per_run_time_map: Dict[str, Any] = {}
+    for device_label, stats_payload in per_device_usage_stats.items():
+        avg_power_map[device_label] = stats_payload.get("avg_power", "Not measured")
+        avg_energy_map[device_label] = stats_payload.get("avg_energy", "Not measured")
+        per_run_time_map[device_label] = stats_payload.get("per_run_time", "Not measured")
+
+    if device_kind == "cpu":
+        primary_order: Tuple[str, ...] = ("cpu", "gpu")
+    elif device_kind == "gpu":
+        primary_order = ("gpu", "cpu")
+    else:
+        primary_order = ("gpu", "cpu")
+
+    def _pick_primary(container: Dict[str, Any]) -> Any:
+        if not container:
             return "Not measured"
-        return component_value
+        for key in primary_order:
+            if key in container:
+                return container[key]
+        return next(iter(container.values()))
 
-    def _format_resource(metric: str, component: str, is_ram: bool) -> str:
-        value = _resource_component(metric, component)
-        if isinstance(value, str):
-            return value
-        if is_ram:
-            return format_bytes(value)
-        return f"{value:.2f}%"
+    def _value_for(container: Dict[str, Any], key: str) -> Any:
+        return container.get(key, "Not measured")
 
-    resource_usage_diff = {}
-    resource_usage_display: Dict[str, Any] = {}
-    for metric, value in resource_usage_metrics.items():
-        if isinstance(value, str):
-            resource_usage_diff[metric] = value
-            if metric in ram_metrics:
-                resource_usage_display[metric] = value
-            continue
+    resource_usage_primary = _pick_primary(per_device_resource_usage)
+    resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
+    resource_usage_display_primary = (
+        _pick_primary(resource_usage_display_map) if resource_usage_display_map else {}
+    )
 
-        diff_value = value.get("difference")
-        resource_usage_diff[metric] = diff_value if diff_value is not None else "Not measured"
+    inference_time_primary = _pick_primary(per_device_inference_time)
+    avg_power_primary = _pick_primary(avg_power_map)
+    avg_energy_primary = _pick_primary(avg_energy_map)
+    per_run_time_primary = _pick_primary(per_run_time_map)
 
-        if metric in ram_metrics:
-            display_components: Dict[str, str] = {}
-            for component in ("before", "current", "difference"):
-                component_value = _resource_component(metric, component)
-                if isinstance(component_value, str):
-                    display_components[component] = component_value
-                else:
-                    raw_int = int(round(component_value))
-                    display_components[component] = f"{raw_int} B ({format_bytes(component_value)})"
-            resource_usage_display[metric] = display_components
+    inference_time_gpu = _value_for(per_device_inference_time, "gpu")
+    inference_time_cpu = _value_for(per_device_inference_time, "cpu")
+    avg_power_gpu = _value_for(avg_power_map, "gpu")
+    avg_power_cpu = _value_for(avg_power_map, "cpu")
+    avg_energy_gpu = _value_for(avg_energy_map, "gpu")
+    avg_energy_cpu = _value_for(avg_energy_map, "cpu")
+    per_run_time_gpu = _value_for(per_run_time_map, "gpu")
+    per_run_time_cpu = _value_for(per_run_time_map, "cpu")
 
     model_stats = {
         "num_params": params,
@@ -545,40 +800,208 @@ def write_model_stats_to_file(
         "flops": get_flops(model),
         "macs": get_macs(model),
         "model_summary": capture_model_summary(model),
-        "resource_usage": resource_usage_metrics,
-        "resource_usage_diff": resource_usage_diff,
-        "resource_usage_display": resource_usage_display,
-        "inference_time": inference_time,
-        "avg_power": avg_power,
-        "avg_energy": avg_energy,
+        "resource_usage": resource_usage_primary,
+        "resource_usage_diff": resource_usage_diff_primary,
+        "resource_usage_display": resource_usage_display_primary,
+        "resource_usage_details": per_device_resource_usage,
+        "resource_usage_diff_details": resource_usage_diff_map,
+        "resource_usage_display_details": resource_usage_display_map,
+        "resource_usage_gpu": per_device_resource_usage.get("gpu", "Not measured"),
+        "resource_usage_cpu": per_device_resource_usage.get("cpu", "Not measured"),
+        "resource_usage_diff_gpu": resource_usage_diff_map.get("gpu", "Not measured"),
+        "resource_usage_diff_cpu": resource_usage_diff_map.get("cpu", "Not measured"),
+        "resource_usage_display_gpu": resource_usage_display_map.get("gpu", "Not measured"),
+        "resource_usage_display_cpu": resource_usage_display_map.get("cpu", "Not measured"),
+        "inference_time": inference_time_primary,
+        "inference_time_details": per_device_inference_time,
+        "inference_time_gpu": inference_time_gpu,
+        "inference_time_cpu": inference_time_cpu,
+        "avg_power": avg_power_primary,
+        "avg_power_details": avg_power_map,
+        "avg_power_gpu": avg_power_gpu,
+        "avg_power_cpu": avg_power_cpu,
+        "avg_energy": avg_energy_primary,
+        "avg_energy_details": avg_energy_map,
+        "avg_energy_gpu": avg_energy_gpu,
+        "avg_energy_cpu": avg_energy_cpu,
+        "per_run_time": per_run_time_primary,
+        "per_run_time_details": per_run_time_map,
+        "per_run_time_gpu": per_run_time_gpu,
+        "per_run_time_cpu": per_run_time_cpu,
     }
+
+    extra_attrs = extra_attrs or {}
 
     with open(file_path, "w") as file:
         file.write(f"Number of parameters: {format_number_commas(model_stats['num_params'])}\n")
         file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
         file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
         file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
-        for metric, label, is_ram in (
-            ("system_ram", "System RAM", True),
-            ("gpu_ram", "GPU RAM", True),
-            ("gpu_usage", "GPU usage", False),
-            ("cpu_usage", "CPU usage", False),
-        ):
-            before_value = _resource_component(metric, "before")
-            current_value = _resource_component(metric, "current")
-            diff_value = _resource_component(metric, "difference")
-            file.write(
-                f"{format_metric_summary_line(label, before_value, current_value, diff_value, is_byte_metric=is_ram)}\n"
-            )
-        file.write(f"Inference time: {format_scientific(model_stats['inference_time'], max_precision=4)} s\n")
-        file.write(
-            f"Average power consumption: {format_scientific(model_stats['avg_power'], max_precision=4)} W\n"
-        )
-        file.write(
-            f"Average energy consumption: {format_scientific(model_stats['avg_energy'], max_precision=4)} J\n"
-        )
 
-        # Write extra attributes
+        device_keys = list(per_device_resource_usage.keys())
+        if not device_keys:
+            device_keys = ["overall"]
+
+        ordered_devices: List[str] = []
+        for candidate in ("gpu", "cpu"):
+            if candidate in per_device_resource_usage and candidate not in ordered_devices:
+                ordered_devices.append(candidate)
+        for key in device_keys:
+            if key not in ordered_devices:
+                ordered_devices.append(key)
+
+        optional_devices: Set[str] = set()
+        if "gpu" not in ordered_devices:
+            ordered_devices.insert(0, "gpu")
+            optional_devices.add("gpu")
+        if "cpu" not in ordered_devices:
+            ordered_devices.append("cpu")
+            optional_devices.add("cpu")
+
+        actual_measured = [
+            label for label in ordered_devices if label not in optional_devices and label != "overall"
+        ]
+        multiple_devices = len(actual_measured) > 1
+
+        def _format_failure(device_label: str, label: str, reason: str | None) -> str:
+            if device_label in optional_devices and (reason is None or str(reason).strip().lower() == "not measured"):
+                return f"{label}: Not measured"
+
+            text = "Not measured" if reason is None else str(reason)
+            lowered = text.strip().lower()
+            if lowered == "not measured" and multiple_devices:
+                text = "Error: Measurement unavailable"
+            elif not lowered.startswith("error"):
+                text = f"Error: {text}"
+            if text.lower().startswith("error"):
+                logger_error.error(
+                    f"{label} measurement failed for {device_label.upper()}: {text}"
+                )
+            return f"{label}: {text}"
+
+        def _metric_line(
+            device_label: str,
+            metric_key: str,
+            label: str,
+            *,
+            is_ram: bool = False,
+        ) -> Optional[str]:
+            metrics_value = per_device_resource_usage.get(device_label, "Not measured")
+            if isinstance(metrics_value, str):
+                lowered = metrics_value.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, metrics_value)
+            if not isinstance(metrics_value, dict):
+                return None
+
+            metric_payload = metrics_value.get(metric_key)
+            if metric_payload is None:
+                return None
+            if isinstance(metric_payload, str):
+                lowered = metric_payload.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, metric_payload)
+
+            before_value = metric_payload.get("before")
+            current_value = metric_payload.get("current")
+            diff_value = metric_payload.get("difference")
+            return format_metric_summary_line(
+                label,
+                before_value,
+                current_value,
+                diff_value,
+                is_byte_metric=is_ram,
+            )
+
+        def _scalar_line(
+            device_label: str,
+            label: str,
+            value: Union[float, str, None],
+            *,
+            unit: Optional[str] = None,
+        ) -> Optional[str]:
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, value)
+            if value is None:
+                if multiple_devices and device_label not in optional_devices:
+                    return _format_failure(device_label, label, None)
+                return f"{label}: Not measured"
+
+            formatted = format_scientific(value, max_precision=4)
+            if unit:
+                formatted = f"{formatted} {unit}"
+            return f"{label}: {formatted}"
+
+        for index, device_label in enumerate(ordered_devices):
+            device_name = {"gpu": "GPU", "cpu": "CPU"}.get(device_label, device_label.upper())
+            file.write(f"{device_name} Inference:\n")
+
+            system_line = _metric_line(device_label, "system_ram", "System Memory", is_ram=True)
+            if system_line:
+                file.write(f"    - {system_line}\n")
+
+            if device_label == "gpu":
+                gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                if gpu_mem_line:
+                    file.write(f"    - {gpu_mem_line}\n")
+                gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                if gpu_usage_line:
+                    file.write(f"    - {gpu_usage_line}\n")
+            elif device_label == "cpu":
+                cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                if cpu_usage_line:
+                    file.write(f"    - {cpu_usage_line}\n")
+            else:
+                gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                if gpu_mem_line:
+                    file.write(f"    - {gpu_mem_line}\n")
+                gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                if gpu_usage_line:
+                    file.write(f"    - {gpu_usage_line}\n")
+                cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                if cpu_usage_line:
+                    file.write(f"    - {cpu_usage_line}\n")
+
+            inference_line = _scalar_line(
+                device_label,
+                "Inference Time",
+                per_device_inference_time.get(device_label, "Not measured"),
+                unit="s",
+            )
+            if inference_line:
+                file.write(f"    - {inference_line}\n")
+
+            power_line = _scalar_line(
+                device_label,
+                "Power Consumption",
+                avg_power_map.get(device_label, "Not measured"),
+                unit="W",
+            )
+            if power_line:
+                file.write(f"    - {power_line}\n")
+
+            energy_line = _scalar_line(
+                device_label,
+                "Energy Consumption",
+                avg_energy_map.get(device_label, "Not measured"),
+                unit="J",
+            )
+            if energy_line:
+                file.write(f"    - {energy_line}\n")
+            if index != len(ordered_devices) - 1:
+                file.write("\n")
+
         for attr, value in extra_attrs.items():
             file.write(f"{attr}: {value}\n")
 

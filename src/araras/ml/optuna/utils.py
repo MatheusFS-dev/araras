@@ -201,34 +201,201 @@ def save_top_k_trials(
         trial_model_size_display = trial.user_attrs.get("model_size_display")
         trial_flops_display = trial.user_attrs.get("flops_display")
         trial_macs_display = trial.user_attrs.get("macs_display")
-        trial_resource_usage = trial.user_attrs.get("resource_usage", {})
-        if not isinstance(trial_resource_usage, dict):
-            trial_resource_usage = trial.user_attrs.get("resource_usage_diff", {})
-        if not isinstance(trial_resource_usage, dict):
-            trial_resource_usage = {}
-        def _resource_value(metric: str, component: str):
-            data = trial_resource_usage.get(metric)
-            if isinstance(data, dict):
-                value = data.get(component)
-                if value is None:
-                    return "Not measured"
-                return value
-            if isinstance(data, str):
-                # Legacy diff-only structure
-                return data if component == "difference" else "Not measured"
+        trial_resource_usage_primary = trial.user_attrs.get("resource_usage", {})
 
-            legacy_diff = trial.user_attrs.get("resource_usage_diff")
-            if isinstance(legacy_diff, dict) and component == "difference":
-                value = legacy_diff.get(metric)
+        def _normalize_per_device(value: Any) -> Dict[str, Any]:
+            if isinstance(value, dict):
+                keys = list(value.keys())
+                if keys and all(k in {"gpu", "cpu", "overall"} for k in keys):
+                    ordered: Dict[str, Any] = {}
+                    for key in ("gpu", "cpu", "overall"):
+                        if key in value:
+                            ordered[key] = value[key]
+                    for key in keys:
+                        if key not in ordered:
+                            ordered[key] = value[key]
+                    return ordered
+                return {"overall": value}
+            if value is None or value == "Not measured":
+                return {}
+            return {"overall": value}
+
+        def _collect_per_device_attr(prefix: str) -> Dict[str, Any]:
+            mapping: Dict[str, Any] = {}
+            for device_label in ("gpu", "cpu"):
+                value = trial.user_attrs.get(f"{prefix}_{device_label}")
                 if value is not None:
-                    return value
+                    mapping[device_label] = value
+            return mapping
 
-            suffix_map = {"before": "before", "current": "current", "difference": "diff"}
-            attr_name = f"{metric}_{suffix_map[component]}"
-            attr_value = trial.user_attrs.get(attr_name)
-            if attr_value is None:
-                return "Not measured"
-            return attr_value
+        per_device_resource_usage = trial.user_attrs.get("resource_usage_details")
+        if not isinstance(per_device_resource_usage, dict) or not per_device_resource_usage:
+            per_device_resource_usage = _collect_per_device_attr("resource_usage")
+        if not per_device_resource_usage:
+            per_device_resource_usage = _normalize_per_device(trial_resource_usage_primary)
+
+        per_device_resource_usage_diff = trial.user_attrs.get("resource_usage_diff_details")
+        if not isinstance(per_device_resource_usage_diff, dict) or not per_device_resource_usage_diff:
+            per_device_resource_usage_diff = _collect_per_device_attr("resource_usage_diff")
+        if not per_device_resource_usage_diff:
+            per_device_resource_usage_diff = _normalize_per_device(
+                trial.user_attrs.get("resource_usage_diff")
+            )
+
+        per_device_resource_usage_display = trial.user_attrs.get("resource_usage_display_details")
+        if not isinstance(per_device_resource_usage_display, dict):
+            per_device_resource_usage_display = {}
+        if not per_device_resource_usage_display:
+            per_device_resource_usage_display = _collect_per_device_attr("resource_usage_display")
+        if not per_device_resource_usage_display:
+            per_device_resource_usage_display = _normalize_per_device(
+                trial.user_attrs.get("resource_usage_display")
+            )
+
+        trial_inference_time = trial.user_attrs.get("inference_time", None)
+        per_device_inference_time = trial.user_attrs.get("inference_time_details")
+        if not isinstance(per_device_inference_time, dict) or not per_device_inference_time:
+            per_device_inference_time = _collect_per_device_attr("inference_time")
+        if not per_device_inference_time:
+            per_device_inference_time = _normalize_per_device(trial_inference_time)
+
+        trial_avg_power = trial.user_attrs.get("avg_power", None)
+        per_device_avg_power = trial.user_attrs.get("avg_power_details")
+        if not isinstance(per_device_avg_power, dict) or not per_device_avg_power:
+            per_device_avg_power = _collect_per_device_attr("avg_power")
+        if not per_device_avg_power:
+            per_device_avg_power = _normalize_per_device(trial_avg_power)
+
+        trial_avg_energy = trial.user_attrs.get("avg_energy", None)
+        per_device_avg_energy = trial.user_attrs.get("avg_energy_details")
+        if not isinstance(per_device_avg_energy, dict) or not per_device_avg_energy:
+            per_device_avg_energy = _collect_per_device_attr("avg_energy")
+        if not per_device_avg_energy:
+            per_device_avg_energy = _normalize_per_device(trial_avg_energy)
+
+        trial_per_run_time = trial.user_attrs.get("per_run_time", None)
+        per_device_per_run_time = trial.user_attrs.get("per_run_time_details")
+        if not isinstance(per_device_per_run_time, dict) or not per_device_per_run_time:
+            per_device_per_run_time = _collect_per_device_attr("per_run_time")
+        if not per_device_per_run_time:
+            per_device_per_run_time = _normalize_per_device(trial_per_run_time)
+
+        device_candidates: Dict[str, None] = {}
+        for mapping in (
+            per_device_resource_usage,
+            per_device_resource_usage_diff,
+            per_device_resource_usage_display,
+            per_device_inference_time,
+            per_device_avg_power,
+            per_device_avg_energy,
+            per_device_per_run_time,
+        ):
+            if isinstance(mapping, dict):
+                for key in mapping.keys():
+                    device_candidates[key] = None
+
+        device_order: List[str] = []
+        for key in ("gpu", "cpu", "overall"):
+            if key in device_candidates and key not in device_order:
+                device_order.append(key)
+        for key in device_candidates.keys():
+            if key not in device_order:
+                device_order.append(key)
+        if not device_order:
+            device_order = ["overall"]
+
+        optional_devices: Set[str] = set()
+        if "gpu" not in device_order:
+            device_order.insert(0, "gpu")
+            optional_devices.add("gpu")
+        if "cpu" not in device_order:
+            device_order.append("cpu")
+            optional_devices.add("cpu")
+
+        actual_measured = [
+            label for label in device_order if label not in optional_devices and label != "overall"
+        ]
+        multiple_devices = len(actual_measured) > 1
+
+        def _format_failure(device_label: str, label: str, reason: Optional[str]) -> str:
+            if device_label in optional_devices and (reason is None or str(reason).strip().lower() == "not measured"):
+                return f"{label}: Not measured"
+
+            text = "Not measured" if reason is None else str(reason)
+            lowered = text.strip().lower()
+            if lowered == "not measured" and multiple_devices:
+                text = "Error: Measurement unavailable"
+            elif not lowered.startswith("error"):
+                text = f"Error: {text}"
+            if text.lower().startswith("error"):
+                logger_error.error(
+                    f"{label} measurement failed for {device_label.upper()}: {text}"
+                )
+            return f"{label}: {text}"
+
+        def _metric_line(
+            device_label: str,
+            metric_key: str,
+            label: str,
+            *,
+            is_ram: bool = False,
+        ) -> Optional[str]:
+            metrics_value = per_device_resource_usage.get(device_label, "Not measured")
+            if isinstance(metrics_value, str):
+                lowered = metrics_value.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, metrics_value)
+            if not isinstance(metrics_value, dict):
+                return None
+
+            metric_payload = metrics_value.get(metric_key)
+            if metric_payload is None:
+                return None
+            if isinstance(metric_payload, str):
+                lowered = metric_payload.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, metric_payload)
+
+            before_value = metric_payload.get("before")
+            current_value = metric_payload.get("current")
+            diff_value = metric_payload.get("difference")
+            return format_metric_summary_line(
+                label,
+                before_value,
+                current_value,
+                diff_value,
+                is_byte_metric=is_ram,
+            )
+
+        def _scalar_line(
+            device_label: str,
+            label: str,
+            value: Union[float, str, None],
+            *,
+            unit: Optional[str] = None,
+        ) -> Optional[str]:
+            if isinstance(value, str):
+                lowered = value.strip().lower()
+                if lowered == "not measured" and (
+                    device_label in optional_devices or not multiple_devices
+                ):
+                    return f"{label}: Not measured"
+                return _format_failure(device_label, label, value)
+            if value is None:
+                if multiple_devices and device_label not in optional_devices:
+                    return _format_failure(device_label, label, None)
+                return f"{label}: Not measured"
+
+            formatted = format_scientific(value, max_precision=4)
+            if unit:
+                formatted = f"{formatted} {unit}"
+            return f"{label}: {formatted}"
 
         def _extract_human(display_value):
             if not isinstance(display_value, str):
@@ -320,25 +487,70 @@ def save_top_k_trials(
                     lambda v: f"{format_number(v)} MACs",
                 )
             )
-            for metric, label, is_ram in (
-                ("system_ram", "System RAM", True),
-                ("gpu_ram", "GPU RAM", True),
-                ("gpu_usage", "GPU usage", False),
-                ("cpu_usage", "CPU usage", False),
-            ):
-                before_value = _resource_value(metric, "before")
-                current_value = _resource_value(metric, "current")
-                diff_value = _resource_value(metric, "difference")
-                file.write(
-                    f"{format_metric_summary_line(label, before_value, current_value, diff_value, is_byte_metric=is_ram)}\n"
+            for index, device_label in enumerate(device_order):
+                metrics_value = per_device_resource_usage.get(device_label, "Not measured")
+                if isinstance(metrics_value, str) and metrics_value.lower().startswith("error"):
+                    logger_error.error(
+                        f"Resource usage measurement failed for {device_label.upper()}: {metrics_value}"
+                    )
+
+                device_name = {"gpu": "GPU", "cpu": "CPU"}.get(device_label, device_label.upper())
+                file.write(f"{device_name} Inference:\n")
+
+                system_line = _metric_line(device_label, "system_ram", "System Memory", is_ram=True)
+                if system_line:
+                    file.write(f"    - {system_line}\n")
+
+                if device_label == "gpu":
+                    gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                    if gpu_mem_line:
+                        file.write(f"    - {gpu_mem_line}\n")
+                    gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                    if gpu_usage_line:
+                        file.write(f"    - {gpu_usage_line}\n")
+                elif device_label == "cpu":
+                    cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                    if cpu_usage_line:
+                        file.write(f"    - {cpu_usage_line}\n")
+                else:
+                    gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                    if gpu_mem_line:
+                        file.write(f"    - {gpu_mem_line}\n")
+                    gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                    if gpu_usage_line:
+                        file.write(f"    - {gpu_usage_line}\n")
+                    cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                    if cpu_usage_line:
+                        file.write(f"    - {cpu_usage_line}\n")
+
+                inference_line = _scalar_line(
+                    device_label,
+                    "Inference Time",
+                    per_device_inference_time.get(device_label, "Not measured"),
+                    unit="s",
                 )
-            file.write(f"Inference time: {format_scientific(trial_inference_time, max_precision=4)} s\n")
-            file.write(
-                f"Average power consumption: {format_scientific(trial_avg_power, max_precision=4)} W\n"
-            )
-            file.write(
-                f"Average energy consumption: {format_scientific(trial_avg_energy, max_precision=4)} J\n"
-            )
+                if inference_line:
+                    file.write(f"    - {inference_line}\n")
+
+                power_line = _scalar_line(
+                    device_label,
+                    "Power Consumption",
+                    per_device_avg_power.get(device_label, "Not measured"),
+                    unit="W",
+                )
+                if power_line:
+                    file.write(f"    - {power_line}\n")
+
+                energy_line = _scalar_line(
+                    device_label,
+                    "Energy Consumption",
+                    per_device_avg_energy.get(device_label, "Not measured"),
+                    unit="J",
+                )
+                if energy_line:
+                    file.write(f"    - {energy_line}\n")
+                if index != len(device_order) - 1:
+                    file.write("\n")
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
 
             # Write extra attributes
