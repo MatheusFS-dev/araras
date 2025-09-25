@@ -185,26 +185,35 @@ def get_memory_and_time(
         for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
 
-        # Timed inference with forced sync
-        times = []
-        progress_iter = range(test_runs)
-        if verbose:
-            progress_iter = white_track(
-                progress_iter,
-                description="Measuring GPU",
-                total=test_runs,
+        progress_iter = (
+            iter(
+                white_track(
+                    range(test_runs),
+                    description="Measuring GPU",
+                    total=test_runs,
+                )
             )
-        for _ in progress_iter:
-            before_snapshot = resource_monitor.capture_snapshot()
+            if verbose
+            else iter(range(test_runs))
+        )
+
+        times: List[float] = []
+
+        def run_gpu_inference() -> float:
+            next(progress_iter, None)
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             tf.nest.map_structure(lambda t: t.numpy(), out)
-            times.append(time.perf_counter() - t0)
-            after_snapshot = resource_monitor.capture_snapshot()
-            resource_monitor.record(before_snapshot, after_snapshot)
+            elapsed = time.perf_counter() - t0
+            times.append(elapsed)
+            return elapsed
 
-        avg_time = sum(times) / len(times)
-        resource_metrics = resource_monitor.finalize()
+        resource_metrics, _ = resource_monitor.measure_callable(
+            run_gpu_inference,
+            repeat=test_runs,
+        )
+
+        avg_time = sum(times) / len(times) if times else 0.0
         return resource_metrics, avg_time
 
     # CPU path
@@ -217,27 +226,36 @@ def get_memory_and_time(
         for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
 
-    times = []
-    progress_iter = range(test_runs)
-    if verbose:
-        progress_iter = white_track(
-            progress_iter,
-            description="Measuring CPU",
-            total=test_runs,
+    progress_iter = (
+        iter(
+            white_track(
+                range(test_runs),
+                description="Measuring CPU",
+                total=test_runs,
+            )
         )
+        if verbose
+        else iter(range(test_runs))
+    )
 
-    for _ in progress_iter:
-        before_snapshot = resource_monitor.capture_snapshot()
+    times: List[float] = []
+
+    def run_cpu_inference() -> float:
+        next(progress_iter, None)
         with tf.device(f"/CPU:{cpu_index}"):
             t0 = time.perf_counter()
             out = infer(*dummy_inputs)
             tf.nest.map_structure(lambda t: t.numpy(), out)
-        times.append(time.perf_counter() - t0)
-        after_snapshot = resource_monitor.capture_snapshot()
-        resource_monitor.record(before_snapshot, after_snapshot)
+        elapsed = time.perf_counter() - t0
+        times.append(elapsed)
+        return elapsed
 
-    avg_time = sum(times) / len(times)
-    resource_metrics = resource_monitor.finalize()
+    resource_metrics, _ = resource_monitor.measure_callable(
+        run_cpu_inference,
+        repeat=test_runs,
+    )
+
+    avg_time = sum(times) / len(times) if times else 0.0
     return resource_metrics, avg_time
 
 

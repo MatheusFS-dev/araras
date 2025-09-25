@@ -3,7 +3,7 @@ import time
 import psutil
 import subprocess
 from datetime import datetime
-from threading import Thread
+from threading import Event, Lock, Thread
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, cast
 
 import tensorflow as tf
@@ -155,6 +155,9 @@ class ResourceMonitor:
         byte_metrics: Iterable containing the metric identifiers that should be
             cast to integers because they represent quantities in bytes. Defaults
             to ``("system_ram", "gpu_ram")``.
+        sample_interval: Sampling cadence in seconds while the monitored
+            callable executes. Values smaller than ``0.01`` are clamped to that
+            minimum to avoid overwhelming the system.
 
     Raises:
         ValueError: If ``metric_extractors`` is empty after initialisation.
@@ -169,6 +172,7 @@ class ResourceMonitor:
         target_gpu_index: Optional[int] = None,
         metric_extractors: Optional[MetricExtractors] = None,
         byte_metrics: Optional[Iterable[str]] = None,
+        sample_interval: float = 0.1,
     ) -> None:
         self._metrics: Sequence[str] = metrics or self._DEFAULT_METRICS
         self._metric_extractors = (
@@ -182,6 +186,7 @@ class ResourceMonitor:
 
         self._tracked_metrics: Tuple[str, ...] = tuple(self._metric_extractors.keys())
         self._byte_metrics = set(byte_metrics or ("system_ram", "gpu_ram"))
+        self._sample_interval = max(sample_interval, 0.01)
 
         self._totals: MetricTotals = {}
         self._counts: Dict[str, int] = {}
@@ -255,7 +260,7 @@ class ResourceMonitor:
         """Reset the internal aggregation buffers."""
 
         self._totals = {
-            key: {"before": 0.0, "current": 0.0, "difference": 0.0}
+            key: {"before": 0.0, "current": 0.0, "difference": 0.0, "final": 0.0}
             for key in self._tracked_metrics
         }
         self._counts = {key: 0 for key in self._tracked_metrics}
@@ -284,12 +289,19 @@ class ResourceMonitor:
 
         return snapshot
 
-    def record(self, before: MetricSnapshot, after: MetricSnapshot) -> None:
-        """Update aggregate statistics using two snapshots.
+    def record(
+        self,
+        before: MetricSnapshot,
+        after: MetricSnapshot,
+        *,
+        final: Optional[MetricSnapshot] = None,
+    ) -> None:
+        """Update aggregate statistics using captured snapshots.
 
         Args:
             before: Snapshot captured immediately before running the workload.
             after: Snapshot captured immediately after running the workload.
+            final: Optional snapshot captured once the workload has completed.
         """
 
         for key in self._tracked_metrics:
@@ -305,6 +317,12 @@ class ResourceMonitor:
             self._totals[key]["before"] += before_val
             self._totals[key]["current"] += after_val
             self._totals[key]["difference"] += diff
+            final_snapshot = final or after
+            final_val = final_snapshot.get(key) if final_snapshot else None
+            if final_val is not None:
+                self._totals[key]["final"] += final_val
+            else:
+                self._totals[key]["final"] += after_val
             self._counts[key] += 1
 
     def _cast_metric_value(self, key: str, value: float) -> Union[int, float]:
@@ -338,6 +356,9 @@ class ResourceMonitor:
                 "difference": self._cast_metric_value(
                     key, self._totals[key]["difference"] / count
                 ),
+                "final": self._cast_metric_value(
+                    key, self._totals[key]["final"] / count
+                ),
             }
 
         return summary
@@ -350,6 +371,11 @@ class ResourceMonitor:
         **kwargs: Any,
     ) -> Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
         """Execute a callable and summarise the resource usage.
+
+        The callable runs synchronously in the current thread while a background
+        sampler polls the configured metrics at regular intervals determined by
+        ``sample_interval``. The peaks observed during each execution are used to
+        compute the aggregated statistics.
 
         Args:
             func: Callable to execute.
@@ -373,9 +399,46 @@ class ResourceMonitor:
         result: TCallableReturn = cast(TCallableReturn, None)
         for _ in range(repeat):
             before_snapshot = self.capture_snapshot()
-            result = func(*args, **kwargs)
-            after_snapshot = self.capture_snapshot()
-            self.record(before_snapshot, after_snapshot)
+            peaks: MetricSnapshot = {key: before_snapshot.get(key) for key in self._tracked_metrics}
+            lock = Lock()
+            stop_event = Event()
+
+            def sampler() -> None:
+                while not stop_event.is_set():
+                    snapshot = self.capture_snapshot()
+                    with lock:
+                        for key in self._tracked_metrics:
+                            value = snapshot.get(key)
+                            if value is None:
+                                continue
+                            peak_value = peaks.get(key)
+                            if peak_value is None or value > peak_value:
+                                peaks[key] = value
+                    if stop_event.wait(self._sample_interval):
+                        break
+
+            sampler_thread = Thread(target=sampler, daemon=True)
+            sampler_thread.start()
+            try:
+                result = func(*args, **kwargs)
+            finally:
+                stop_event.set()
+                sampler_thread.join()
+
+            final_snapshot = self.capture_snapshot()
+            with lock:
+                for key in self._tracked_metrics:
+                    final_value = final_snapshot.get(key)
+                    if final_value is None:
+                        continue
+                    peak_value = peaks.get(key)
+                    if peak_value is None or final_value > peak_value:
+                        peaks[key] = final_value
+                peak_snapshot: MetricSnapshot = {
+                    key: peaks.get(key) for key in self._tracked_metrics
+                }
+
+            self.record(before_snapshot, peak_snapshot, final=final_snapshot)
 
         metrics_summary = self.finalize()
         return metrics_summary, result
