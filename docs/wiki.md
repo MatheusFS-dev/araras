@@ -1474,6 +1474,8 @@ plot_model_param_distribution(
     csv_path=None,
     logs_dir=None,
     corr_csv_path=None,
+    plot_model_dir=None,
+    show_plot=False,
 )
 ```
 Sample random models and plot parameter and size histograms.
@@ -1485,11 +1487,13 @@ Sample random models and plot parameter and size histograms.
 | bytes_per_param | `int` | Number of bytes used to store each parameter. |
 | batch_size | `int` | Batch size used when estimating the training memory. |
 | n_trials | `int` | Total number of random trials to sample. |
-| fig_save_path | `str, optional` | Path to save the figure. If ``None`` the figure is shown only. |
+| fig_save_path | `str, optional` | Path to save the figure. If ``None`` the figure is only displayed when ``show_plot`` is ``True``. |
 | figsize | `Tuple[int, int]` | Figure size for the histograms. |
 | csv_path | `str, optional` | Path to save trial results in CSV format. |
 | logs_dir | `str, optional` | Directory to store error logs for failed trials. |
 | corr_csv_path | `str, optional` | Path to save hyperparameter correlations. |
+| plot_model_dir | `str, optional` | Directory where individual model architecture plots are saved. |
+| show_plot | `bool` | Whether to display the histogram figure after sampling. Defaults to ``False``. |
 
 **Returns**
 `None`

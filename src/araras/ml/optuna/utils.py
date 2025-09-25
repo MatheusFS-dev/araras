@@ -393,20 +393,45 @@ def save_top_k_trials(
 
 
 def init_study_dirs(run_dir, study_name="optuna_study", subdirs=None):
-    """
-    Create and return study directory structure for experiments.
+    """Create the directory layout used for Optuna studies.
+
+    The helper mirrors the folder structure expected by :func:`run_study`,
+    guaranteeing that every artifact directory exists before the optimization
+    starts. Custom layouts can be provided through ``subdirs`` when needed.
+
+    Notes:
+        Providing an explicit ``subdirs`` sequence allows callers to reuse the
+        helper for bespoke experiment layouts while still benefiting from the
+        creation guarantees.
 
     Args:
-        run_dir (str): Base directory for the run
-        study_name (str): Name of the study directory (default: "optuna_study")
-        subdirs (list): List of subdirectory names to create
-                       (default: ["args", "figures", "backup", "history", "models", "logs", "tensorboard"])
+        run_dir (str): Base directory for the optimization run.
+        study_name (str): Name of the study directory created inside
+            ``run_dir``. Defaults to ``"optuna_study"``.
+        subdirs (list[str] | None): Explicit list of subdirectories to create
+            under the study directory. When ``None`` the defaults are used,
+            matching the keyword arguments consumed by
+            :func:`run_study`:
+            ``["args", "figures", "backup", "history", "scaler", "models", "logs", "tensorboard"]``.
 
     Returns:
-        tuple: (study_dir, *subdirectory_paths) in the order specified by subdirs
+        tuple[str, ...]: ``study_dir`` followed by the paths for each
+        requested subdirectory in the order provided by ``subdirs``.
+
+    Raises:
+        OSError: Propagated if any directory cannot be created.
     """
     if subdirs is None:
-        subdirs = ["args", "figures", "backup", "history", "models", "logs", "tensorboard"]
+        subdirs = [
+            "args",
+            "figures",
+            "backup",
+            "history",
+            "scaler",
+            "models",
+            "logs",
+            "tensorboard",
+        ]
 
     study_dir = os.path.join(run_dir, study_name)
     dirs = {d: os.path.join(study_dir, d) for d in subdirs}
@@ -593,6 +618,7 @@ def run_study(
                 - logs_dir: Directory to save training logs.
                 - tensorboard_dir: Directory for TensorBoard logs.
                 - history_dir: Directory to save training history CSV files.
+                - scaler_dir: Directory to persist fitted scalers.
 
     Returns:
         optuna.study.Study: The completed study object.
@@ -623,6 +649,7 @@ def run_study(
         fig_dir,
         backup_dir,
         history_dir,
+        scaler_dir,
         model_dir,
         logs_dir,
         tensorboard_dir,
@@ -655,6 +682,7 @@ def run_study(
             "logs_dir": logs_dir,
             "tensorboard_dir": tensorboard_dir,
             "history_dir": history_dir,
+            "scaler_dir": scaler_dir,
         }
         objective_kwargs = {**default_objective_kwargs, **kwargs}
 
