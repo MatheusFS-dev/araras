@@ -1,6 +1,7 @@
 from araras.core import *
 
 from typing import Any, Dict, Iterable, Tuple, Union
+from collections import Counter
 
 import optuna
 import matplotlib.pyplot as plt
@@ -138,123 +139,262 @@ def _iter_tensor_shapes(shapes: Union[tf.TensorShape, Iterable, None]) -> Iterab
     yield tf.TensorShape(shapes)
 
 
-def _estimate_activation_elements(model: keras.Model, batch_size: int) -> int:
-    """Estimate how many activation elements are kept in memory per training batch."""
+def _shape_num_elements(
+    shape: Union[tf.TensorShape, Iterable, None], batch_size: int
+) -> int:
+    """Resolve the number of elements encoded by ``shape``.
 
-    total_elements = 0
-    for layer in model.layers:
-        # ``output_shape`` is preferred because it does not trigger graph execution.
-        shapes = getattr(layer, "output_shape", None)
-        if shapes is None and hasattr(layer, "output"):
-            # Fall back to inferring the shape from symbolic tensors.
-            shapes = tf.keras.backend.int_shape(layer.output)
+    Args:
+        shape (Union[tf.TensorShape, Iterable, None]): Tensor shape that may
+            include ``None`` dimensions.
+        batch_size (int): Batch dimension used to replace leading ``None``.
 
-        for shape in _iter_tensor_shapes(shapes):
-            if shape.rank is None:
-                continue
-            dims = list(shape)
-            if not dims:
-                continue
+    Returns:
+        int: Total element count after resolving undefined dimensions.
+    """
 
-            resolved_dims = []
-            for index, dim in enumerate(dims):
-                if dim is None:
-                    if index == 0:
-                        resolved_dims.append(batch_size)
-                    else:
-                        resolved_dims.append(1)
-                else:
-                    resolved_dims.append(int(dim))
+    if shape is None:
+        return 0
 
-            elements = math.prod(resolved_dims)
-            total_elements += elements
+    tensor_shape = tf.TensorShape(shape)
+    if tensor_shape.rank is None:
+        return 0
 
-    return total_elements
+    resolved_dims = []
+    for index, dim in enumerate(tensor_shape):
+        if dim is None:
+            resolved_dims.append(batch_size if index == 0 else 1)
+        else:
+            resolved_dims.append(int(dim))
+
+    if not resolved_dims:
+        return 0
+
+    return int(math.prod(resolved_dims))
 
 
-def _calculate_activation_memory(
+def _tensor_num_bytes(
+    tensor: Any,
+    batch_size: int,
+    dtype_bytes: int,
+) -> int:
+    """Compute the memory footprint of ``tensor`` using symbolic metadata.
+
+    Args:
+        tensor (Any): Keras tensor or placeholder exposing a ``shape`` attribute.
+        batch_size (int): Batch dimension used for ``None`` resolution.
+        dtype_bytes (int): Byte width of the tensor dtype.
+
+    Returns:
+        int: Size of the tensor in bytes or ``0`` if the shape is unknown.
+    """
+
+    shape = getattr(tensor, "shape", None)
+    elements = _shape_num_elements(shape, batch_size)
+    return elements * dtype_bytes
+
+
+def _estimate_graph_activation_bytes(
     model: keras.Model,
     batch_size: int,
     activation_bytes: int,
-    gradient_bytes: int,
 ) -> int:
-    """Estimate activation + activation-gradient memory for one training batch."""
+    """Estimate the forward activation footprint using graph liveness analysis.
+
+    Args:
+        model (keras.Model): Graph model exposing ``_nodes_by_depth``.
+        batch_size (int): Batch dimension used for symbolic tensors.
+        activation_bytes (int): Byte width used for activation tensors.
+
+    Returns:
+        int: Peak number of bytes occupied by live forward activations.
+
+    Raises:
+        ValueError: If the model lacks graph metadata for static analysis.
+    """
+
+    nodes_by_depth = getattr(model, "_nodes_by_depth", None)
+    if not nodes_by_depth:
+        raise ValueError("Model does not expose graph nodes for static analysis.")
+
+    ordered_nodes = []
+    for depth in sorted(nodes_by_depth.keys()):
+        ordered_nodes.extend(nodes_by_depth[depth])
+
+    input_tensors_per_node = []
+    consumer_counts: Counter[int] = Counter()
+
+    for node in ordered_nodes:
+        input_tensors = tf.nest.flatten(getattr(node, "input_tensors", ()))
+        input_tensors_per_node.append(input_tensors)
+        for tensor in input_tensors:
+            consumer_counts[id(tensor)] += 1
+
+    live_bytes = 0
+    peak_bytes = 0
+    tensor_sizes: Dict[int, int] = {}
+
+    for node, input_tensors in zip(ordered_nodes, input_tensors_per_node):
+        output_tensors = tf.nest.flatten(getattr(node, "output_tensors", ()))
+
+        for tensor in output_tensors:
+            tensor_id = id(tensor)
+            size_bytes = _tensor_num_bytes(tensor, batch_size, activation_bytes)
+            if size_bytes <= 0:
+                continue
+            tensor_sizes[tensor_id] = size_bytes
+            live_bytes += size_bytes
+
+        peak_bytes = max(peak_bytes, live_bytes)
+
+        for tensor in input_tensors:
+            tensor_id = id(tensor)
+            if tensor_id not in tensor_sizes:
+                continue
+
+            consumer_counts[tensor_id] -= 1
+            if consumer_counts[tensor_id] <= 0:
+                live_bytes -= tensor_sizes.pop(tensor_id, 0)
+
+        peak_bytes = max(peak_bytes, live_bytes)
+
+    return int(peak_bytes)
+
+
+def _estimate_peak_activation_bytes(
+    model: keras.Model,
+    batch_size: int,
+    activation_bytes: int,
+    *,
+    activation_overhead_factor: float = 0.10,
+) -> int:
+    """Estimate activation residency including transient backward buffers.
+
+    Args:
+        model (keras.Model): Model to analyse for activation liveness.
+        batch_size (int): Batch size assumed for symbolic tensors.
+        activation_bytes (int): Byte width used for activation tensors.
+        activation_overhead_factor (float): Fraction of forward bytes kept to
+            approximate short-lived backward buffers.
+
+    Returns:
+        int: Estimated activation memory in bytes.
+    """
 
     try:
-        total_elements = _estimate_activation_elements(model, batch_size)
-        forward_memory = total_elements * activation_bytes
-        backward_memory = total_elements * gradient_bytes
-        return int(forward_memory + backward_memory)
+        peak_forward = _estimate_graph_activation_bytes(
+            model, batch_size, activation_bytes
+        )
     except Exception:
-        # Fallback: proportional to parameter count.
-        params = _get_model_trainable_params(model)
-        return int(params * (activation_bytes + gradient_bytes) * 0.75)
+        total_elements = 0
+        for layer in model.layers:
+            shapes = getattr(layer, "output_shape", None)
+            if shapes is None and hasattr(layer, "output"):
+                shapes = tf.keras.backend.int_shape(layer.output)
+
+            for shape in _iter_tensor_shapes(shapes):
+                total_elements += _shape_num_elements(shape, batch_size)
+
+        peak_forward = total_elements * activation_bytes
+
+    if peak_forward <= 0:
+        return 0
+
+    overhead = peak_forward * activation_overhead_factor
+    return int(peak_forward + overhead)
 
 
-def _get_framework_overhead(base_bytes: int) -> int:
-    """Estimate framework and runtime overhead based on device availability."""
+def _estimate_device_overhead_bytes() -> int:
+    """Estimate baseline runtime overhead for the active accelerator.
 
-    # Base floor to account for TensorFlow runtime, cuDNN kernels, and graph caches.
-    cpu_floor = 64 * 1024 * 1024  # 64 MB
-    gpu_floor = 128 * 1024 * 1024  # 128 MB
+    Returns:
+        int: Bytes reserved for device runtime, allocator, and workspace needs.
+    """
+
+    cpu_floor = 128 * 1024 * 1024  # 128 MB accounts for TF runtime caches.
+    gpu_floor = 384 * 1024 * 1024  # 384 MB approximates CUDA context + allocator.
+    gpu_fraction = 0.12
+    gpu_cap_fraction = 0.25
 
     try:
         gpus = tf.config.experimental.list_physical_devices("GPU")
         if gpus:
             details = tf.config.experimental.get_device_details(gpus[0])
-            memory_limit = details.get("memory_limit") if isinstance(details, dict) else None
+            memory_limit = (
+                details.get("memory_limit") if isinstance(details, dict) else None
+            )
             if memory_limit:
-                # Keep a buffer at ~4% of total VRAM, capped to avoid dwarfing small models.
-                overhead = max(base_bytes * 0.1, memory_limit * 0.04)
-            else:
-                overhead = base_bytes * 0.1
-            return int(max(overhead, gpu_floor))
-
-        # CPU-only training: reserve ~10% of model memory with a practical minimum.
-        return int(max(base_bytes * 0.1, cpu_floor))
+                baseline = int(memory_limit * gpu_fraction)
+                cap = int(memory_limit * gpu_cap_fraction)
+                overhead = max(gpu_floor, min(baseline, cap))
+                return overhead
+            return gpu_floor
     except Exception:
-        return int(max(base_bytes * 0.1, cpu_floor))
+        pass
+
+    return cpu_floor
 
 # ———————————————————————————————————————————————————————————————————————————— #
 
 def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
-    """
-    Estimate total VRAM needed for training a Keras model in bytes.
+    """Estimate the VRAM footprint required to train ``model``.
 
     Args:
-        model (keras.Model): Keras model object
-        batch_size (int): Training batch size
+        model (keras.Model): Model to analyse. ``model`` must be built so that
+            layer shapes are available. Functional/Sequential models receive a
+            static liveness sweep; subclassed models fall back to a conservative
+            approximation.
+        batch_size (int): Mini-batch size used during training.
 
     Returns:
-        int: Total memory needed in bytes
+        int: Estimated memory requirement in bytes including tensors and runtime
+        overhead.
+
+    Notes:
+        The estimation assumes that variable tensors and optimizer slots use the
+        variable dtype while forward activations follow the compute dtype.
+        Activation residency leverages a static liveness analysis for graph
+        models and reverts to a parameter-proportional upper bound when graph
+        structure is unavailable.
+
+    Warnings:
+        This function produces an analytical approximation. CUDA workspaces,
+        allocator behaviour, and layer-specific buffers can change with driver
+        versions or custom ops. Always validate against runtime telemetry when
+        operating close to device limits.
+
+    Raises:
+        ValueError: If ``batch_size`` is not positive.
     """
+
+    if batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer")
+
     # Get model characteristics
     trainable_params = _get_model_trainable_params(model)
     non_trainable_params = _get_model_non_trainable_params(model)
     variable_bytes, compute_bytes = _get_precision_bytes(model)
-    gradient_bytes_per_value = max(variable_bytes, compute_bytes)
     slot_factor = _get_optimizer_slot_factor(model)
 
     # Parameter tensors (weights)
     weight_bytes = trainable_params * variable_bytes
     non_trainable_bytes = non_trainable_params * variable_bytes
 
-    # Gradient tensors are usually kept in compute dtype during backprop.
-    gradient_bytes = trainable_params * gradient_bytes_per_value
+    # Gradients are materialised in the variable dtype when applied.
+    gradient_bytes = trainable_params * variable_bytes
 
     # Optimizer slots (e.g., Adam moments, momentum buffers)
     optimizer_slot_bytes = trainable_params * variable_bytes * slot_factor
 
-    # Activations and their gradients scale with the batch size.
-    activation_memory = _calculate_activation_memory(
+    # Peak forward activations retained by autodiff plus transient buffers.
+    activation_memory = _estimate_peak_activation_bytes(
         model,
         batch_size,
         activation_bytes=compute_bytes,
-        gradient_bytes=gradient_bytes_per_value,
     )
 
     base_memory = weight_bytes + non_trainable_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory
-    framework_overhead = _get_framework_overhead(base_memory)
+    framework_overhead = _estimate_device_overhead_bytes()
 
     return int(base_memory + framework_overhead)
 
