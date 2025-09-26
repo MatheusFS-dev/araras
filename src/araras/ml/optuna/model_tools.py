@@ -26,382 +26,141 @@ from araras.ml.model.tools import save_model_plot
 #                                   Utilities                                  #
 # ———————————————————————————————————————————————————————————————————————————— #
 
+
 def _get_model_trainable_params(model: keras.Model) -> int:
     """Get number of trainable parameters in the model."""
-    return sum(tf.keras.backend.count_params(w) for w in model.trainable_weights)
+    return sum([tf.keras.backend.count_params(w) for w in model.trainable_weights])
 
 
-def _get_model_non_trainable_params(model: keras.Model) -> int:
-    """Get number of non-trainable parameters in the model."""
-    return sum(tf.keras.backend.count_params(w) for w in model.non_trainable_weights)
-
-
-def _resolve_dtype_bytes(dtype: Union[str, tf.dtypes.DType]) -> int:
-    """Return byte-width for the provided TensorFlow dtype."""
-    try:
-        tf_dtype = tf.as_dtype(dtype)
-        # ``size`` returns the number of bytes occupied by the dtype.
-        size = tf_dtype.size
-        if size is None:
-            return 4
-        return int(size)
-    except TypeError:
-        return 4
-
-
-def _get_precision_bytes(model: keras.Model) -> Tuple[int, int]:
-    """Return (variable_bytes, compute_bytes) for the model."""
-
-    policy = getattr(model, "dtype_policy", None)
-    variable_dtype = getattr(policy, "variable_dtype", None)
-    compute_dtype = getattr(policy, "compute_dtype", None)
-
-    if variable_dtype is None:
-        # Fallback to the dtype of the first weight tensor.
-        for weight in model.weights:
-            variable_dtype = weight.dtype
-            break
-
-    if compute_dtype is None:
-        if hasattr(model, "compute_dtype") and model.compute_dtype:
-            compute_dtype = model.compute_dtype
-        elif hasattr(model, "dtype") and model.dtype:
-            compute_dtype = model.dtype
-        else:
-            for layer in model.layers:
-                if hasattr(layer, "dtype") and layer.dtype:
-                    compute_dtype = layer.dtype
-                    break
-
-    variable_bytes = _resolve_dtype_bytes(variable_dtype or "float32")
-    compute_bytes = _resolve_dtype_bytes(compute_dtype or variable_dtype or "float32")
-
-    return variable_bytes, compute_bytes
-
-
-def _get_optimizer_slot_factor(model: keras.Model) -> int:
-    """Return the number of optimizer slot tensors kept per parameter."""
-
-    optimizer = getattr(model, "optimizer", None)
-    if optimizer is None:
-        # Assume SGD without momentum plus gradient tensor handled elsewhere.
-        return 0
-
-    optimizer_name = optimizer.__class__.__name__.lower()
-
-    if "adam" in optimizer_name or "nadam" in optimizer_name or "adamax" in optimizer_name:
-        return 2  # first and second moments
-    if "adafactor" in optimizer_name:
-        # Adafactor keeps factored second moment states in practice (approx 2 slots)
-        return 2
-    if "rmsprop" in optimizer_name:
-        # mean_square plus momentum (if enabled)
-        has_momentum = getattr(optimizer, "momentum", 0) > 0
-        return 2 if has_momentum else 1
-    if "adagrad" in optimizer_name:
-        return 1
-    if "adadelta" in optimizer_name:
-        return 2
-    if "ftrl" in optimizer_name:
-        # accumulators + linear slots
-        return 2
-    if "sgd" in optimizer_name:
-        return 1 if getattr(optimizer, "momentum", 0) > 0 else 0
-
-    # Default to two slots for unknown adaptive optimizers.
-    return 2
-
-
-def _iter_tensor_shapes(shapes: Union[tf.TensorShape, Iterable, None]) -> Iterable[tf.TensorShape]:
-    """Yield TensorShape objects from possibly nested iterables."""
-
-    if shapes is None:
-        return
-
-    if isinstance(shapes, tf.TensorShape):
-        yield shapes
-        return
-
-    if isinstance(shapes, (tuple, list)):
-        # Distinguish between a single shape tuple ``(None, 128)`` and a list of shapes.
-        if not shapes:
-            return
-
-        if all(isinstance(dim, (int, type(None))) for dim in shapes):
-            yield tf.TensorShape(shapes)
-            return
-
-        for item in shapes:
-            yield from _iter_tensor_shapes(item)
-        return
-
-    # Fallback: best effort conversion.
-    yield tf.TensorShape(shapes)
-
-
-def _shape_num_elements(
-    shape: Union[tf.TensorShape, Iterable, None], batch_size: int
-) -> int:
-    """Resolve the number of elements encoded by ``shape``.
-
-    Args:
-        shape (Union[tf.TensorShape, Iterable, None]): Tensor shape that may
-            include ``None`` dimensions.
-        batch_size (int): Batch dimension used to replace leading ``None``.
-
-    Returns:
-        int: Total element count after resolving undefined dimensions.
-    """
-
-    if shape is None:
-        return 0
-
-    tensor_shape = tf.TensorShape(shape)
-    if tensor_shape.rank is None:
-        return 0
-
-    resolved_dims = []
-    for index, dim in enumerate(tensor_shape):
-        if dim is None:
-            resolved_dims.append(batch_size if index == 0 else 1)
-        else:
-            resolved_dims.append(int(dim))
-
-    if not resolved_dims:
-        return 0
-
-    return int(math.prod(resolved_dims))
-
-
-def _tensor_num_bytes(
-    tensor: Any,
-    batch_size: int,
-    dtype_bytes: int,
-) -> int:
-    """Compute the memory footprint of ``tensor`` using symbolic metadata.
-
-    Args:
-        tensor (Any): Keras tensor or placeholder exposing a ``shape`` attribute.
-        batch_size (int): Batch dimension used for ``None`` resolution.
-        dtype_bytes (int): Byte width of the tensor dtype.
-
-    Returns:
-        int: Size of the tensor in bytes or ``0`` if the shape is unknown.
-    """
-
-    shape = getattr(tensor, "shape", None)
-    elements = _shape_num_elements(shape, batch_size)
-    return elements * dtype_bytes
-
-
-def _estimate_graph_activation_bytes(
-    model: keras.Model,
-    batch_size: int,
-    activation_bytes: int,
-) -> int:
-    """Estimate retained activation bytes for graph models.
-
-    Args:
-        model (keras.Model): Graph model exposing ``_nodes_by_depth``.
-        batch_size (int): Batch dimension used for symbolic tensors.
-        activation_bytes (int): Byte width used for activation tensors.
-
-    Returns:
-        int: Number of bytes held by tensors that survive until the backward pass.
-
-    Raises:
-        ValueError: If the model lacks graph metadata for static analysis.
-
-    Notes:
-        Reverse-mode autodiff keeps forward tensors alive until gradients have been
-        computed. The returned value therefore sums unique forward tensors and the
-        inputs to trainable operations instead of simulating a forward liveness
-        curve that frees tensors after their last consumer.
-    """
-
-    nodes_by_depth = getattr(model, "_nodes_by_depth", None)
-    if not nodes_by_depth:
-        raise ValueError("Model does not expose graph nodes for static analysis.")
-
-    ordered_nodes = []
-    for depth in sorted(nodes_by_depth.keys()):
-        ordered_nodes.extend(nodes_by_depth[depth])
-
-    retained_tensor_sizes: Dict[int, int] = {}
-
-    for node in ordered_nodes:
-        input_tensors = tf.nest.flatten(getattr(node, "input_tensors", ()))
-        output_tensors = tf.nest.flatten(getattr(node, "output_tensors", ()))
-
-        for tensor in output_tensors:
-            tensor_id = id(tensor)
-            if tensor_id in retained_tensor_sizes:
-                continue
-            size_bytes = _tensor_num_bytes(tensor, batch_size, activation_bytes)
-            if size_bytes <= 0:
-                continue
-            retained_tensor_sizes[tensor_id] = size_bytes
-
-        layer = getattr(node, "layer", None)
-        trainable_weights = getattr(layer, "trainable_weights", None)
-        if trainable_weights:
-            for tensor in input_tensors:
-                tensor_id = id(tensor)
-                if tensor_id in retained_tensor_sizes:
-                    continue
-                size_bytes = _tensor_num_bytes(tensor, batch_size, activation_bytes)
-                if size_bytes <= 0:
-                    continue
-                retained_tensor_sizes[tensor_id] = size_bytes
-
-    retained_bytes = sum(retained_tensor_sizes.values())
-    return int(retained_bytes)
-
-
-def _estimate_peak_activation_bytes(
-    model: keras.Model,
-    batch_size: int,
-    activation_bytes: int,
-    *,
-    activation_overhead_factor: float = 0.10,
-) -> int:
-    """Estimate activation residency including transient backward buffers.
-
-    Args:
-        model (keras.Model): Model to analyse for activation liveness.
-        batch_size (int): Batch size assumed for symbolic tensors.
-        activation_bytes (int): Byte width used for activation tensors.
-        activation_overhead_factor (float): Fraction of forward bytes kept to
-            approximate short-lived backward buffers.
-
-    Returns:
-        int: Estimated activation memory in bytes.
-    """
-
-    try:
-        peak_forward = _estimate_graph_activation_bytes(
-            model, batch_size, activation_bytes
-        )
-    except Exception:
-        total_elements = 0
+def _get_precision_bytes(model: keras.Model) -> int:
+    """Determine bytes per parameter based on model's actual dtype."""
+    if hasattr(model, "dtype"):
+        dtype = str(model.dtype)
+    else:
+        # Check first layer's dtype
         for layer in model.layers:
-            output_shapes = getattr(layer, "output_shape", None)
-            if output_shapes is None and hasattr(layer, "output"):
-                output_shapes = tf.keras.backend.int_shape(layer.output)
+            if hasattr(layer, "dtype"):
+                dtype = str(layer.dtype)
+                break
+        else:
+            dtype = "float32"  # default
 
-            for shape in _iter_tensor_shapes(output_shapes):
-                total_elements += _shape_num_elements(shape, batch_size)
-
-            if getattr(layer, "trainable_weights", None):
-                input_shapes = getattr(layer, "input_shape", None)
-                if input_shapes is None and hasattr(layer, "input"):
-                    input_shapes = tf.keras.backend.int_shape(layer.input)
-
-                for shape in _iter_tensor_shapes(input_shapes):
-                    total_elements += _shape_num_elements(shape, batch_size)
-
-        peak_forward = total_elements * activation_bytes
-
-    if peak_forward <= 0:
-        return 0
-
-    overhead = peak_forward * activation_overhead_factor
-    return int(peak_forward + overhead)
+    if "float16" in dtype or "half" in dtype:
+        return 2
+    elif "float32" in dtype:
+        return 4
+    elif "float64" in dtype:
+        return 8
+    else:
+        return 4  # default to fp32
 
 
-def _estimate_device_overhead_bytes() -> int:
-    """Estimate baseline runtime overhead for the active accelerator.
+def _get_optimizer_state_factor(model: keras.Model) -> int:
+    """Determine optimizer state factor from compiled model."""
+    if not hasattr(model, "optimizer") or model.optimizer is None:
+        return 3  # default to Adam-like
 
-    Returns:
-        int: Bytes reserved for device runtime, allocator, and workspace needs.
-    """
+    optimizer_name = model.optimizer.__class__.__name__.lower()
 
-    cpu_floor = 128 * 1024 * 1024  # 128 MB accounts for TF runtime caches.
-    gpu_floor = 384 * 1024 * 1024  # 384 MB approximates CUDA context + allocator.
-    gpu_fraction = 0.12
-    gpu_cap_fraction = 0.25
+    if "adam" in optimizer_name:
+        return 3  # param + momentum + velocity
+    elif "sgd" in optimizer_name:
+        # Check if momentum is used
+        if hasattr(model.optimizer, "momentum") and model.optimizer.momentum > 0:
+            return 2  # param + momentum
+        else:
+            return 1  # param only
+    elif "rmsprop" in optimizer_name:
+        return 3  # param + accumulator + momentum
+    elif "adagrad" in optimizer_name:
+        return 2  # param + accumulator
+    elif "adadelta" in optimizer_name:
+        return 3  # param + accumulator + delta
+    else:
+        return 3  # default to Adam-like
 
+
+def _calculate_activation_memory(model: keras.Model, bytes_per_param: int) -> int:
+    """Calculate activation memory needed during forward/backward pass."""
+    try:
+        # Get input shape from model
+        if hasattr(model, "input_shape") and model.input_shape:
+            input_shape = model.input_shape
+            if isinstance(input_shape, list):
+                input_shape = input_shape[0]
+
+            # Use batch size of 1 to get per-sample memory, then multiply by actual batch
+            if input_shape[0] is None:
+                dummy_shape = (1,) + input_shape[1:]
+            else:
+                dummy_shape = input_shape
+        else:
+            # Fallback: estimate based on total parameters
+            return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+
+        # Create dummy input and trace through model
+        dummy_input = tf.random.normal(dummy_shape)
+        total_elements = 0
+        x = dummy_input
+
+        for layer in model.layers:
+            try:
+                x = layer(x)
+                if hasattr(x, "shape"):
+                    elements = tf.reduce_prod(x.shape[1:]).numpy()  # Exclude batch dimension
+                    total_elements += elements
+            except:
+                continue
+
+        # Memory per sample * 2 (for gradients) * bytes_per_param
+        return int(total_elements * 2 * bytes_per_param)
+
+    except Exception:
+        # Fallback calculation
+        return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+
+
+def _get_framework_overhead() -> int:
+    """Calculate framework overhead based on available GPU memory."""
     try:
         gpus = tf.config.experimental.list_physical_devices("GPU")
         if gpus:
-            details = tf.config.experimental.get_device_details(gpus[0])
-            memory_limit = (
-                details.get("memory_limit") if isinstance(details, dict) else None
-            )
-            if memory_limit:
-                baseline = int(memory_limit * gpu_fraction)
-                cap = int(memory_limit * gpu_cap_fraction)
-                overhead = max(gpu_floor, min(baseline, cap))
-                return overhead
-            return gpu_floor
-    except Exception:
-        pass
+            # Scale overhead based on GPU memory (roughly 5-10% of total memory)
+            gpu_details = tf.config.experimental.get_memory_info(gpus[0])
+            total_gpu_memory = gpu_details["total"]
+            return int(total_gpu_memory * 0.07)  # 7% of total GPU memory
+        else:
+            return 512 * 1024 * 1024  # 512 MB for CPU training
+    except:
+        return 1024 * 1024 * 1024  # 1 GB default
 
-    return cpu_floor
 
 # ———————————————————————————————————————————————————————————————————————————— #
 
+
 def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
-    """Estimate the VRAM footprint required to train ``model``.
+    """
+    Estimate total VRAM needed for training a Keras model in bytes.
 
     Args:
-        model (keras.Model): Model to analyse. ``model`` must be built so that
-            layer shapes are available. Functional/Sequential models receive a
-            static liveness sweep; subclassed models fall back to a conservative
-            approximation.
-        batch_size (int): Mini-batch size used during training.
+        model: Keras model object
+        batch_size: Training batch size
 
     Returns:
-        int: Estimated memory requirement in bytes including tensors and runtime
-        overhead.
-
-    Notes:
-        The estimation assumes that variable tensors and optimizer slots use the
-        variable dtype while forward activations follow the compute dtype.
-        Activation residency leverages a static liveness analysis for graph
-        models and reverts to a parameter-proportional upper bound when graph
-        structure is unavailable.
-
-    Warnings:
-        This function produces an analytical approximation. CUDA workspaces,
-        allocator behaviour, and layer-specific buffers can change with driver
-        versions or custom ops. Always validate against runtime telemetry when
-        operating close to device limits.
-
-    Raises:
-        ValueError: If ``batch_size`` is not positive.
+        Total memory needed in bytes
     """
-
-    if batch_size <= 0:
-        raise ValueError("batch_size must be a positive integer")
-
     # Get model characteristics
     trainable_params = _get_model_trainable_params(model)
-    non_trainable_params = _get_model_non_trainable_params(model)
-    variable_bytes, compute_bytes = _get_precision_bytes(model)
-    slot_factor = _get_optimizer_slot_factor(model)
+    bytes_per_param = _get_precision_bytes(model)
+    state_factor = _get_optimizer_state_factor(model)
 
-    # Parameter tensors (weights)
-    weight_bytes = trainable_params * variable_bytes
-    non_trainable_bytes = non_trainable_params * variable_bytes
+    # Calculate memory components
+    param_memory = trainable_params * bytes_per_param * state_factor
+    activation_memory_per_sample = _calculate_activation_memory(model, bytes_per_param)
+    activation_memory = activation_memory_per_sample * batch_size
+    framework_overhead = _get_framework_overhead()
 
-    # Gradients are materialised in the variable dtype when applied.
-    gradient_bytes = trainable_params * variable_bytes
-
-    # Optimizer slots (e.g., Adam moments, momentum buffers)
-    optimizer_slot_bytes = trainable_params * variable_bytes * slot_factor
-
-    # Peak forward activations retained by autodiff plus transient buffers.
-    activation_memory = _estimate_peak_activation_bytes(
-        model,
-        batch_size,
-        activation_bytes=compute_bytes,
-    )
-
-    base_memory = weight_bytes + non_trainable_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory
-    framework_overhead = _estimate_device_overhead_bytes()
-
-    return int(base_memory + framework_overhead)
+    return param_memory + activation_memory + framework_overhead
 
 
 def prune_model_by_config(
