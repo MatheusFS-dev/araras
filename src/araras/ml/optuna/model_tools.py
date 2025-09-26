@@ -333,7 +333,7 @@ def prune_model_by_config(
 def plot_model_param_distribution(
     build_model_fn: Callable[[optuna.Trial], tf.keras.Model],
     bytes_per_param: int,
-    batch_size: int = 1,
+    batch_size: Union[int, Iterable[int]] = 1,
     n_trials: int = 1000,
     fig_save_path: Optional[str] = None,
     figsize: Tuple[int, int] = (18, 6),
@@ -362,7 +362,8 @@ def plot_model_param_distribution(
         build_model_fn: Callable that receives an Optuna ``Trial`` and returns a compiled
             :class:`tf.keras.Model`.
         bytes_per_param: Number of bytes used to store each parameter.
-        batch_size: Batch size used when estimating the training memory.
+        batch_size: Batch size used when estimating the training memory. Can be a single
+            int or an iterable of ints; when multiple values are provided they are all evaluated.
         n_trials: Total number of random trials to sample.
         fig_save_path: Optional path to save the figure. If ``None`` and ``show_plot`` is
             ``True``, the figure is only displayed.
@@ -393,9 +394,23 @@ def plot_model_param_distribution(
     if logs_dir:
         os.makedirs(logs_dir, exist_ok=True)
 
+    if isinstance(batch_size, (int, np.integer)):
+        batch_sizes = [int(batch_size)]
+    elif isinstance(batch_size, (list, tuple)):
+        if not batch_size:
+            raise ValueError("batch_size iterable must contain at least one value.")
+        normalized_batch_sizes = []
+        for value in batch_size:
+            if not isinstance(value, (int, np.integer)):
+                raise TypeError("batch_size iterable must contain only integers.")
+            normalized_batch_sizes.append(int(value))
+        batch_sizes = list(dict.fromkeys(normalized_batch_sizes))
+    else:
+        raise TypeError("batch_size must be an int or a list/tuple of ints.")
+
     param_counts = []
     model_sizes_mb = []
-    training_memory = []
+    training_memory_map = {bs: [] for bs in batch_sizes}
     collected_params = []
 
     progress_iter = range(n_trials)
@@ -433,8 +448,11 @@ def plot_model_param_distribution(
             size_mb = (n_params * bytes_per_param) / (8 * 1024 * 1024)
             model_sizes_mb.append(size_mb)
 
-            training_memory_mb = estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024)
-            training_memory.append(training_memory_mb)
+            for batch in batch_sizes:
+                training_memory_mb = (
+                    estimate_training_memory(model, batch_size=batch) / (1024 * 1024)
+                )
+                training_memory_map[batch].append(training_memory_mb)
             collected_params.append(trial.params)
 
             if plot_model_dir:
@@ -486,21 +504,35 @@ def plot_model_param_distribution(
             tf.keras.backend.clear_session()
             gc.collect()
 
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
-    axes[0].hist(param_counts, bins=100, color="black")
-    axes[0].set_xlabel("Number of parameters")
-    axes[0].set_ylabel("Frequency")
-    axes[0].set_title("Parameter count distribution")
+    total_axes = 2 + len(batch_sizes)
+    base_axes = 3
+    if total_axes != base_axes:
+        width_scale = total_axes / base_axes
+        dynamic_figsize = (figsize[0] * width_scale, figsize[1])
+    else:
+        dynamic_figsize = figsize
+    fig, axes = plt.subplots(1, total_axes, figsize=dynamic_figsize)
+    if isinstance(axes, np.ndarray):
+        axes_list = axes.ravel().tolist()
+    else:
+        axes_list = [axes]
 
-    axes[1].hist(model_sizes_mb, bins=100, color="black")
-    axes[1].set_xlabel("Model size (MB)")
-    axes[1].set_ylabel("Frequency")
-    axes[1].set_title("Model size distribution")
+    axes_list[0].hist(param_counts, bins=100, color="black")
+    axes_list[0].set_xlabel("Number of parameters")
+    axes_list[0].set_ylabel("Frequency")
+    axes_list[0].set_title("Parameter count distribution")
 
-    axes[2].hist(training_memory, bins=100, color="black")
-    axes[2].set_xlabel("Training memory (MB)")
-    axes[2].set_ylabel("Frequency")
-    axes[2].set_title("Training memory distribution")
+    axes_list[1].hist(model_sizes_mb, bins=100, color="black")
+    axes_list[1].set_xlabel("Model size (MB)")
+    axes_list[1].set_ylabel("Frequency")
+    axes_list[1].set_title("Model size distribution")
+
+    for index, batch in enumerate(batch_sizes):
+        axis = axes_list[2 + index]
+        axis.hist(training_memory_map[batch], bins=100, color="black")
+        axis.set_xlabel("Training memory (MB)")
+        axis.set_ylabel("Frequency")
+        axis.set_title(f"Training memory distribution (batch={batch})")
 
     plt.tight_layout()
 
@@ -513,15 +545,24 @@ def plot_model_param_distribution(
         plt.close(fig)
 
     if csv_path:
-        df = pd.DataFrame(
-            {
-                "param_count": param_counts,
-                "model_size_mb": model_sizes_mb,
-                "training_memory_mb": training_memory,
-                "params": collected_params,
-            }
-        )
-        df = df.sort_values("training_memory_mb", ascending=False)
+        df_data = {
+            "param_count": param_counts,
+            "model_size_mb": model_sizes_mb,
+            "params": collected_params,
+        }
+        if len(batch_sizes) == 1:
+            df_data["training_memory_mb"] = training_memory_map[batch_sizes[0]]
+        else:
+            for batch in batch_sizes:
+                column_name = f"training_memory_mb_batch_{batch}"
+                df_data[column_name] = training_memory_map[batch]
+        df = pd.DataFrame(df_data)
+        if len(batch_sizes) == 1:
+            df = df.sort_values("training_memory_mb", ascending=False)
+        else:
+            memory_columns = [f"training_memory_mb_batch_{batch}" for batch in batch_sizes]
+            df["max_training_memory_mb"] = df[memory_columns].max(axis=1)
+            df = df.sort_values("max_training_memory_mb", ascending=False)
         df.to_csv(csv_path, index=False)
 
     if corr_csv_path:
