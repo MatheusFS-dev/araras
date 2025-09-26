@@ -428,8 +428,7 @@ def get_model_usage_stats(
         except Exception:
             # RAPL interface not present or unreadable
             raise RuntimeError(
-                f"\033[91mUnable to read CPU power from {rapl_path}. "
-                "Ensure the path is correct and accessible, or run with sudo.\033[0m"
+                f"Unable to read CPU power from {rapl_path}. Ensure the path is correct and accessible, or run with sudo."
             )
 
     dummy_inputs = None
