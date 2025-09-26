@@ -25,8 +25,8 @@ class ColorFormatter(logging.Formatter):
         """Initialize the formatter with the given format strings.
 
         Args:
-            fmt: Log message format string.
-            datefmt: Optional date format string.
+            fmt (str): Log message format string.
+            datefmt (str | None): Optional date format string.
         """
         super().__init__(fmt, datefmt)
         self._colors = {

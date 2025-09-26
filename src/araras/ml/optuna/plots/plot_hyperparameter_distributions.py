@@ -35,19 +35,19 @@ def plot_hyperparameter_distributions(
     displayed without the KDE curve so that the analysis can proceed.
 
     Args:
-        df: DataFrame containing the hyperparameter values.
-        numeric_cols: Columns interpreted as numeric hyperparameters.
-        categorical_cols: Columns interpreted as categorical hyperparameters.
-        dirs: Dictionary of directories where plots and data files are saved.
-        param_name_mapping: Optional mapping from parameter name to a more
+        df (pd.DataFrame): DataFrame containing the hyperparameter values.
+        numeric_cols (List[str]): Columns interpreted as numeric hyperparameters.
+        categorical_cols (List[str]): Columns interpreted as categorical hyperparameters.
+        dirs (Dict[str, str]): Dictionary of directories where plots and data files are saved.
+        param_name_mapping (Dict[str, str] | None): Optional mapping from parameter name to a more
             readable display name.
-        create_standalone: When ``True`` also saves each distribution as a
+        create_standalone (bool): When ``True`` also saves each distribution as a
             standalone figure.
-        create_plotly: When ``True`` saves interactive HTML versions of the
+        create_plotly (bool): When ``True`` saves interactive HTML versions of the
             generated figures.
 
     Returns:
-        ``None``. Files are written to ``dirs``.
+        None: ``None``. Files are written to ``dirs``.
 
     Raises:
         None.

@@ -26,12 +26,12 @@ class WarmupCosine(tf.keras.optimizers.schedules.LearningRateSchedule):
     Where W is warmup_steps and T is total_steps.
 
     Args:
-        base_lr: Target learning rate reached at the end of warmup and used as
+        base_lr (Any): Target learning rate reached at the end of warmup and used as
             the peak value before cosine decay starts. Accepts a float or scalar
             tensor.
-        warmup_steps: Number of optimizer steps used for linear warmup.
-        total_steps: Total number of optimizer steps for the full schedule.
-        name: Optional name scope for the schedule.
+        warmup_steps (Any): Number of optimizer steps used for linear warmup.
+        total_steps (Any): Total number of optimizer steps for the full schedule.
+        name (Any): Optional name scope for the schedule.
 
     Attributes:
         base_lr: Float, stored as Python float for serialization.
@@ -86,7 +86,7 @@ class WarmupCosine(tf.keras.optimizers.schedules.LearningRateSchedule):
         """Compute learning rate at a given global optimizer step.
 
         Args:
-          step: Integer step index, scalar Tensor or Python int.
+          step (Any): Integer step index, scalar Tensor or Python int.
 
         Returns:
           Scalar Tensor, dtype float32, the learning rate for this step.

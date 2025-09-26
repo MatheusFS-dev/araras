@@ -39,13 +39,13 @@ def _get_improvement_info(
     """Collect improvement and error values for each completed trial.
 
     Args:
-        study: The Optuna study being analysed.
-        get_error: If ``True`` also compute error estimates using
+        study (optuna.Study): The Optuna study being analysed.
+        get_error (bool): If ``True`` also compute error estimates using
             ``error_evaluator``.
-        improvement_evaluator: Evaluator used to estimate potential improvement
+        improvement_evaluator (Optional[BaseImprovementEvaluator]): Evaluator used to estimate potential improvement
             after each trial. When ``None`` a :class:`RegretBoundEvaluator` is
             used.
-        error_evaluator: Evaluator used to compute error bars. If ``None`` a
+        error_evaluator (Optional[BaseErrorEvaluator]): Evaluator used to compute error bars. If ``None`` a
             sensible default is chosen based on ``improvement_evaluator``.
 
     Returns:
@@ -105,8 +105,8 @@ def _get_y_range(info: _ImprovementInfo, min_n_trials: int) -> tuple[float, floa
     """Compute padded y-axis limits for the improvement plot.
 
     Args:
-        info: Improvement data returned by :func:`_get_improvement_info`.
-        min_n_trials: Minimum number of trials before termination analysis.
+        info (_ImprovementInfo): Improvement data returned by :func:`_get_improvement_info`.
+        min_n_trials (int): Minimum number of trials before termination analysis.
 
     Returns:
         tuple[float, float]: Minimum and maximum y values including padding.
@@ -144,14 +144,14 @@ def plot_terminator_improvement(
     Plotly version can also be generated.
 
     Args:
-        study: Optuna study containing optimization results.
-        dirs: Dictionary with output directories for saving figures.
-        plot_error: Whether to include error bars in the plot.
-        print_variance: If ``True`` prints the variance of the last few trials.
-        improvement_evaluator: Custom improvement evaluator instance.
-        error_evaluator: Custom error evaluator instance.
-        min_n_trials: Minimum number of completed trials before plotting.
-        create_plotly: Whether to save an interactive HTML version of the plot.
+        study (optuna.Study): Optuna study containing optimization results.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        plot_error (bool): Whether to include error bars in the plot.
+        print_variance (bool): If ``True`` prints the variance of the last few trials.
+        improvement_evaluator (Optional[BaseImprovementEvaluator]): Custom improvement evaluator instance.
+        error_evaluator (Optional[BaseErrorEvaluator]): Custom error evaluator instance.
+        min_n_trials (int): Minimum number of completed trials before plotting.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
 
     Returns:
         None: Images are stored under the directories specified in ``dirs``.

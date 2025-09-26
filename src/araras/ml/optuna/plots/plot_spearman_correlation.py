@@ -21,10 +21,10 @@ def plot_spearman_correlation(
     """Visualise rank-based correlations among numeric parameters and loss.
 
     Args:
-        df: DataFrame containing numeric parameters and loss values.
-        numeric_cols: Names of numeric parameters to include in the analysis.
-        dirs: Mapping of output directory identifiers to file-system paths.
-        create_plotly: Whether to emit an interactive HTML heatmap in addition
+        df (pd.DataFrame): DataFrame containing numeric parameters and loss values.
+        numeric_cols (List[str]): Names of numeric parameters to include in the analysis.
+        dirs (Dict[str, str]): Mapping of output directory identifiers to file-system paths.
+        create_plotly (bool): Whether to emit an interactive HTML heatmap in addition
             to the static figure.
 
     Returns:

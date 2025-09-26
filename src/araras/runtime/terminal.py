@@ -20,7 +20,7 @@ class SimpleTerminalLauncher:
         """Set the supress_tf_warnings attribute.
 
         Args:
-            value: Boolean indicating whether to suppress TensorFlow warnings.
+            value (bool): Boolean indicating whether to suppress TensorFlow warnings.
         """
         self.supress_tf_warnings = value
 
@@ -34,11 +34,11 @@ class SimpleTerminalLauncher:
         that all other log messages remain visible.
 
         Args:
-            command: Sequence of command arguments to execute.
-            working_dir: Directory where ``command`` should run.
+            command (List[str]): Sequence of command arguments to execute.
+            working_dir (str): Directory where ``command`` should run.
 
         Returns:
-            The ``subprocess.Popen`` instance representing the terminal process.
+            subprocess.Popen: The ``subprocess.Popen`` instance representing the terminal process.
             The object includes a ``pid_file`` attribute with the path to the
             temporary PID file.
 

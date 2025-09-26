@@ -111,16 +111,15 @@ def save_trial_params_to_file(filepath: str, params: dict[str, float], **kwargs:
     """Persist trial parameters and metadata in a plain-text file.
 
     Args:
-        filepath: Destination where the summary should be written.
-        params: Dictionary containing the hyperparameters evaluated during the
+        filepath (str): Destination where the summary should be written.
+        params (dict[str, float]): Dictionary containing the hyperparameters evaluated during the
             trial.
-        **kwargs: Additional metadata such as trial identifier, rank or loss
+        **kwargs (str): Additional metadata such as trial identifier, rank or loss
             values. Each keyword is emitted as a ``key: value`` line before the
             parameter block.
 
     Raises:
         OSError: If the file cannot be opened or written.
-
     """
     with open(filepath, "w") as file:
         # Write metadata key-value pairs first
@@ -649,15 +648,15 @@ def log_trial_error(
         mechanism.
 
     Args:
-        trial: Trial that encountered the error.
-        exc: Exception raised during the trial execution.
-        logs_dir: Directory where the error log file should be saved.
-        prune_on: Mapping of exception types to substrings that trigger
+        trial (Any): Trial that encountered the error.
+        exc (Any): Exception raised during the trial execution.
+        logs_dir (Any): Directory where the error log file should be saved.
+        prune_on (Any): Mapping of exception types to substrings that trigger
             pruning. Defaults to ``{tf.errors.ResourceExhaustedError: None,
             tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
-        propagate: Mapping of exception types to substrings that trigger
+        propagate (Any): Mapping of exception types to substrings that trigger
             propagation. Defaults to ``{optuna.exceptions.TrialPruned: None}``.
-        force_crash_oom: Minimum number of consecutive
+        force_crash_oom (int | None): Minimum number of consecutive
             ``tf.errors.ResourceExhaustedError``, ``tf.errors.InternalError`` or
             ``tf.errors.UnavailableError`` exceptions before the process is
             aborted. Defaults to ``10``; ``None`` disables this behaviour.
@@ -765,26 +764,26 @@ def run_study(
           ``None`` disables the corresponding callback.
 
     Args:
-        objective: Function that trains a model and returns the metric to
+        objective (Callable[[optuna.Trial], float]): Function that trains a model and returns the metric to
             optimize.
-        run_dir: Base directory for the study run.
-        epochs: Number of training epochs per trial.
-        num_trials: Total number of trials to evaluate.
-        sampler_seed: Seed for the Optuna sampler.
-        direction: Optimization direction, e.g. ``"minimize"`` or ``"maximize"``.
-        top_k: Number of best trials to keep after optimization.
-        rank_key: Study attribute used for ranking trials.
-        order: Sorting order for ranking trials.
-        extra_attrs: Additional user attributes copied when saving the top trials.
-        pruner: Optional custom Optuna pruner. Defaults to :class:`HyperbandPruner`.
-        sampler: Optional custom Optuna sampler. Defaults to :class:`TPESampler`.
-        patience: Number of completed trials allowed without improvement before
+        run_dir (str): Base directory for the study run.
+        epochs (int): Number of training epochs per trial.
+        num_trials (int): Total number of trials to evaluate.
+        sampler_seed (int): Seed for the Optuna sampler.
+        direction (str): Optimization direction, e.g. ``"minimize"`` or ``"maximize"``.
+        top_k (int): Number of best trials to keep after optimization.
+        rank_key (str): Study attribute used for ranking trials.
+        order (str): Sorting order for ranking trials.
+        extra_attrs (Sequence[str] | None): Additional user attributes copied when saving the top trials.
+        pruner (optuna.pruners.BasePruner | None): Optional custom Optuna pruner. Defaults to :class:`HyperbandPruner`.
+        sampler (optuna.samplers.BaseSampler | None): Optional custom Optuna sampler. Defaults to :class:`TPESampler`.
+        patience (int): Number of completed trials allowed without improvement before
             stopping the study. ``None`` disables this check.
-        prune_threshold: Number of consecutive pruned trials that triggers early
+        prune_threshold (int): Number of consecutive pruned trials that triggers early
             stopping. ``None`` disables this check.
-        variance_threshold: Improvement variance threshold used to detect
+        variance_threshold (float): Improvement variance threshold used to detect
             stagnation. ``None`` disables this check.
-        **kwargs: Additional keyword arguments passed to the objective.
+        **kwargs (Any): Additional keyword arguments passed to the objective.
             This is merged with default args:
                 - backup_dir: Directory for temporary trial backups.
                 - model_dir: Directory to save trained models.

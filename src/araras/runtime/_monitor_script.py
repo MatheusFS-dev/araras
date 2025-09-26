@@ -34,10 +34,10 @@ def _parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     monitored sequentially.
 
     Args:
-        argv: Optional list of arguments to parse instead of ``sys.argv``.
+        argv (Optional[List[str]]): Optional list of arguments to parse instead of ``sys.argv``.
 
     Returns:
-        Parsed CLI arguments.
+        argparse.Namespace: Parsed CLI arguments.
     """
 
     parser = argparse.ArgumentParser(
@@ -138,10 +138,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         notebook being monitored so that relative paths resolve correctly.
 
     Args:
-        argv: Optional list of arguments to parse instead of ``sys.argv``.
+        argv (Optional[List[str]]): Optional list of arguments to parse instead of ``sys.argv``.
 
     Returns:
-        ``None``
+        None: ``None``
 
     Raises:
         SystemExit: If invalid options are supplied and argument parsing

@@ -29,7 +29,7 @@ def __getattr__(name: str):
     """Lazily import optional subpackages.
 
     Args:
-        name: Name of a subpackage listed in ``__all__``.
+        name (str): Name of a subpackage listed in ``__all__``.
 
     Returns:
         The requested module once imported.

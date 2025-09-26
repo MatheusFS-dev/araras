@@ -50,7 +50,7 @@ def __getattr__(name: str):
     """Load attributes from submodules on demand.
 
     Args:
-        name: Name of the attribute listed in :data:`__all__`.
+        name (str): Name of the attribute listed in :data:`__all__`.
 
     Returns:
         The requested attribute from its defining submodule.

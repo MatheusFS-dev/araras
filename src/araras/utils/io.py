@@ -11,8 +11,8 @@ def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
     """Create a run directory with an incremented numeric suffix.
 
     Args:
-        prefix: Prefix used in the directory name (for example ``"run"``).
-        base_dir: Parent directory where run folders should be created. The
+        prefix (str): Prefix used in the directory name (for example ``"run"``).
+        base_dir (str): Parent directory where run folders should be created. The
             folder is created when it does not already exist.
 
     Returns:
@@ -49,7 +49,7 @@ def get_caller_stem(remove: Optional[str] = "temp_monitor_") -> str:
     """Return the stem name of the script or notebook that invoked this helper.
 
     Args:
-        remove: Optional substring to remove from the detected stem.
+        remove (Optional[str]): Optional substring to remove from the detected stem.
 
     Returns:
         str: Stem name derived from VS Code, Python script or notebook

@@ -15,9 +15,9 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_p
     interactive Plotly version can also be saved.
 
     Args:
-        study: Optuna study containing the trials.
-        dirs: Dictionary with output directories for saving figures.
-        create_plotly: Whether to save an interactive HTML version of the plot.
+        study (optuna.Study): Optuna study containing the trials.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
 
     Returns:
         None: The figure is persisted to the directories referenced in ``dirs``.

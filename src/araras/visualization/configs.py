@@ -8,7 +8,7 @@ def config_plt(style: str = "single-column") -> None:
     """Configure matplotlib defaults for IEEE-style figures.
 
     Args:
-        style: Figure layout preset to apply. Supported values are
+        style (str): Figure layout preset to apply. Supported values are
             ``"single-column"`` and ``"double-column"``.
 
     Raises:

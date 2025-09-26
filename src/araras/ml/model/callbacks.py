@@ -28,26 +28,26 @@ def get_callbacks_model(
         drastically increases memory consumption, especially with large models.
 
     Args:
-        backup_dir: Directory where the backup files will be stored. If
+        backup_dir (str | None): Directory where the backup files will be stored. If
             ``None``, the backup callback is omitted.
-        checkpoint_dir: Directory where the checkpoint files will be stored. If
+        checkpoint_dir (str | None): Directory where the checkpoint files will be stored. If
             ``None``, the checkpoint callback is omitted.
-        tensorboard_logs: Directory where TensorBoard logs will be stored. If
+        tensorboard_logs (str | None): Directory where TensorBoard logs will be stored. If
             ``None``, the TensorBoard callback is omitted.
-        early_stopping_patience: Number of epochs with no improvement after
+        early_stopping_patience (int | None): Number of epochs with no improvement after
             which training will be stopped. Set to ``None`` to disable the
             ``EarlyStopping`` callback. Defaults to ``10``.
-        reduce_lr_patience: Number of epochs with no improvement before the
+        reduce_lr_patience (int | None): Number of epochs with no improvement before the
             learning rate is reduced. Set to ``None`` to disable the
             ``ReduceLROnPlateau`` callback. Defaults to ``5``.
-        restore_best_weights: Whether to restore model weights from the epoch
+        restore_best_weights (bool): Whether to restore model weights from the epoch
             with the best monitored metric. When ``True`` and
             ``early_stopping_patience`` is ``None``, ``checkpoint_dir`` **must**
             be provided so the best weights can be reloaded at the end of
             training. Defaults to ``True``.
 
     Returns:
-        A list of callbacks to pass into ``model.fit``.
+        List[tf.keras.callbacks.Callback]: A list of callbacks to pass into ``model.fit``.
 
     Raises:
         ValueError: If ``restore_best_weights`` is ``True`` while both

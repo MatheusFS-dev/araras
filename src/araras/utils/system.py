@@ -88,7 +88,7 @@ def measure_current_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> L
     """Collect system resource usage measurements for requested metrics.
 
     Args:
-        metrics: Comma-separated list of metric identifiers to collect. Supported
+        metrics (str): Comma-separated list of metric identifiers to collect. Supported
             values are ``cpu``, ``ram``, ``disk``, ``gpu_ram`` and ``all``.
             Values are case-insensitive and surrounding whitespace is ignored.
 
@@ -146,12 +146,12 @@ def format_metric_summary_line(
     """Format metric snapshots into a single descriptive line.
 
     Args:
-        label: Human readable label for the metric (e.g. ``"System RAM"``).
-        before: Baseline value captured before executing the workload.
-        current: Peak or final value captured during the workload.
-        difference: Delta between ``current`` and ``before``.
-        is_byte_metric: Flag indicating whether the values represent bytes.
-        percent_precision: Decimal precision when formatting percentage metrics.
+        label (str): Human readable label for the metric (e.g. ``"System RAM"``).
+        before (Union[None, str, int, float]): Baseline value captured before executing the workload.
+        current (Union[None, str, int, float]): Peak or final value captured during the workload.
+        difference (Union[None, str, int, float]): Delta between ``current`` and ``before``.
+        is_byte_metric (bool): Flag indicating whether the values represent bytes.
+        percent_precision (int): Decimal precision when formatting percentage metrics.
 
     Returns:
         str: A formatted single-line summary such as::
@@ -227,20 +227,20 @@ class ResourceMonitor:
     and CPU utilisation, but the extraction logic can be fully customized.
 
     Args:
-        metrics: Sequence of metric identifiers to request from
+        metrics (Any): Sequence of metric identifiers to request from
             :func:`measure_current_system_resources`. If ``None`` the monitor
             requests CPU, RAM and GPU memory information.
-        target_gpu_index: Specific GPU index to summarise when multiple devices
+        target_gpu_index (Any): Specific GPU index to summarise when multiple devices
             are available. ``None`` summarises the first GPU reported by
             ``nvidia-smi``.
-        metric_extractors: Optional mapping defining how to translate the raw
+        metric_extractors (Any): Optional mapping defining how to translate the raw
             :func:`measure_current_system_resources` payload into scalar values
             for aggregation. The keys of this mapping are used as the metric
             identifiers within the resulting summary.
-        byte_metrics: Iterable containing the metric identifiers that should be
+        byte_metrics (Any): Iterable containing the metric identifiers that should be
             cast to integers because they represent quantities in bytes. Defaults
             to ``("system_ram", "gpu_ram")``.
-        sample_interval: Sampling cadence in seconds while the monitored
+        sample_interval (Any): Sampling cadence in seconds while the monitored
             callable executes. Values smaller than ``0.01`` are clamped to that
             minimum to avoid overwhelming the system.
 
@@ -284,10 +284,10 @@ class ResourceMonitor:
         """Create default extractors for CPU, RAM and GPU metrics.
 
         Args:
-            target_gpu_index: GPU index to focus on when summarising GPU metrics.
+            target_gpu_index (Optional[int]): GPU index to focus on when summarising GPU metrics.
 
         Returns:
-            Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]: Mapping of
+            MetricExtractors: Mapping of
             metric names to extractor callables.
         """
 
@@ -354,7 +354,7 @@ class ResourceMonitor:
         """Collect a snapshot of the configured metrics.
 
         Returns:
-            Dict[str, Optional[float]]: Mapping from tracked metric identifier to
+            MetricSnapshot: Mapping from tracked metric identifier to
             the extracted scalar value. Missing or failed metrics are represented
             as ``None``.
         """
@@ -384,9 +384,9 @@ class ResourceMonitor:
         """Update aggregate statistics using captured snapshots.
 
         Args:
-            before: Snapshot captured immediately before running the workload.
-            after: Snapshot captured immediately after running the workload.
-            final: Optional snapshot captured once the workload has completed.
+            before (MetricSnapshot): Snapshot captured immediately before running the workload.
+            after (MetricSnapshot): Snapshot captured immediately after running the workload.
+            final (Optional[MetricSnapshot]): Optional snapshot captured once the workload has completed.
         """
 
         for key in self._tracked_metrics:
@@ -463,13 +463,13 @@ class ResourceMonitor:
         compute the aggregated statistics.
 
         Args:
-            func: Callable to execute.
-            *args: Positional arguments forwarded to ``func``.
-            repeat: Number of times ``func`` should be executed for measurement.
-            **kwargs: Keyword arguments forwarded to ``func``.
+            func (Callable[..., TCallableReturn]): Callable to execute.
+            *args (Any): Positional arguments forwarded to ``func``.
+            repeat (int): Number of times ``func`` should be executed for measurement.
+            **kwargs (Any): Keyword arguments forwarded to ``func``.
 
         Returns:
-            Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], Any]:
+            Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]: 
             A tuple containing the aggregated metrics and the result returned by
             the last invocation of ``func``.
 
@@ -542,20 +542,20 @@ def measure_callable_resource_usage(
     """Measure system resource usage for an arbitrary callable.
 
     Args:
-        func: Callable object to execute.
-        *args: Positional arguments forwarded to ``func``.
-        metrics: Sequence of metric identifiers to request from
+        func (Callable[..., TCallableReturn]): Callable object to execute.
+        *args (Any): Positional arguments forwarded to ``func``.
+        metrics (Optional[Sequence[str]]): Sequence of metric identifiers to request from
             :func:`measure_current_system_resources`. ``None`` uses the default
             configuration from :class:`ResourceMonitor`.
-        target_gpu_index: GPU index to focus on for GPU-related metrics.
-        repeat: Number of times the callable should be executed for sampling.
-        metric_extractors: Optional custom extractor mapping for the monitor.
-        byte_metrics: Iterable of metric identifiers that should be rounded to
+        target_gpu_index (Optional[int]): GPU index to focus on for GPU-related metrics.
+        repeat (int): Number of times the callable should be executed for sampling.
+        metric_extractors (Optional[MetricExtractors]): Optional custom extractor mapping for the monitor.
+        byte_metrics (Optional[Iterable[str]]): Iterable of metric identifiers that should be rounded to
             integers when summarising results.
-        **kwargs: Keyword arguments forwarded to ``func``.
+        **kwargs (Any): Keyword arguments forwarded to ``func``.
 
     Returns:
-        Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], Any]:
+        Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]: 
         Aggregated metric summary and the callable's final return value.
     """
 
@@ -838,11 +838,11 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
     experiments.
 
     Args:
-        log_dir: Directory where log files will be written.
-        interval: Seconds between two consecutive samplings.
-        pid: Process ID whose CPU usage should also be logged. Defaults to the
+        log_dir (str): Directory where log files will be written.
+        interval (int): Seconds between two consecutive samplings.
+        pid (Optional[int]): Process ID whose CPU usage should also be logged. Defaults to the
             current process ID.
-        **kwargs: Flags indicating which resources should be logged. Supported
+        **kwargs (Any): Flags indicating which resources should be logged. Supported
             flags are ``"cpu"``, ``"ram"``, ``"gpu"``, ``"cuda"`` and
             ``"tensorflow"``.
 

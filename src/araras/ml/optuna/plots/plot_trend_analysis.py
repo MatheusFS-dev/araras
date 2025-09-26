@@ -29,14 +29,14 @@ def plot_trend_analysis(
     trends indicative of improved performance.
 
     Args:
-        df: Dataset containing both parameter values and loss metrics.
-        numeric_cols: Numeric parameter names to include in the trend analysis.
-        dirs: Directory mapping for figure, data and auxiliary outputs.
-        param_name_mapping: Optional mapping that replaces raw parameter names
+        df (pd.DataFrame): Dataset containing both parameter values and loss metrics.
+        numeric_cols (List[str]): Numeric parameter names to include in the trend analysis.
+        dirs (Dict[str, str]): Directory mapping for figure, data and auxiliary outputs.
+        param_name_mapping (Dict[str, str]): Optional mapping that replaces raw parameter names
             with presentation labels.
-        create_standalone: Whether to create per-parameter figures instead of a
+        create_standalone (bool): Whether to create per-parameter figures instead of a
             combined grid.
-        create_plotly: Whether to generate interactive Plotly versions.
+        create_plotly (bool): Whether to generate interactive Plotly versions.
 
     Returns:
         None: A combined trend figure, optional standalone plots and CSV

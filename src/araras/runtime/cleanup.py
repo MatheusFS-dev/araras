@@ -16,8 +16,8 @@ class ChildProcessCleanup:
         """Initialize cleanup manager with configurable timeouts.
 
         Args:
-            termination_timeout: Seconds to wait for graceful termination
-            kill_timeout: Seconds to wait after force kill
+            termination_timeout (float): Seconds to wait for graceful termination
+            kill_timeout (float): Seconds to wait after force kill
         """
         self._current_pid = os.getpid()
         self._exclude_pids: Set[int] = {self._current_pid}
@@ -28,10 +28,10 @@ class ChildProcessCleanup:
         """Clean up all child processes with optimized batch operations.
 
         Args:
-            exclude_pids: Additional PIDs to exclude from cleanup
+            exclude_pids (Optional[List[int]]): Additional PIDs to exclude from cleanup
 
         Returns:
-            Tuple of (terminated_count, killed_count)
+            Tuple[int, int]: Tuple of (terminated_count, killed_count)
 
         Raises:
             psutil.NoSuchProcess: If current process doesn't exist
@@ -71,10 +71,10 @@ class ChildProcessCleanup:
         """Terminate processes gracefully with parallel execution.
 
         Args:
-            processes: List of processes to terminate
+            processes (List[psutil.Process]): List of processes to terminate
 
         Returns:
-            Number of processes successfully terminated
+            int: Number of processes successfully terminated
         """
         terminated_count = 0
 
@@ -98,10 +98,10 @@ class ChildProcessCleanup:
         """Safely terminate a single process with error handling.
 
         Args:
-            process: Process to terminate
+            process (psutil.Process): Process to terminate
 
         Returns:
-            True if termination signal sent successfully, False otherwise
+            bool: True if termination signal sent successfully, False otherwise
         """
         try:
             if process.is_running():
@@ -117,11 +117,11 @@ class ChildProcessCleanup:
         """Force kill processes that didn't terminate gracefully.
 
         Args:
-            original_processes: Original list of processes to check
-            exclude_set: PIDs to exclude from force kill
+            original_processes (List[psutil.Process]): Original list of processes to check
+            exclude_set (Set[int]): PIDs to exclude from force kill
 
         Returns:
-            Number of processes force killed
+            int: Number of processes force killed
         """
         killed_count = 0
 
@@ -148,7 +148,7 @@ class ChildProcessCleanup:
         """Add a PID to the protected (exclude) list.
 
         Args:
-            pid: Process ID to protect from cleanup
+            pid (int): Process ID to protect from cleanup
         """
         self._exclude_pids.add(pid)
 
@@ -156,7 +156,7 @@ class ChildProcessCleanup:
         """Remove a PID from the protected list.
 
         Args:
-            pid: Process ID to remove from protection
+            pid (int): Process ID to remove from protection
         """
         self._exclude_pids.discard(pid)  # discard won't raise if not present
 
@@ -164,7 +164,7 @@ class ChildProcessCleanup:
         """Get current number of child processes.
 
         Returns:
-            Number of child processes (including nested children)
+            int: Number of child processes (including nested children)
         """
         try:
             current_process = psutil.Process(self._current_pid)

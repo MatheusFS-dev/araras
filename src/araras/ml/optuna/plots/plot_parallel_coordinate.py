@@ -35,11 +35,10 @@ def plot_parallel_coordinate(
     ``True`` an interactive HTML version of the plot is also saved.
 
     Args:
-        study: Optuna study containing the trials to visualize.
-        params: List of parameter names to include in the plot.
-        dirs: Dictionary with output directories used for saving figures.
-        create_plotly: Whether to save an interactive HTML version of the plot.
-
+        study (optuna.Study): Optuna study containing the trials to visualize.
+        params (List[str]): List of parameter names to include in the plot.
+        dirs (Dict[str, str]): Dictionary with output directories used for saving figures.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

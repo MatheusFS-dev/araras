@@ -33,11 +33,11 @@ def get_trial_subsets(df: pd.DataFrame, top_frac: float) -> Tuple[pd.DataFrame, 
     """Extract best and worst performing trial subsets.
 
     Args:
-        df: DataFrame with a ``loss`` column.
-        top_frac: Fraction of top trials to extract.
+        df (pd.DataFrame): DataFrame with a ``loss`` column.
+        top_frac (float): Fraction of top trials to extract.
 
     Returns:
-        Tuple of DataFrames ``(best, worst)``.
+        Tuple[pd.DataFrame, pd.DataFrame]: Tuple of DataFrames ``(best, worst)``.
     """
     n_top = max(1, int(len(df) * top_frac))
     best = df.nsmallest(n_top, "loss")
@@ -49,10 +49,10 @@ def format_numeric_value(x: float) -> Union[int, float, str]:
     """Format numeric values for readability.
 
     Args:
-        x: Numeric value to format.
+        x (float): Numeric value to format.
 
     Returns:
-        Formatted value with reduced precision when possible.
+        Union[int, float, str]: Formatted value with reduced precision when possible.
     """
     if pd.isna(x) or np.isinf(x):
         return x
@@ -67,11 +67,11 @@ def describe_numeric(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     """Generate descriptive statistics for numeric hyperparameters.
 
     Args:
-        data: DataFrame with numeric columns.
-        cols: Target column names.
+        data (pd.DataFrame): DataFrame with numeric columns.
+        cols (List[str]): Target column names.
 
     Returns:
-        DataFrame with summary statistics.
+        pd.DataFrame: DataFrame with summary statistics.
     """
     stats = []
     for col in cols:
@@ -110,11 +110,11 @@ def create_frequency_table(data: pd.DataFrame, cols: List[str]) -> pd.DataFrame:
     """Generate frequency tables for categorical hyperparameters.
 
     Args:
-        data: DataFrame containing the data.
-        cols: Categorical column names.
+        data (pd.DataFrame): DataFrame containing the data.
+        cols (List[str]): Categorical column names.
 
     Returns:
-        DataFrame with category counts and fractions.
+        pd.DataFrame: DataFrame with category counts and fractions.
     """
     rows = []
     for col in cols:
@@ -133,10 +133,10 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
     """Execute a plotting function and catch errors.
 
     Args:
-        plot_name: Name of the plot being generated.
-        func: Plotting callable.
-        *args: Positional arguments for ``func``.
-        **kwargs: Keyword arguments for ``func``.
+        plot_name (str): Name of the plot being generated.
+        func (Callable): Plotting callable.
+        *args (Any): Positional arguments for ``func``.
+        **kwargs (Any): Keyword arguments for ``func``.
 
     Notes:
         Exceptions are logged and printed; they are not raised.
@@ -163,13 +163,13 @@ def calculate_grid(
     """Calculate grid dimensions for subplots ensuring image size limits.
 
     Args:
-        n_plots: Number of subplots desired.
-        subplot_width: Width of each subplot in inches.
-        subplot_height: Height of each subplot in inches.
-        base_max_cols: Desired maximum columns before adjustment.
+        n_plots (int): Number of subplots desired.
+        subplot_width (int): Width of each subplot in inches.
+        subplot_height (int): Height of each subplot in inches.
+        base_max_cols (int): Desired maximum columns before adjustment.
 
     Returns:
-        Tuple ``(n_rows, n_cols)`` for ``plt.subplots``.
+        Tuple[int, int]: Tuple ``(n_rows, n_cols)`` for ``plt.subplots``.
     """
     if n_plots <= 0:
         return 0, 0
@@ -446,12 +446,12 @@ def analyze_improvement_variance(
     time so that a suitable ``variance_threshold`` can be chosen.
 
     Args:
-        study: The Optuna study containing trials to analyse.
-        window_size: Number of recent improvements used for each variance
+        study (optuna.Study): The Optuna study containing trials to analyse.
+        window_size (int): Number of recent improvements used for each variance
             calculation.
-        min_n_trials: Minimum number of completed trials required before
+        min_n_trials (int): Minimum number of completed trials required before
             variance values are produced.
-        improvement_evaluator: Custom evaluator used to estimate potential
+        improvement_evaluator (Optional[BaseImprovementEvaluator]): Custom evaluator used to estimate potential
             improvement. Defaults to :class:`RegretBoundEvaluator`.
 
     Returns:

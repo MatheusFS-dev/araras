@@ -18,9 +18,9 @@ def plot_param_importances(study: optuna.Study, dirs: Dict[str, str], create_plo
     """Generate bar charts and CSV summaries of Optuna parameter importances.
 
     Args:
-        study: Optuna study containing the optimisation history.
-        dirs: Mapping of directory identifiers to output folders.
-        create_plotly: Whether to export an interactive HTML bar chart in
+        study (optuna.Study): Optuna study containing the optimisation history.
+        dirs (Dict[str, str]): Mapping of directory identifiers to output folders.
+        create_plotly (bool): Whether to export an interactive HTML bar chart in
             addition to the static Matplotlib figure.
 
     Returns:

@@ -132,13 +132,13 @@ def print_monitoring_config_summary(
     target file. Subsequent calls are ignored to avoid repeated messages.
 
     Args:
-        file_path: Path of the file displayed in the summary.
-        file_type: Detected type of the monitored file.
-        success_flag_file: Location where the SUCCESS flag is expected.
-        max_restarts: Maximum restart attempts allowed.
-        email_enabled: Whether email notifications are enabled.
-        title: Title shown for the monitored process.
-        restart_after_delay: Optional forced restart delay in seconds.
+        file_path (str): Path of the file displayed in the summary.
+        file_type (str): Detected type of the monitored file.
+        success_flag_file (str): Location where the SUCCESS flag is expected.
+        max_restarts (int): Maximum restart attempts allowed.
+        email_enabled (bool): Whether email notifications are enabled.
+        title (str): Title shown for the monitored process.
+        restart_after_delay (Optional[float]): Optional forced restart delay in seconds.
 
     Notes:
         This function only prints configuration information and does not alter
@@ -235,7 +235,7 @@ def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
     therefore may exceed ``100`` when the process utilises more than one core.
 
     Args:
-        pid: Process ID of the process to query.
+        pid (int): Process ID of the process to query.
 
     Returns:
         Tuple[float, float, float]:
@@ -289,12 +289,12 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
     """Start simplified crash monitor without email capabilities.
 
     Args:
-        pid: Process ID to monitor
-        title: Process title for alerts
-        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
+        pid (int): Process ID to monitor
+        title (str): Process title for alerts
+        supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
 
     Returns:
-        Monitor control info dictionary
+        Dict[str, Any]: Monitor control info dictionary
 
     Raises:
         ValueError: If PID doesn't exist
@@ -367,7 +367,7 @@ def stop_monitor(monitor_info: Dict[str, Any]) -> None:
     """Stop monitor and cleanup files with optimized batch operations.
 
     Args:
-        monitor_info: Monitor control info from start_monitor()
+        monitor_info (Dict[str, Any]): Monitor control info from start_monitor()
     """
     if not monitor_info:
         return
@@ -409,10 +409,10 @@ def check_crash_signal(monitor_info: Dict[str, Any]) -> Dict[str, Any]:
     """Check if process crashed with minimal I/O operations.
 
     Args:
-        monitor_info: Monitor control info
+        monitor_info (Dict[str, Any]): Monitor control info
 
     Returns:
-        Dictionary with crash info or empty dict if no crash
+        Dict[str, Any]: Dictionary with crash info or empty dict if no crash
     """
     restart_file = monitor_info.get("restart_file")
     if not restart_file or not os.path.exists(restart_file):
@@ -450,18 +450,18 @@ def run_auto_restart(
     ``FileNotFoundError`` is raised immediately.
 
     Args:
-        file_path: Path to .py or .ipynb file to execute
-        success_flag_file: Path to success flag file
-        title: Custom title for monitoring and email alerts
-        max_restarts: Maximum restart attempts
-        restart_delay: Delay between restarts in seconds
-        recipients_file: Path to recipients JSON file (defaults to ./json/recipients.json)
-        credentials_file: Path to credentials JSON file (defaults to ./json/credentials.json)
-        force_restart: restart the run after a delay in seconds
-        retry_attempts: Number of retry attempts before sending failure email
-        supress_tf_warnings: Suppress TensorFlow warnings (default: False)
-        resource_usage_log_file: Path to write process resource usage logs. If None, logging is disabled.
-        restart_email_warning: Enable or disable email warnings for restart events
+        file_path (str): Path to .py or .ipynb file to execute
+        success_flag_file (str): Path to success flag file
+        title (Optional[str]): Custom title for monitoring and email alerts
+        max_restarts (int): Maximum restart attempts
+        restart_delay (float): Delay between restarts in seconds
+        recipients_file (Optional[str]): Path to recipients JSON file (defaults to ./json/recipients.json)
+        credentials_file (Optional[str]): Path to credentials JSON file (defaults to ./json/credentials.json)
+        force_restart (Optional[float]): restart the run after a delay in seconds
+        retry_attempts (int): Number of retry attempts before sending failure email
+        supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
+        resource_usage_log_file (Optional[str]): Path to write process resource usage logs. If None, logging is disabled.
+        restart_email_warning (bool): Enable or disable email warnings for restart events
 
     Raises:
         FileNotFoundError: If file doesn't exist

@@ -253,25 +253,25 @@ def generate_conv1d_pool_table(
     generation times.
 
     Args:
-        L0: Initial temporal length before the first block.
-        n_layers: Number of ``Conv1D`` + ``MaxPooling1D`` blocks.
-        kernel_sizes: Allowed kernel sizes for ``Conv1D``.
-        pool_sizes: Allowed pool sizes for ``MaxPooling1D``.
-        filters: Allowed filter counts for ``Conv1D``.
-        conv_stride: Stride for all ``Conv1D`` layers.
-        conv_dilation: Dilation rate for all ``Conv1D`` layers.
-        pool_stride: Stride for all ``MaxPooling1D`` layers. If ``None``, uses
+        L0 (int): Initial temporal length before the first block.
+        n_layers (int): Number of ``Conv1D`` + ``MaxPooling1D`` blocks.
+        kernel_sizes (Sequence[int]): Allowed kernel sizes for ``Conv1D``.
+        pool_sizes (Sequence[int]): Allowed pool sizes for ``MaxPooling1D``.
+        filters (Sequence[int]): Allowed filter counts for ``Conv1D``.
+        conv_stride (int): Stride for all ``Conv1D`` layers.
+        conv_dilation (int): Dilation rate for all ``Conv1D`` layers.
+        pool_stride (Optional[int]): Stride for all ``MaxPooling1D`` layers. If ``None``, uses
             ``pool_size``.
-        csv_path: Optional path to stream the table to CSV. When ``None`` the
+        csv_path (Optional[str]): Optional path to stream the table to CSV. When ``None`` the
             table is returned as a :class:`pandas.DataFrame`.
-        verbose: Display a progress bar while generating combinations.
-        plot: Whether to generate histograms for each layer's final length.
-        plot_dir: Directory in which to save the histogram PNG files. If ``None``
+        verbose (bool): Display a progress bar while generating combinations.
+        plot (bool): Whether to generate histograms for each layer's final length.
+        plot_dir (Optional[str]): Directory in which to save the histogram PNG files. If ``None``
             the plots are saved in the current working directory with default
             names.
 
     Returns:
-        :class:`pandas.DataFrame`: A table describing each parameter
+        pd.DataFrame: class:`pandas.DataFrame`: A table describing each parameter
         combination and the resulting lengths after every block.
 
     Raises:

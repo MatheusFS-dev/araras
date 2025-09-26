@@ -56,12 +56,12 @@ class FlagBasedRestartManager:
         """Initialize restart manager with consolidated email notification support.
 
         Args:
-            max_restarts: Maximum restart attempts
-            restart_delay: Delay between restarts in seconds
-            recipients_file: Path to recipients JSON file
-            credentials_file: Path to credentials JSON file
-            retry_attempts: Number of retry attempts before sending failure email
-            restart_email_warning: Enable restart success and failure email messages
+            max_restarts (int): Maximum restart attempts
+            restart_delay (float): Delay between restarts in seconds
+            recipients_file (Optional[str]): Path to recipients JSON file
+            credentials_file (Optional[str]): Path to credentials JSON file
+            retry_attempts (int): Number of retry attempts before sending failure email
+            restart_email_warning (bool): Enable restart success and failure email messages
         """
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
@@ -117,14 +117,14 @@ class FlagBasedRestartManager:
         after execution completes.
 
         Args:
-            file_path: Path to the Python script or Jupyter notebook to run.
-            success_flag_file: Path where the monitored file writes the
+            file_path (str): Path to the Python script or Jupyter notebook to run.
+            success_flag_file (str): Path where the monitored file writes the
                 ``SUCCESS`` flag upon completion.
-            title: Optional custom title displayed in status messages. If not
+            title (Optional[str]): Optional custom title displayed in status messages. If not
                 provided, the original file name is used for display purposes.
-            restart_after_delay: Optional delay in seconds that forces a restart
+            restart_after_delay (Optional[float]): Optional delay in seconds that forces a restart
                 even if the process is still running.
-            supress_tf_warnings: When ``True``, TensorFlow warnings emitted by
+            supress_tf_warnings (bool): When ``True``, TensorFlow warnings emitted by
                 the target script are filtered out in the terminal.
 
         Notes:
@@ -307,7 +307,7 @@ class FlagBasedRestartManager:
         """Handle restart with retry logic and consolidated email notifications.
 
         Returns:
-            True if should continue restart attempts, False if should stop
+            bool: True if should continue restart attempts, False if should stop
         """
         self.restart_count += 1
 
@@ -350,14 +350,14 @@ class FlagBasedRestartManager:
         """Launch the monitored process in a new terminal.
 
         Args:
-            file_path: Validated path to the Python file.
-            working_dir: Directory where the command should be executed.
-            success_flag_file: Path to the success flag written by the process.
-            supress_tf_warnings: When ``True``, filter out TensorFlow warnings
+            file_path (Path): Validated path to the Python file.
+            working_dir (str): Directory where the command should be executed.
+            success_flag_file (str): Path to the success flag written by the process.
+            supress_tf_warnings (bool): When ``True``, filter out TensorFlow warnings
                 printed to the terminal.
 
         Returns:
-            The PID of the launched process.
+            int: The PID of the launched process.
 
         Raises:
             OSError: If the process fails to start or the PID cannot be
@@ -393,11 +393,11 @@ class FlagBasedRestartManager:
         """Discover target PID with optimized polling strategy.
 
         Args:
-            pid_file: Path to PID file
-            timeout: Discovery timeout in seconds
+            pid_file (str): Path to PID file
+            timeout (float): Discovery timeout in seconds
 
         Returns:
-            Target PID if found, None otherwise
+            Optional[int]: Target PID if found, None otherwise
         """
         end_time = time.time() + timeout
         check_count = 0
@@ -431,10 +431,10 @@ class FlagBasedRestartManager:
         """Wait for process completion with optimized polling strategy.
 
         Args:
-            flag_path: Path to success flag file
+            flag_path (Path): Path to success flag file
 
         Returns:
-            Completion reason string
+            str: Completion reason string
         """
         check_count = 0
 
@@ -598,11 +598,11 @@ class FlagBasedRestartManager:
         writes the provided success flag when execution completes.
 
         Args:
-            file_path: Source Python file to be monitored.
-            success_flag: Location where the success flag should be written.
+            file_path (Path): Source Python file to be monitored.
+            success_flag (str): Location where the success flag should be written.
 
         Returns:
-            Path to the generated monitored file.
+            Path: Path to the generated monitored file.
 
         Raises:
             OSError: If the file cannot be created or written.
@@ -643,7 +643,7 @@ class FlagBasedRestartManager:
         """Interruptible sleep with minimal CPU usage.
 
         Args:
-            duration: Sleep duration in seconds
+            duration (float): Sleep duration in seconds
         """
         end_time = time.time() + duration
         while self.running and time.time() < end_time:

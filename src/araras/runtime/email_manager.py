@@ -30,14 +30,14 @@ class ConsolidatedEmailManager:
         """Initialize the manager and validate configuration.
 
         Args:
-            recipients_file: Path to the JSON file containing the list of email
+            recipients_file (Optional[str]): Path to the JSON file containing the list of email
                 recipients. Defaults to ``"./json/recipients.json"`` when not
                 provided.
-            credentials_file: Path to the JSON file with the SMTP credentials.
+            credentials_file (Optional[str]): Path to the JSON file with the SMTP credentials.
                 Defaults to ``"./json/credentials.json"``.
-            retry_attempts: Maximum number of retries to attempt before giving
+            retry_attempts (int): Maximum number of retries to attempt before giving
                 up on sending a notification.
-            restart_email_warning: When ``True`` restart success and failure
+            restart_email_warning (bool): When ``True`` restart success and failure
                 messages are sent via email.
 
         Notes:
@@ -78,10 +78,10 @@ class ConsolidatedEmailManager:
         """Send a single consolidated status email.
 
         Args:
-            status_type: Type of status message to send. Supported values are
+            status_type (str): Type of status message to send. Supported values are
                 ``"restart_success"``, ``"restart_failed"`` and
                 ``"task_complete"``.
-            process_data: Dictionary with details about the process.  The
+            process_data (Dict[str, Any]): Dictionary with details about the process.  The
                 expected keys vary depending on ``status_type``.
 
         Raises:
@@ -166,9 +166,9 @@ class ConsolidatedEmailManager:
         """Determine whether another restart attempt should be made.
 
         Args:
-            title: The process title used for email notifications.
-            restart_count: How many times the process has already been restarted.
-            max_restarts: Maximum allowed restarts overall.
+            title (str): The process title used for email notifications.
+            restart_count (int): How many times the process has already been restarted.
+            max_restarts (int): Maximum allowed restarts overall.
 
         Returns:
             bool: ``True`` if another restart should be attempted, ``False`` otherwise.

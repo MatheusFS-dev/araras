@@ -29,11 +29,11 @@ def plot_slice(
     version can also be generated.
 
     Args:
-        study: Optuna study containing the trials.
-        params: List of parameter names to include in the plot.
-        dirs: Dictionary with output directories for saving figures.
-        create_standalone: Whether to save each slice plot separately.
-        create_plotly: Whether to save interactive HTML versions of the plots.
+        study (optuna.Study): Optuna study containing the trials.
+        params (List[str]): List of parameter names to include in the plot.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_standalone (bool): Whether to save each slice plot separately.
+        create_plotly (bool): Whether to save interactive HTML versions of the plots.
 
     Returns:
         None: Figures are saved to the directories defined in ``dirs``.

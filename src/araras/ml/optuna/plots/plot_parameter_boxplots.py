@@ -27,17 +27,17 @@ def plot_parameter_boxplots(
     """Visualise numeric hyper-parameter distributions across trial subsets.
 
     Args:
-        df: DataFrame containing every completed trial.
-        best: Subset of the top-performing trials.
-        worst: Subset of the least-performing trials.
-        numeric_cols: Names of numeric parameters to plot.
-        dirs: Mapping of directory identifiers (e.g. ``"figs"``) to output
+        df (pd.DataFrame): DataFrame containing every completed trial.
+        best (pd.DataFrame): Subset of the top-performing trials.
+        worst (pd.DataFrame): Subset of the least-performing trials.
+        numeric_cols (List[str]): Names of numeric parameters to plot.
+        dirs (Dict[str, str]): Mapping of directory identifiers (e.g. ``"figs"``) to output
             paths.
-        param_name_mapping: Optional mapping from raw parameter names to
+        param_name_mapping (Dict[str, str]): Optional mapping from raw parameter names to
             human-friendly labels.
-        create_standalone: Whether to create separate PDF files for each
+        create_standalone (bool): Whether to create separate PDF files for each
             parameter.
-        create_plotly: Whether to emit interactive Plotly versions alongside
+        create_plotly (bool): Whether to emit interactive Plotly versions alongside
             the Matplotlib figures.
 
     Returns:

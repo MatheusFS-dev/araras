@@ -10,7 +10,7 @@ def get_credentials(file_path: str) -> tuple[str, str]:
     """Load sender credentials from a JSON file.
 
     Args:
-        file_path: Path to a JSON document containing ``"email"`` and
+        file_path (str): Path to a JSON document containing ``"email"`` and
             ``"password"`` keys.
 
     Returns:
@@ -38,7 +38,7 @@ def get_recipient_emails(file_path: str) -> list[str]:
     """Load recipient addresses from a JSON file.
 
     Args:
-        file_path: Path to a JSON document containing an ``"emails"`` list.
+        file_path (str): Path to a JSON document containing an ``"emails"`` list.
 
     Returns:
         list[str]: Email addresses that should receive the notification.
@@ -72,16 +72,16 @@ def send_email(
     """Send an email notification to every configured recipient.
 
     Args:
-        subject: Subject line for the message.
-        body: Plain-text or HTML content to send.
-        recipients_file: Path to a JSON file consumed by
+        subject (str): Subject line for the message.
+        body (str): Plain-text or HTML content to send.
+        recipients_file (str): Path to a JSON file consumed by
             :func:`get_recipient_emails`.
-        credentials_file: Path to a JSON file understood by
+        credentials_file (str): Path to a JSON file understood by
             :func:`get_credentials`.
-        text_type: MIME subtype to use for the message body (``"plain"`` or
+        text_type (str): MIME subtype to use for the message body (``"plain"`` or
             ``"html"``).
-        smtp_server: Hostname or IP address of the SMTP server.
-        smtp_port: Port used to connect to the SMTP server.
+        smtp_server (str): Hostname or IP address of the SMTP server.
+        smtp_port (int): Port used to connect to the SMTP server.
 
     Notes:
         Exceptions raised while loading files or sending the message are

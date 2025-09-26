@@ -20,15 +20,14 @@ class ImprovementStagnation:
     ``variance_threshold`` after ``min_n_trials`` trials.
 
     Args:
-        min_n_trials: Minimum number of completed trials before variance checks
+        min_n_trials (Any): Minimum number of completed trials before variance checks
             are performed.
-        window_size: Number of recent improvement values used to compute the
+        window_size (Any): Number of recent improvement values used to compute the
             variance.
-        variance_threshold: Threshold below which the variance of improvements
+        variance_threshold (Any): Threshold below which the variance of improvements
             indicates stagnation.
-        improvement_evaluator: Custom improvement evaluator. Defaults to
+        improvement_evaluator (Any): Custom improvement evaluator. Defaults to
             :class:`RegretBoundEvaluator`.
-
     """
 
     def __init__(
@@ -42,16 +41,16 @@ class ImprovementStagnation:
         """Create a new callback instance.
 
         Args:
-            min_n_trials: Minimum number of completed trials before the
+            min_n_trials (int): Minimum number of completed trials before the
                 stagnation checks start.
-            window_size: Number of recent improvements to use for the variance
+            window_size (int): Number of recent improvements to use for the variance
                 calculation.
-            variance_threshold: Variance value below which the study will be
+            variance_threshold (float): Variance value below which the study will be
                 stopped.
-            improvement_evaluator: Custom evaluator used to compute expected
+            improvement_evaluator (Optional[BaseImprovementEvaluator]): Custom evaluator used to compute expected
                 improvement. Defaults to :class:`RegretBoundEvaluator` when
                 ``None``.
-            verbose: Whether to log debugging information at each check.
+            verbose (bool): Whether to log debugging information at each check.
         """
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
@@ -78,8 +77,8 @@ class ImprovementStagnation:
         """Evaluate trial results and stop the study if stagnation is detected.
 
         Args:
-            study: The Optuna study currently being optimised.
-            trial: The trial that has just completed.
+            study (optuna.Study): The Optuna study currently being optimised.
+            trial (optuna.trial.FrozenTrial): The trial that has just completed.
 
         Notes:
             This method mutates internal state each time it is called and will
@@ -178,11 +177,11 @@ class StopWhenNoValueImprovement:
         counter nor the best value.
 
     Args:
-        patience: Number of consecutive completed trials allowed without a new
+        patience (Any): Number of consecutive completed trials allowed without a new
             best value.
-        min_delta: Minimum absolute improvement required to reset the patience
+        min_delta (Any): Minimum absolute improvement required to reset the patience
             counter. Defaults to ``0.0``.
-        verbose: If ``True``, log a warning when the study is stopped.
+        verbose (Any): If ``True``, log a warning when the study is stopped.
 
     Raises:
         ValueError: If ``patience`` is not positive or ``min_delta`` is negative.
@@ -241,7 +240,7 @@ class NanLossPrunerOptuna(callbacks.Callback):
     """Prune an Optuna trial when the training loss diverges to ``NaN``.
 
     Args:
-        trial: Optuna trial instance associated with the current Keras model
+        trial (Any): Optuna trial instance associated with the current Keras model
             run.
 
     Examples:
@@ -300,23 +299,23 @@ def get_callbacks_study(
         memory consumption.
 
     Args:
-        trial: The current Optuna trial object.
-        tensorboard_logs: Directory where TensorBoard logs will be stored. If
+        trial (optuna.Trial): The current Optuna trial object.
+        tensorboard_logs (str | None): Directory where TensorBoard logs will be stored. If
             ``None``, the TensorBoard callback is omitted.
-        monitor: The metric to monitor for early stopping and learning rate
+        monitor (str): The metric to monitor for early stopping and learning rate
             reduction.
-        early_stopping_patience: Number of epochs with no improvement after
+        early_stopping_patience (int | None): Number of epochs with no improvement after
             which training will be stopped. Set to ``None`` to disable the
             ``EarlyStopping`` callback. Defaults to ``5``.
-        reduce_lr_patience: Number of epochs with no improvement before the
+        reduce_lr_patience (int | None): Number of epochs with no improvement before the
             learning rate is reduced. Set to ``None`` to disable the
             ``ReduceLROnPlateau`` callback. Defaults to ``2``.
-        pruning_interval: Frequency (in epochs) at which the
+        pruning_interval (int | None): Frequency (in epochs) at which the
             ``KerasPruningCallback`` checks the monitored metric. Set to ``None``
             to disable pruning. Defaults to ``3``.
 
     Returns:
-        A list of callbacks to pass into ``model.fit``.
+        List[tf.keras.callbacks.Callback]: A list of callbacks to pass into ``model.fit``.
 
     Raises:
         None.

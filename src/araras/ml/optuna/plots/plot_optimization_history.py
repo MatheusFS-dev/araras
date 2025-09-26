@@ -16,9 +16,9 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_
     interactive version of the plot is also generated.
 
     Args:
-        study: Optuna study to visualize.
-        dirs: Dictionary with output directories for saving figures.
-        create_plotly: Whether to save an interactive HTML version of the plot.
+        study (optuna.Study): Optuna study to visualize.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
 
     Returns:
         None: The generated figures are saved under the directories described

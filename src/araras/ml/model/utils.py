@@ -6,7 +6,7 @@ def capture_model_summary(model):
     Capture model summary as a string.
 
     Args:
-        model: Keras model
+        model (Any): Keras model
 
     Returns:
         str: Model summary as string

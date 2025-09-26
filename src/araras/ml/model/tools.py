@@ -12,8 +12,8 @@ def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
     """Convert a `.keras` archive into a zipped TensorFlow SavedModel.
 
     Args:
-        input_keras_path: Path to the source ``.keras`` model file.
-        output_zip_path: Destination path for the resulting ``.zip`` bundle.
+        input_keras_path (str): Path to the source ``.keras`` model file.
+        output_zip_path (str): Destination path for the resulting ``.zip`` bundle.
 
     Returns:
         None: The SavedModel artefacts are written into ``output_zip_path``.
@@ -57,10 +57,10 @@ def save_model_plot(
         files at ``output_path`` will be overwritten.
 
     Args:
-        model_or_path: Either a :class:`tf.keras.Model` instance to be plotted or
+        model_or_path (Union[tf.keras.Model, str, Path]): Either a :class:`tf.keras.Model` instance to be plotted or
             a filesystem path pointing to a ``.keras`` model archive.
-        output_path: Destination path where the plot image will be saved.
-        safe_mode: a parameter from :func:`tf.keras.utils.plot_model` that
+        output_path (Union[str, Path]): Destination path where the plot image will be saved.
+        safe_mode (bool): a parameter from :func:`tf.keras.utils.plot_model` that
             controls whether to use safe mode for plotting. If set to `True`, the
             function will not plot layers that are not supported by the plotting
             utility, which can help avoid errors with custom layers.
@@ -114,13 +114,13 @@ def punish_model_flops(
     """Penalize an objective according to the model's FLOPs.
 
     Args:
-        target: Base objective value (scalar or list of scalars).
-        model: Model whose FLOPs will be used for the penalty.
-        penalty_factor: Multiplicative factor applied to the FLOPs count.
-        direction: Whether the objective should be minimised or maximised.
+        target (Union[float, Sequence[float]]): Base objective value (scalar or list of scalars).
+        model (tf.keras.Model): Model whose FLOPs will be used for the penalty.
+        penalty_factor (float): Multiplicative factor applied to the FLOPs count.
+        direction (Literal['minimize', 'maximize']): Whether the objective should be minimised or maximised.
 
     Returns:
-        The penalised objective value or list of values.
+        Union[float, Sequence[float]]: The penalised objective value or list of values.
     """
 
     if direction not in ("minimize", "maximize"):
@@ -146,13 +146,13 @@ def punish_model_params(
     """Penalize an objective according to the model's parameter count.
 
     Args:
-        target: Base objective value (scalar or list of scalars).
-        model: Model whose parameters will be used for the penalty.
-        penalty_factor: Multiplicative factor applied to the parameter count.
-        direction: Whether the objective should be minimised or maximised.
+        target (Union[float, Sequence[float]]): Base objective value (scalar or list of scalars).
+        model (tf.keras.Model): Model whose parameters will be used for the penalty.
+        penalty_factor (float): Multiplicative factor applied to the parameter count.
+        direction (Literal['minimize', 'maximize']): Whether the objective should be minimised or maximised.
 
     Returns:
-        The penalised objective value or list of values.
+        Union[float, Sequence[float]]: The penalised objective value or list of values.
     """
 
     if direction not in ("minimize", "maximize"):
@@ -182,15 +182,15 @@ def punish_model(
     """Apply both FLOPs and parameter penalties to an objective.
 
     Args:
-        target: Base objective value (scalar or list of scalars).
-        model: Model whose complexity will be penalised.
-        type: Type of penalty to apply, either "flops" or "params".
-        flops_penalty_factor: Factor for FLOPs penalty.
-        params_penalty_factor: Factor for parameters penalty.
-        direction: Whether the objective should be minimised or maximised.
+        target (Union[float, Sequence[float]]): Base objective value (scalar or list of scalars).
+        model (tf.keras.Model): Model whose complexity will be penalised.
+        type (Literal['flops', 'params', None]): Type of penalty to apply, either "flops" or "params".
+        flops_penalty_factor (float): Factor for FLOPs penalty.
+        params_penalty_factor (float): Factor for parameters penalty.
+        direction (Literal['minimize', 'maximize']): Whether the objective should be minimised or maximised.
 
     Returns:
-        The penalised objective value or list of values.
+        Union[float, Sequence[float]]: The penalised objective value or list of values.
     """
     if type is None:
         # If no type is specified, return the target unchanged

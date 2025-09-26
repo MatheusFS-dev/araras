@@ -21,8 +21,8 @@ def make_rank_plotly(df: pd.DataFrame, pairs: List[Tuple[str, str]]):
     """Create an interactive Plotly figure for parameter rank pairs.
 
     Args:
-        df: DataFrame containing the trial parameters and objective values.
-        pairs: List of parameter name pairs to plot against each other.
+        df (pd.DataFrame): DataFrame containing the trial parameters and objective values.
+        pairs (List[Tuple[str, str]]): List of parameter name pairs to plot against each other.
 
     Returns:
         plotly.graph_objs._figure.Figure: The constructed Plotly figure object.
@@ -70,12 +70,12 @@ def plot_rank(
     also saved.
 
     Args:
-        study: Optuna study containing the trials.
-        params: List of parameter names to include in the plot.
-        dirs: Dictionary with output directories for saving figures.
-        create_standalone: Whether to save separate figures for each parameter
+        study (optuna.Study): Optuna study containing the trials.
+        params (List[str]): List of parameter names to include in the plot.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_standalone (bool): Whether to save separate figures for each parameter
             pair.
-        create_plotly: Whether to save interactive HTML versions of the plots.
+        create_plotly (bool): Whether to save interactive HTML versions of the plots.
 
     Returns:
         None: Figures are written to the folders defined in ``dirs``.

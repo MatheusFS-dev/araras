@@ -148,15 +148,15 @@ def analyze_study(
     """Comprehensive analysis of Optuna hyperparameter optimization study results.
 
     Args:
-        study: Optuna study object containing trials to analyze.
-        table_dir: Directory to save analysis results and figures.
-        top_frac: Fraction of best/worst trials to analyze (default: 0.2).
-        param_name_mapping: Optional mapping of parameter names to display names,
+        study (optuna.Study): Optuna study object containing trials to analyze.
+        table_dir (str): Directory to save analysis results and figures.
+        top_frac (float): Fraction of best/worst trials to analyze (default: 0.2).
+        param_name_mapping (Dict[str, str]): Optional mapping of parameter names to display names,
             for example ``{"params_learning_rate": "Learning Rate"}``.
-        create_standalone: If True, generates standalone images for each plot type.
-        save_data: If True, saves data for LaTeX plotting into CSV files.
-        create_plotly: If True, also saves interactive Plotly HTML versions of the figures.
-        plots: List of plot types to generate. Available options:
+        create_standalone (bool): If True, generates standalone images for each plot type.
+        save_data (bool): If True, saves data for LaTeX plotting into CSV files.
+        create_plotly (bool): If True, also saves interactive Plotly HTML versions of the figures.
+        plots (Optional[List[str]]): List of plot types to generate. Available options:
             'distributions', 'importances', 'correlations', 'boxplots',
             'trends', 'ranges', 'contours', 'edf', 'intermediate',
             'parallel_coordinate', 'slice', 'rank', 'history', 'timeline',

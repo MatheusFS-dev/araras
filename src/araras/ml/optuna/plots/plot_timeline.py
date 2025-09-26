@@ -26,9 +26,9 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool
     version can be generated for interactive exploration.
 
     Args:
-        study: Optuna study with the recorded trials.
-        dirs: Dictionary with output directories for saving figures.
-        create_plotly: Whether to save an interactive HTML version of the plot.
+        study (optuna.Study): Optuna study with the recorded trials.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
 
     Returns:
         None: The timeline visualisation is saved within the directories

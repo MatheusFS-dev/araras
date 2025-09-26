@@ -19,19 +19,19 @@ def build_squeeze_excite_1d(
     Based on the paper: https://arxiv.org/pdf/1709.01507
 
     Args:
-        x: Input 3D tensor (batch, length, channels).
-        trial: Optuna Trial object for suggesting hyperparameters.
-        kparams: KParams object containing hyperparameter choices. Can be ``None`` if
+        x (tf.keras.layers.Layer): Input 3D tensor (batch, length, channels).
+        trial (optuna.Trial): Optuna Trial object for suggesting hyperparameters.
+        kparams (Optional[KParams]): KParams object containing hyperparameter choices. Can be ``None`` if
             both ``act_reduce`` and ``act_expand`` are provided.
-        ratio_choices: List of integers representing reduction ratios for the SE block.
-        act_reduce: Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+        ratio_choices (List[int]): List of integers representing reduction ratios for the SE block.
+        act_reduce (Optional[Union[str, Callable[..., Any]]]): Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
             to apply no activation and skip sampling from ``kparams``.
-        act_expand: Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+        act_expand (Optional[Union[str, Callable[..., Any]]]): Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
             to apply no activation and skip sampling from ``kparams``.
-        name_prefix: Prefix for naming layers and trial parameters.
+        name_prefix (str): Prefix for naming layers and trial parameters.
 
     Returns:
-        A tensor the same shape as `x`, re-scaled by the SE attention weights.
+        tf.keras.layers.Layer: A tensor the same shape as `x`, re-scaled by the SE attention weights.
 
     Raises:
         ValueError: If `x.shape[-1]` is None (undefined channel dimension).
@@ -90,19 +90,19 @@ def build_squeeze_excite_2d(
     Apply a 2D Squeeze-and-Excitation block.
 
     Args:
-        x: Input tensor of shape (batch, height, width, channels).
-        trial: Optuna Trial for hyperparameter suggestions.
-        hparams: HParams object for activation choices. Can be ``None`` if both
+        x (tf.keras.layers.Layer): Input tensor of shape (batch, height, width, channels).
+        trial (optuna.Trial): Optuna Trial for hyperparameter suggestions.
+        hparams (Any): HParams object for activation choices. Can be ``None`` if both
             ``act_reduce`` and ``act_expand`` are provided.
-        ratio_choices: List of reduction ratios to try.
-        act_reduce: Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+        ratio_choices (List[int]): List of reduction ratios to try.
+        act_reduce (Optional[Union[str, Callable[..., Any]]]): Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
             to apply no activation and skip sampling from ``kparams``.
-        act_expand: Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+        act_expand (Optional[Union[str, Callable[..., Any]]]): Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
             to apply no activation and skip sampling from ``kparams``.
-        name_prefix: Prefix for layer names.
+        name_prefix (str): Prefix for layer names.
 
     Returns:
-        Tensor of same shape as `x`, re-weighted by channel attention.
+        tf.keras.layers.Layer: Tensor of same shape as `x`, re-weighted by channel attention.
 
     Raises:
         ValueError: if channel dimension is undefined.

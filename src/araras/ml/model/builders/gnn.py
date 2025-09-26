@@ -53,14 +53,13 @@ def discard_tensor_mask(x: tf.Tensor) -> tf.Tensor:
         The mask is permanently removed and cannot be recovered.
 
     Args:
-        x: Tensor potentially carrying a mask. Must not be ``None``.
+        x (tf.Tensor): Tensor potentially carrying a mask. Must not be ``None``.
 
     Returns:
         tf.Tensor: The same tensor without a mask.
 
     Raises:
         ValueError: If ``x`` is ``None``.
-
     """
 
     if x is None:
@@ -98,11 +97,11 @@ def check_gpu_limit(knn_list, K_list, units_list, n=20 * 200, save_path=None):
             )
 
     Args:
-        knn_list: List of ``k`` values used when building the kNN graph.
-        K_list: List of Chebyshev orders to test.
-        units_list: Candidate numbers of output channels.
-        n: Number of nodes in the graph.
-        save_path: Optional path where the resulting table is saved as CSV.
+        knn_list (Any): List of ``k`` values used when building the kNN graph.
+        K_list (Any): List of Chebyshev orders to test.
+        units_list (Any): Candidate numbers of output channels.
+        n (Any): Number of nodes in the graph.
+        save_path (Any): Optional path where the resulting table is saved as CSV.
 
     Returns:
         pandas.DataFrame: Table with ``knn_k``, ``K``, ``threshold_units`` and
@@ -155,8 +154,8 @@ def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
     tensor ready to be fed to Spektral layers.
 
     Args:
-        rows: Number of grid rows.
-        cols: Number of grid columns.
+        rows (int): Number of grid rows.
+        cols (int): Number of grid columns.
 
     Returns:
         tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
@@ -192,9 +191,9 @@ def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
     sparse tensor.
 
     Args:
-        rows: Number of grid rows.
-        cols: Number of grid columns.
-        k: Number of neighbours for each node.
+        rows (int): Number of grid rows.
+        cols (int): Number of grid columns.
+        k (int): Number of neighbours for each node.
 
     Returns:
         tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
@@ -255,13 +254,13 @@ def _apply_layer_with_retry(
     re-executed on the CPU, otherwise the original exception is propagated.
 
     Args:
-        layer: The Spektral convolutional layer instance to call.
-        inputs: List of inputs ``[x, a_graph]`` for the layer.
-        name_prefix: Prefix used when logging error messages.
-        retry_on_cpu: If ``True``, retry the operation on the CPU on failure.
+        layer (layers.Layer): The Spektral convolutional layer instance to call.
+        inputs (list): List of inputs ``[x, a_graph]`` for the layer.
+        name_prefix (str): Prefix used when logging error messages.
+        retry_on_cpu (bool): If ``True``, retry the operation on the CPU on failure.
 
     Returns:
-        The output tensor produced by ``layer``.
+        tf.Tensor: The output tensor produced by ``layer``.
 
     Raises:
         tf.errors.InvalidArgumentError: If the GPU operation fails and
@@ -314,30 +313,30 @@ def build_gcn(
         ``retry_on_cpu=True`` to automatically rerun the layer on the CPU.
 
     Args:
-        trial: Optuna trial object used for hyperparameter suggestions.
-        kparams: Hyperparameter helper for activation functions and regularizers.
-        x: Input feature tensor.
-        a_graph: Normalized adjacency matrix as a sparse tensor.
-        units_range: Either an integer or ``(low, high)`` tuple for the number of
+        trial (Any): Optuna trial object used for hyperparameter suggestions.
+        kparams (KParams): Hyperparameter helper for activation functions and regularizers.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Either an integer or ``(low, high)`` tuple for the number of
             output units.
-        dropout_rate_range: Float or ``(low, high)`` tuple for the dropout rate.
-        units_step: Step size when ``units_range`` is a tuple.
-        dropout_rate_step: Step size when ``dropout_rate_range`` is a tuple.
-        kernel_initializer: Initializer for kernel weights.
-        bias_initializer: Initializer for bias weights.
-        use_bias: Whether to include a bias term.
-        use_batch_norm: If ``True``, apply batch normalization after the layer.
-        trial_kernel_reg: If ``True``, search for a kernel regularizer.
-        trial_bias_reg: If ``True``, search for a bias regularizer.
-        trial_activity_reg: If ``True``, search for an activity regularizer.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for the dropout rate.
+        units_step (int): Step size when ``units_range`` is a tuple.
+        dropout_rate_step (float): Step size when ``dropout_rate_range`` is a tuple.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
         activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
             ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
             ``kparams`` may be ``None`` and no activation is sampled.
-        retry_on_cpu: Retry the layer on the CPU when a GPU ``InvalidArgumentError`` occurs.
-        name_prefix: Prefix for naming the created Keras layers.
+        retry_on_cpu (bool): Retry the layer on the CPU when a GPU ``InvalidArgumentError`` occurs.
+        name_prefix (str): Prefix for naming the created Keras layers.
 
     Returns:
-        The output tensor after convolution, normalization, activation and dropout.
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
 
     Raises:
         tf.errors.InvalidArgumentError: If the GPU operation fails and
@@ -426,33 +425,33 @@ def build_gat(
         ``retry_on_cpu`` to fall back to a CPU implementation in this case.
 
     Args:
-        trial: Optuna trial object for hyperparameter sampling.
-        kparams: Helper providing activations and regularizers.
-        x: Input feature tensor.
-        a_graph: Normalized adjacency matrix as a sparse tensor.
-        units_range: Integer or ``(low, high)`` tuple specifying output units.
-        dropout_rate_range: Float or ``(low, high)`` tuple for dropout.
-        heads_range: Integer or ``(low, high)`` tuple for the number of heads.
-        units_step: Step size when sampling ``units_range``.
-        dropout_rate_step: Step size when sampling ``dropout_rate_range``.
-        heads_step: Step size when sampling ``heads_range``.
-        concat_heads: Concatenate the outputs of the attention heads if ``True``.
-        kernel_initializer: Initializer for kernel weights.
-        bias_initializer: Initializer for bias weights.
-        use_bias: Whether to include a bias term.
-        use_batch_norm: If ``True``, apply batch normalization after the layer.
-        trial_kernel_reg: If ``True``, search for a kernel regularizer.
-        trial_bias_reg: If ``True``, search for a bias regularizer.
-        trial_activity_reg: If ``True``, search for an activity regularizer.
+        trial (Any): Optuna trial object for hyperparameter sampling.
+        kparams (KParams): Helper providing activations and regularizers.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple specifying output units.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for dropout.
+        heads_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for the number of heads.
+        units_step (int): Step size when sampling ``units_range``.
+        dropout_rate_step (float): Step size when sampling ``dropout_rate_range``.
+        heads_step (int): Step size when sampling ``heads_range``.
+        concat_heads (bool): Concatenate the outputs of the attention heads if ``True``.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
         activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
             ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
             ``kparams`` may be ``None`` and no activation is sampled.
-        retry_on_cpu: Retry the operation on the CPU if a GPU
+        retry_on_cpu (bool): Retry the operation on the CPU if a GPU
             ``InvalidArgumentError`` is raised.
-        name_prefix: Prefix for naming the created Keras layers.
+        name_prefix (str): Prefix for naming the created Keras layers.
 
     Returns:
-        The output tensor after convolution, normalization, activation and dropout.
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
 
     Raises:
         tf.errors.InvalidArgumentError: If the GPU operation fails and
@@ -543,32 +542,32 @@ def build_cheb(
         layer on the CPU when this error occurs.
 
     Args:
-        trial: Optuna trial used for suggesting hyperparameters.
-        kparams: Hyperparameter helper instance.
-        x: Input feature tensor.
-        a_graph: Normalized adjacency matrix as a sparse tensor.
-        units_range: Integer or ``(low, high)`` tuple for output units.
-        dropout_rate_range: Float or ``(low, high)`` tuple for dropout rate.
-        K_range: Integer or ``(low, high)`` tuple for the Chebyshev order ``K``.
-        units_step: Step size when sampling ``units_range``.
-        dropout_rate_step: Step size when sampling ``dropout_rate_range``.
-        K_step: Step size when sampling ``K_range``.
-        kernel_initializer: Initializer for kernel weights.
-        bias_initializer: Initializer for bias weights.
-        use_bias: Whether to include a bias term.
-        use_batch_norm: If ``True``, apply batch normalization after the layer.
-        trial_kernel_reg: If ``True``, search for a kernel regularizer.
-        trial_bias_reg: If ``True``, search for a bias regularizer.
-        trial_activity_reg: If ``True``, search for an activity regularizer.
+        trial (Any): Optuna trial used for suggesting hyperparameters.
+        kparams (KParams): Hyperparameter helper instance.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for output units.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for dropout rate.
+        K_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for the Chebyshev order ``K``.
+        units_step (int): Step size when sampling ``units_range``.
+        dropout_rate_step (float): Step size when sampling ``dropout_rate_range``.
+        K_step (int): Step size when sampling ``K_range``.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
         activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
             ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
             ``kparams`` may be ``None`` and no activation is sampled.
-        retry_on_cpu: Retry the operation on the CPU if a GPU
+        retry_on_cpu (bool): Retry the operation on the CPU if a GPU
             ``InvalidArgumentError`` is raised.
-        name_prefix: Prefix for naming the created Keras layers.
+        name_prefix (str): Prefix for naming the created Keras layers.
 
     Returns:
-        The output tensor after convolution, normalization, activation and dropout.
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
 
     Raises:
         tf.errors.InvalidArgumentError: If the GPU operation fails and

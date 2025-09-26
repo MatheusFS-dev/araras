@@ -16,9 +16,9 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = Fa
     An optional interactive Plotly version can also be generated.
 
     Args:
-        study: Optuna study containing optimization results.
-        dirs: Dictionary with output directories for saving figures.
-        create_plotly: Whether to save an interactive HTML version of the plot.
+        study (optuna.Study): Optuna study containing optimization results.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_plotly (bool): Whether to save an interactive HTML version of the plot.
 
     Returns:
         None: The EDF figure is saved under the directories listed in ``dirs``.

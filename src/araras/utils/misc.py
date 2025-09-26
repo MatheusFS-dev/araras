@@ -243,12 +243,12 @@ class NotebookConverter:
         where extra code must be appended.
 
         Args:
-            notebook_path: Path to the ``.ipynb`` file.
-            output_path: Optional custom destination for the converted script.
-            append_lines: Optional lines to append to the resulting Python file.
+            notebook_path (Path): Path to the ``.ipynb`` file.
+            output_path (Optional[Path]): Optional custom destination for the converted script.
+            append_lines (Optional[List[str]]): Optional lines to append to the resulting Python file.
 
         Returns:
-            Path to the created ``.py`` file.
+            Path: Path to the created ``.py`` file.
 
         Raises:
             ImportError: If the ``nbformat`` dependency is missing.
@@ -323,12 +323,12 @@ class NotebookConverter:
         success flag when execution finishes.
 
         Args:
-            notebook_path: Path to the ``.ipynb`` file.
-            success_flag: Path where the monitored script should write the
+            notebook_path (Path): Path to the ``.ipynb`` file.
+            success_flag (str): Path where the monitored script should write the
                 ``SUCCESS`` flag upon completion.
 
         Returns:
-            Path to the generated monitored Python script.
+            Path: Path to the generated monitored Python script.
 
         Raises:
             ImportError: If the ``nbformat`` dependency is missing.

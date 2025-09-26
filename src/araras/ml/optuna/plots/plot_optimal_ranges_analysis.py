@@ -32,16 +32,16 @@ def plot_optimal_ranges_analysis(
     value for the best trials.
 
     Args:
-        df: DataFrame containing all recorded trials.
-        best: DataFrame with the best performing trials.
-        numeric_cols: Parameters to include in the range analysis.
-        dirs: Mapping of directory identifiers to filesystem locations for
+        df (pd.DataFrame): DataFrame containing all recorded trials.
+        best (pd.DataFrame): DataFrame with the best performing trials.
+        numeric_cols (List[str]): Parameters to include in the range analysis.
+        dirs (Dict[str, str]): Mapping of directory identifiers to filesystem locations for
             outputs.
-        param_name_mapping: Optional mapping from parameter names to
+        param_name_mapping (Dict[str, str]): Optional mapping from parameter names to
             presentation labels.
-        create_standalone: Whether to generate individual figures per
+        create_standalone (bool): Whether to generate individual figures per
             parameter.
-        create_plotly: Whether to export interactive versions of the plots.
+        create_plotly (bool): Whether to export interactive versions of the plots.
 
     Returns:
         None: Output files are saved beneath ``dirs["figs"]`` and related
@@ -75,7 +75,7 @@ def plot_optimal_ranges_analysis(
             best_values (pd.Series): Best trials data
             conservative_min, conservative_max: 25%-75% range
             aggressive_min, aggressive_max: 5%-95% range
-            best_median: Median of best trials
+            best_median (float): Median of best trials
             data_dir (str): Directory to save data files
         """
         if data_dir is None:

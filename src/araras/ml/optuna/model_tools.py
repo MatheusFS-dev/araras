@@ -222,11 +222,11 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
     Estimate total VRAM needed for training a Keras model in bytes.
 
     Args:
-        model: Keras model object
-        batch_size: Training batch size
+        model (keras.Model): Keras model object
+        batch_size (int): Training batch size
 
     Returns:
-        Total memory needed in bytes
+        int: Total memory needed in bytes
     """
     # Get model characteristics
     trainable_params = _get_model_trainable_params(model)
@@ -282,12 +282,12 @@ def prune_model_by_config(
     - ``"flops"``: FLOPs for a single forward pass.
 
     Args:
-        trial: The Optuna trial that may be pruned.
-        model: Keras model to evaluate.
-        thresholds: Mapping of pruning criteria to threshold values.
-        bytes_per_param: Bytes used to store each parameter when calculating the model size. Defaults to ``8``.
-        batch_size: Batch size used for memory estimation. Defaults to ``1``.
-        verbose: If True, print stats for the model.
+        trial (optuna.Trial): The Optuna trial that may be pruned.
+        model (keras.Model): Keras model to evaluate.
+        thresholds (Dict[str, float]): Mapping of pruning criteria to threshold values.
+        bytes_per_param (int): Bytes used to store each parameter when calculating the model size. Defaults to ``8``.
+        batch_size (int): Batch size used for memory estimation. Defaults to ``1``.
+        verbose (bool): If True, print stats for the model.
 
     Raises:
         optuna.TrialPruned: If any threshold is exceeded.
@@ -359,23 +359,23 @@ def plot_model_param_distribution(
     error traceback are saved to individual log files.
 
     Args:
-        build_model_fn: Callable that receives an Optuna ``Trial`` and returns a compiled
+        build_model_fn (Callable[[optuna.Trial], tf.keras.Model]): Callable that receives an Optuna ``Trial`` and returns a compiled
             :class:`tf.keras.Model`.
-        bytes_per_param: Number of bytes used to store each parameter.
-        batch_size: Batch size used when estimating the training memory. Can be a single
+        bytes_per_param (int): Number of bytes used to store each parameter.
+        batch_size (Union[int, Iterable[int]]): Batch size used when estimating the training memory. Can be a single
             int or an iterable of ints; when multiple values are provided they are all evaluated.
-        n_trials: Total number of random trials to sample.
-        fig_save_path: Optional path to save the figure. If ``None`` and ``show_plot`` is
+        n_trials (int): Total number of random trials to sample.
+        fig_save_path (Optional[str]): Optional path to save the figure. If ``None`` and ``show_plot`` is
             ``True``, the figure is only displayed.
-        figsize: Figure size for the histograms.
-        csv_path: Optional path to store trial results as CSV. The CSV includes the sampled
+        figsize (Tuple[int, int]): Figure size for the histograms.
+        csv_path (Optional[str]): Optional path to store trial results as CSV. The CSV includes the sampled
             parameters and is sorted by ``training_memory_mb`` in descending order.
-        logs_dir: Directory where error logs are written. If ``None``, no logs are saved.
-        corr_csv_path: Optional path to store correlations between numeric hyperparameters and
+        logs_dir (Optional[str]): Directory where error logs are written. If ``None``, no logs are saved.
+        corr_csv_path (Optional[str]): Optional path to store correlations between numeric hyperparameters and
             the model parameter count. If ``None`` the correlation analysis is skipped.
-        plot_model_dir: Directory where model plots are saved. If ``None``, no plots are saved.
+        plot_model_dir (Optional[str]): Directory where model plots are saved. If ``None``, no plots are saved.
             Each model is saved as a PNG file named ``model_{trial_number}.png``.
-        show_plot: Whether to display the histogram figure after sampling. Defaults to ``False``.
+        show_plot (bool): Whether to display the histogram figure after sampling. Defaults to ``False``.
 
     Notes:
         Clearing the Keras backend session between trials mitigates

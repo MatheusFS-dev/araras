@@ -30,12 +30,12 @@ def plot_contour(
     versions may also be saved.
 
     Args:
-        study: Optuna study containing optimization results.
-        params: List of parameter names to include in the plot.
-        dirs: Dictionary with output directories for saving figures.
-        create_standalone: Whether to save separate figures for each parameter
+        study (optuna.Study): Optuna study containing optimization results.
+        params (List[str]): List of parameter names to include in the plot.
+        dirs (Dict[str, str]): Dictionary with output directories for saving figures.
+        create_standalone (bool): Whether to save separate figures for each parameter
             pair.
-        create_plotly: Whether to save interactive HTML versions of the plots.
+        create_plotly (bool): Whether to save interactive HTML versions of the plots.
 
     Returns:
         None: Figures are written to the locations described by ``dirs``.
