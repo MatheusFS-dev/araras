@@ -1,5 +1,5 @@
 """Model builder modules."""
 
-from . import cnn, dnn, gnn, lstm, se, skip, tcnn
+from . import cnn, dnn, gnn, lm, lstm, se, skip, tcnn
 
-__all__ = ["cnn", "dnn", "gnn", "lstm", "se", "skip", "tcnn"]
+__all__ = ["cnn", "dnn", "gnn", "lm", "lstm", "se", "skip", "tcnn"]
