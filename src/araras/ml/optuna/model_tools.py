@@ -199,7 +199,7 @@ def _estimate_graph_activation_bytes(
     batch_size: int,
     activation_bytes: int,
 ) -> int:
-    """Estimate the forward activation footprint using graph liveness analysis.
+    """Estimate retained activation bytes for graph models.
 
     Args:
         model (keras.Model): Graph model exposing ``_nodes_by_depth``.
@@ -207,10 +207,16 @@ def _estimate_graph_activation_bytes(
         activation_bytes (int): Byte width used for activation tensors.
 
     Returns:
-        int: Peak number of bytes occupied by live forward activations.
+        int: Number of bytes held by tensors that survive until the backward pass.
 
     Raises:
         ValueError: If the model lacks graph metadata for static analysis.
+
+    Notes:
+        Reverse-mode autodiff keeps forward tensors alive until gradients have been
+        computed. The returned value therefore sums unique forward tensors and the
+        inputs to trainable operations instead of simulating a forward liveness
+        curve that frees tensors after their last consumer.
     """
 
     nodes_by_depth = getattr(model, "_nodes_by_depth", None)
@@ -221,44 +227,35 @@ def _estimate_graph_activation_bytes(
     for depth in sorted(nodes_by_depth.keys()):
         ordered_nodes.extend(nodes_by_depth[depth])
 
-    input_tensors_per_node = []
-    consumer_counts: Counter[int] = Counter()
+    retained_tensor_sizes: Dict[int, int] = {}
 
     for node in ordered_nodes:
         input_tensors = tf.nest.flatten(getattr(node, "input_tensors", ()))
-        input_tensors_per_node.append(input_tensors)
-        for tensor in input_tensors:
-            consumer_counts[id(tensor)] += 1
-
-    live_bytes = 0
-    peak_bytes = 0
-    tensor_sizes: Dict[int, int] = {}
-
-    for node, input_tensors in zip(ordered_nodes, input_tensors_per_node):
         output_tensors = tf.nest.flatten(getattr(node, "output_tensors", ()))
 
         for tensor in output_tensors:
             tensor_id = id(tensor)
+            if tensor_id in retained_tensor_sizes:
+                continue
             size_bytes = _tensor_num_bytes(tensor, batch_size, activation_bytes)
             if size_bytes <= 0:
                 continue
-            tensor_sizes[tensor_id] = size_bytes
-            live_bytes += size_bytes
+            retained_tensor_sizes[tensor_id] = size_bytes
 
-        peak_bytes = max(peak_bytes, live_bytes)
+        layer = getattr(node, "layer", None)
+        trainable_weights = getattr(layer, "trainable_weights", None)
+        if trainable_weights:
+            for tensor in input_tensors:
+                tensor_id = id(tensor)
+                if tensor_id in retained_tensor_sizes:
+                    continue
+                size_bytes = _tensor_num_bytes(tensor, batch_size, activation_bytes)
+                if size_bytes <= 0:
+                    continue
+                retained_tensor_sizes[tensor_id] = size_bytes
 
-        for tensor in input_tensors:
-            tensor_id = id(tensor)
-            if tensor_id not in tensor_sizes:
-                continue
-
-            consumer_counts[tensor_id] -= 1
-            if consumer_counts[tensor_id] <= 0:
-                live_bytes -= tensor_sizes.pop(tensor_id, 0)
-
-        peak_bytes = max(peak_bytes, live_bytes)
-
-    return int(peak_bytes)
+    retained_bytes = sum(retained_tensor_sizes.values())
+    return int(retained_bytes)
 
 
 def _estimate_peak_activation_bytes(
@@ -288,12 +285,20 @@ def _estimate_peak_activation_bytes(
     except Exception:
         total_elements = 0
         for layer in model.layers:
-            shapes = getattr(layer, "output_shape", None)
-            if shapes is None and hasattr(layer, "output"):
-                shapes = tf.keras.backend.int_shape(layer.output)
+            output_shapes = getattr(layer, "output_shape", None)
+            if output_shapes is None and hasattr(layer, "output"):
+                output_shapes = tf.keras.backend.int_shape(layer.output)
 
-            for shape in _iter_tensor_shapes(shapes):
+            for shape in _iter_tensor_shapes(output_shapes):
                 total_elements += _shape_num_elements(shape, batch_size)
+
+            if getattr(layer, "trainable_weights", None):
+                input_shapes = getattr(layer, "input_shape", None)
+                if input_shapes is None and hasattr(layer, "input"):
+                    input_shapes = tf.keras.backend.int_shape(layer.input)
+
+                for shape in _iter_tensor_shapes(input_shapes):
+                    total_elements += _shape_num_elements(shape, batch_size)
 
         peak_forward = total_elements * activation_bytes
 
