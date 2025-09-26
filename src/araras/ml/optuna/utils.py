@@ -108,16 +108,18 @@ def rename_top_k_files(top_trials: List[optuna.Trial], file_configs: List[Tuple[
 
 
 def save_trial_params_to_file(filepath: str, params: dict[str, float], **kwargs: str) -> None:
-    """
-    Save Optuna trial parameters and associated metadata to a text file.
+    """Persist trial parameters and metadata in a plain-text file.
 
     Args:
-        filepath (str): Path where the parameter file should be saved.
-        params (dict[str, float]): Dictionary of trial hyperparameters.
-        **kwargs (str): Additional information such as trial ID, rank, or loss.
+        filepath: Destination where the summary should be written.
+        params: Dictionary containing the hyperparameters evaluated during the
+            trial.
+        **kwargs: Additional metadata such as trial identifier, rank or loss
+            values. Each keyword is emitted as a ``key: value`` line before the
+            parameter block.
 
-    Returns:
-        None
+    Raises:
+        OSError: If the file cannot be opened or written.
 
     """
     with open(filepath, "w") as file:
@@ -549,8 +551,6 @@ def save_top_k_trials(
                 )
                 if energy_line:
                     file.write(f"    - {energy_line}\n")
-                if index != len(device_order) - 1:
-                    file.write("\n")
             file.write(f"Sampler: {study.sampler.__class__.__name__}\n")
 
             # Write extra attributes
@@ -649,19 +649,18 @@ def log_trial_error(
         mechanism.
 
     Args:
-        trial (optuna.trial.FrozenTrial): The trial that encountered the error.
-        exc (Exception): The exception that occurred during the trial.
-        logs_dir (str): Directory where the error log file should be saved.
-        prune_on (dict | None): Mapping of exception types to substrings that
-            trigger pruning. Defaults to ``{tf.errors.ResourceExhaustedError: None, tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
-        propagate (dict | None): Mapping of exception types to substrings that
-            trigger propagation. Defaults to ``{optuna.exceptions.TrialPruned: None}``.
-        force_crash_oom (int | None): Minimum number of consecutive
-            ``tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError`` exceptions before the process is aborted.
-            Defaults to ``10``. ``None`` disables this check.
-
-    Returns:
-        None
+        trial: Trial that encountered the error.
+        exc: Exception raised during the trial execution.
+        logs_dir: Directory where the error log file should be saved.
+        prune_on: Mapping of exception types to substrings that trigger
+            pruning. Defaults to ``{tf.errors.ResourceExhaustedError: None,
+            tf.errors.InternalError: None, tf.errors.UnavailableError: None}``.
+        propagate: Mapping of exception types to substrings that trigger
+            propagation. Defaults to ``{optuna.exceptions.TrialPruned: None}``.
+        force_crash_oom: Minimum number of consecutive
+            ``tf.errors.ResourceExhaustedError``, ``tf.errors.InternalError`` or
+            ``tf.errors.UnavailableError`` exceptions before the process is
+            aborted. Defaults to ``10``; ``None`` disables this behaviour.
 
     Raises:
         optuna.TrialPruned: If the error matches any pruning rules.

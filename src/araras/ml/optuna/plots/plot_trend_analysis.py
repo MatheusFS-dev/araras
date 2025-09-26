@@ -23,23 +23,24 @@ def plot_trend_analysis(
     create_standalone: bool = False,
     create_plotly: bool = False,
 ) -> None:
-    """
-    Create a single comprehensive plot with trend analysis for parameter-loss relationships.
+    """Analyse how numeric parameters correlate with the objective value.
 
-    This function generates a single plot with subplots showing the relationship between
-    each numeric parameter and the loss function, fitting linear trends
-    to identify parameter directions that improve performance.
+    Linear fits and scatter plots are produced for each parameter to highlight
+    trends indicative of improved performance.
 
     Args:
-        df (pd.DataFrame): Dataset containing parameters and loss values
-        numeric_cols (List[str]): List of numeric parameter column names
-        dirs (Dict[str, str]): Directory paths for saving outputs
-        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
-        create_standalone (bool): Whether to create standalone images for each parameter
-        create_plotly (bool): Whether to save interactive HTML versions
+        df: Dataset containing both parameter values and loss metrics.
+        numeric_cols: Numeric parameter names to include in the trend analysis.
+        dirs: Directory mapping for figure, data and auxiliary outputs.
+        param_name_mapping: Optional mapping that replaces raw parameter names
+            with presentation labels.
+        create_standalone: Whether to create per-parameter figures instead of a
+            combined grid.
+        create_plotly: Whether to generate interactive Plotly versions.
 
     Returns:
-        None: Saves single comprehensive trend plot as pdf file and trend statistics as CSV
+        None: A combined trend figure, optional standalone plots and CSV
+        statistics are saved to the locations under ``dirs``.
     """
     if not numeric_cols:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

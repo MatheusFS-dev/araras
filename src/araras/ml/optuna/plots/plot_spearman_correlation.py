@@ -18,21 +18,17 @@ def plot_spearman_correlation(
     dirs: Dict[str, str],
     create_plotly: bool = False,
 ) -> None:
-    """
-    Generate and save Spearman correlation heatmap for numeric parameters and loss.
-
-    This function computes rank-based correlations between all numeric parameters
-    and the loss function, creating a heatmap visualization to identify
-    relationships between parameters and their impact on optimization performance.
+    """Visualise rank-based correlations among numeric parameters and loss.
 
     Args:
-        df (pd.DataFrame): Dataset containing numeric parameters and loss values
-        numeric_cols (List[str]): List of numeric parameter column names
-        dirs (Dict[str, str]): Directory paths for saving outputs
-        create_plotly (bool): Whether to save an interactive HTML version
+        df: DataFrame containing numeric parameters and loss values.
+        numeric_cols: Names of numeric parameters to include in the analysis.
+        dirs: Mapping of output directory identifiers to file-system paths.
+        create_plotly: Whether to emit an interactive HTML heatmap in addition
+            to the static figure.
 
     Returns:
-        None: Saves correlation heatmap as pdf file
+        None: Heatmaps and supporting data files are saved under ``dirs``.
     """
     if not numeric_cols:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

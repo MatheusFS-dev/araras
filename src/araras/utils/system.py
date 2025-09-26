@@ -753,23 +753,18 @@ def _print_memory_summary(gpu_data):
 
 
 def get_gpu_info() -> None:
-    """
-    Prints detailed TensorFlow and GPU configuration information in nvidia-smi style format.
+    """Print detailed TensorFlow and GPU configuration information.
 
-    This function reports:
-      - TensorFlow version and CUDA configuration
-      - GPU devices in tabular format similar to nvidia-smi
-      - Memory usage summary
-      - Temperature and utilization data (when available)
+    The output mirrors ``nvidia-smi`` style tables and includes TensorFlow build
+    metadata, individual GPU statistics, memory consumption, and, when
+    available, temperature plus utilisation metrics.
 
-    Args:
-        None
+    Notes:
+        Run this helper in an environment where ``nvidia-smi`` is available for
+        the richest output. Missing utilities degrade the report gracefully.
 
-    Returns:
-        None
-
-    Example:
-        get_gpu_info()
+    Examples:
+        >>> get_gpu_info()
     """
     # Header with timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -851,16 +846,10 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
             flags are ``"cpu"``, ``"ram"``, ``"gpu"``, ``"cuda"`` and
             ``"tensorflow"``.
 
-    Returns:
-        None
+    Examples:
+        >>> log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)
 
-    Raises:
-        None
-
-    Example:
-        log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)
-
-    Note:
+    Notes:
         Ensure that ``log_dir`` has sufficient disk space available since the
         files are appended indefinitely.  CPU usage logged for ``pid`` represents
         the sum across all CPU cores and may exceed ``100``.
@@ -933,12 +922,6 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
         Warning:
             The log file increases in size continuously while this thread is
             running.
-
-        Returns:
-            None
-
-        Raises:
-            None
         """
         log_path = os.path.join(log_dir, "gpu_usage_log.csv")
         with open(log_path, "w") as f:

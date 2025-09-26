@@ -21,10 +21,8 @@ def plot_optimization_history(study: optuna.Study, dirs: Dict[str, str], create_
         create_plotly: Whether to save an interactive HTML version of the plot.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: The generated figures are saved under the directories described
+        in ``dirs``.
     """
     df = study.trials_dataframe(attrs=("number", "value", "state"))
     df = df.query("state == 'COMPLETE'")

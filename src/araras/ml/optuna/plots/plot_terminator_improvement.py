@@ -154,10 +154,7 @@ def plot_terminator_improvement(
         create_plotly: Whether to save an interactive HTML version of the plot.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: Images are stored under the directories specified in ``dirs``.
     """
 
     info = _get_improvement_info(

@@ -24,21 +24,25 @@ def plot_parameter_boxplots(
     create_standalone: bool = False,
     create_plotly: bool = False,
 ) -> None:
-    """
-    Create separate comprehensive boxplot comparisons for numeric parameters across trial subsets.
+    """Visualise numeric hyper-parameter distributions across trial subsets.
 
     Args:
-        df (pd.DataFrame): Complete dataset with all trials
-        best (pd.DataFrame): Subset of best-performing trials
-        worst (pd.DataFrame): Subset of worst-performing trials
-        numeric_cols (List[str]): List of numeric parameter column names
-        dirs (Dict[str, str]): Directory paths for saving outputs
-        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
-        create_standalone (bool): Whether to create standalone images for each parameter
-        create_plotly (bool): Whether to save interactive HTML versions
+        df: DataFrame containing every completed trial.
+        best: Subset of the top-performing trials.
+        worst: Subset of the least-performing trials.
+        numeric_cols: Names of numeric parameters to plot.
+        dirs: Mapping of directory identifiers (e.g. ``"figs"``) to output
+            paths.
+        param_name_mapping: Optional mapping from raw parameter names to
+            human-friendly labels.
+        create_standalone: Whether to create separate PDF files for each
+            parameter.
+        create_plotly: Whether to emit interactive Plotly versions alongside
+            the Matplotlib figures.
 
     Returns:
-        None: Saves separate boxplot files for numeric parameters
+        None: Plots and supporting CSV files are written to folders specified
+        in ``dirs``.
     """
 
     def save_boxplot_data_for_latex(

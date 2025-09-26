@@ -82,20 +82,20 @@ def check_gpu_limit(knn_list, K_list, units_list, n=20 * 200, save_path=None):
     Results are collected in a :class:`pandas.DataFrame` and optionally written
     to ``save_path``.
 
-    Example:
-        ````python
-        knn_values = [4, 8, 12, 16]
-        K_values = list(range(2, 11))
-        units_values = [128 * i for i in range(1, 9)]
+    Examples:
+        .. code-block:: python
 
-        check_gpu_limit(
-            knn_list=knn_values,
-            K_list=K_values,
-            units_list=units_values,
-            n=20 * 200,
-            save_path="results.csv",
-        )
-        ````
+            knn_values = [4, 8, 12, 16]
+            K_values = list(range(2, 11))
+            units_values = [128 * i for i in range(1, 9)]
+
+            check_gpu_limit(
+                knn_list=knn_values,
+                K_list=K_values,
+                units_list=units_values,
+                n=20 * 200,
+                save_path="results.csv",
+            )
 
     Args:
         knn_list: List of ``k`` values used when building the kNN graph.

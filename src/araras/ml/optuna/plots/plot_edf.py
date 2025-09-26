@@ -21,10 +21,7 @@ def plot_edf(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = Fa
         create_plotly: Whether to save an interactive HTML version of the plot.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: The EDF figure is saved under the directories listed in ``dirs``.
     """
     df = study.trials_dataframe()
     df = df.query("state == 'COMPLETE'")

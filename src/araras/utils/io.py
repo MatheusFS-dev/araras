@@ -8,22 +8,19 @@ from pathlib import Path
 
 
 def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
-    """
-    Creates a new run directory with an incremented numeric suffix and returns its full path.
-
-    The directory name is generated using the given prefix followed by the next available number.
-    For example, if directories "run1", "run2", and "run3" exist, calling with prefix="run" will create "run4".
+    """Create a run directory with an incremented numeric suffix.
 
     Args:
-        prefix (str): Prefix to be used in the name of each run directory (e.g., "run").
-        base_dir (str, optional): Directory under which all runs are stored. Defaults to "runs".
+        prefix: Prefix used in the directory name (for example ``"run"``).
+        base_dir: Parent directory where run folders should be created. The
+            folder is created when it does not already exist.
 
     Returns:
-        str: Absolute path to the newly created run directory.
+        str: Path to the newly created directory relative to ``base_dir``.
 
-    Example:
-        run_path = create_run_directory(prefix="run")
-        print(run_path)  # outputs: runs/run1, runs/run2, etc.
+    Examples:
+        >>> create_run_directory("run")
+        'runs/run1'
     """
     # Ensure the base directory exists; create it if it doesn't
     os.makedirs(base_dir, exist_ok=True)
@@ -49,18 +46,18 @@ def create_run_directory(prefix: str, base_dir: str = "runs") -> str:
 
 
 def get_caller_stem(remove: Optional[str] = "temp_monitor_") -> str:
-    """
-    Attempts to determine the stem name of the script or notebook that called this function,
-    optionally removing a specified substring from the result.
+    """Return the stem name of the script or notebook that invoked this helper.
 
     Args:
-        remove (Optional[str]): A substring to remove from the detected stem. If None, no removal is done.
+        remove: Optional substring to remove from the detected stem.
 
     Returns:
-        str: The (possibly cleaned) stem name of the calling script or notebook.
+        str: Stem name derived from VS Code, Python script or notebook
+        metadata.
 
     Raises:
-        RuntimeError: If the stem name cannot be determined.
+        RuntimeError: If a stem cannot be inferred from the call stack or
+        runtime metadata.
     """
 
     def clean(stem: str) -> str:

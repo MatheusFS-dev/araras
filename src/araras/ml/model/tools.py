@@ -9,20 +9,17 @@ import tensorflow as tf
 
 
 def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
-    """Convert a Keras `.keras` model archive into a zipped TensorFlow SavedModel.
-
-    This will load the model, export it in SavedModel directory format,
-    then compress that directory into a .zip file.
+    """Convert a `.keras` archive into a zipped TensorFlow SavedModel.
 
     Args:
-        input_keras_path (str): Path to the source `.keras` model file.
-        output_zip_path (str): Desired path for the output zip (e.g. 'saved_model.zip').
+        input_keras_path: Path to the source ``.keras`` model file.
+        output_zip_path: Destination path for the resulting ``.zip`` bundle.
 
     Returns:
-        None
+        None: The SavedModel artefacts are written into ``output_zip_path``.
 
     Raises:
-        Any exception raised by TensorFlow I/O (e.g. file not found, load/save errors).
+        Exception: Propagates loader or saver failures raised by TensorFlow.
     """
     # Create a temp workspace for the SavedModel directory
     with tempfile.TemporaryDirectory() as tmp_dir:

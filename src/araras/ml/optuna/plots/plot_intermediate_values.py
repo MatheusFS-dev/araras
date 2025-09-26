@@ -20,10 +20,7 @@ def plot_intermediate_values(study: optuna.Study, dirs: Dict[str, str], create_p
         create_plotly: Whether to save an interactive HTML version of the plot.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: The figure is persisted to the directories referenced in ``dirs``.
     """
     trials = [t for t in study.trials if t.state == optuna.trial.TrialState.COMPLETE]
     if not trials:

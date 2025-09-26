@@ -72,6 +72,8 @@ This document provides an overview of the API functions available in the ARARAS 
     - [init\_study\_dirs](#init_study_dirs)
     - [log\_trial\_error](#log_trial_error)
   - [notifications.email](#notificationsemail)
+    - [get\_credentials](#get_credentials)
+    - [get\_recipient\_emails](#get_recipient_emails)
     - [send\_email](#send_email)
   - [runtime.monitoring](#runtimemonitoring)
     - [run\_auto\_restart](#run_auto_restart)
@@ -104,18 +106,12 @@ supress_optuna_warnings(
 
 )
 ```
-Suppress Optuna experimental warnings. This helper inspects Optuna for
-``ExperimentalWarning`` classes and filters them out.
+Suppress ``ExperimentalWarning`` messages emitted by Optuna's experimental
+features without importing the library at module import time.
 
-**Parameters**
-| Name | Type | Description |
-|------|------|-------------|
-
-**Returns**
-`None`
-
-**Raises**
-- None
+> [!NOTE]
+> The Optuna import happens lazily inside the function so that optional
+> dependencies are only loaded when needed.
 
 
 
@@ -1748,6 +1744,59 @@ the process aborts after that many consecutive
 
 ## notifications.email
 
+### get_credentials
+
+```python
+get_credentials(
+    file_path,
+)
+```
+Load sender credentials from a JSON file containing ``"email"`` and
+``"password"`` keys.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| file_path | `str` | Path to the credentials JSON file. |
+
+**Returns**
+`Tuple[str, str]`: Sender email address and password.
+
+**Raises**
+- ValueError: If the file cannot be read or is missing required keys.
+
+**Examples**
+```python
+>>> get_credentials("credentials.json")
+('your_email@gmail.com', 'your_password')
+```
+
+### get_recipient_emails
+
+```python
+get_recipient_emails(
+    file_path,
+)
+```
+Load recipient addresses from a JSON document with an ``"emails"`` list.
+
+**Parameters**
+| Name | Type | Description |
+|------|------|-------------|
+| file_path | `str` | Path to the recipient JSON file. |
+
+**Returns**
+`List[str]`: Email addresses that should receive notifications.
+
+**Raises**
+- ValueError: If the file cannot be read or lacks an ``"emails"`` list.
+
+**Examples**
+```python
+>>> get_recipient_emails("recipients.json")
+['recipient1@example.com', 'recipient2@example.com']
+```
+
 ### send_email
 
 ```python
@@ -1761,24 +1810,31 @@ send_email(
     smtp_port,
 )
 ```
-Sends an email notification with the specified subject and body content to multiple recipients. Example: send_email("Hi", "This is a test", "recipients.json", "credentials.json", text_type="html")
+Send a notification message to every configured recipient. The helper reads
+credentials and recipients from JSON files and logs any failure instead of
+raising it.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| subject | `str` | The subject of the email. |
-| body | `str` | The main content of the email. |
-| recipients_file | `str` | Path to the recipients JSON file. |
-| credentials_file | `str` | Path to the credentials JSON file. |
-| text_type | `str` | The type of text content (e.g., "plain" or "html"). |
-| smtp_server | `str` | The SMTP server address (default is Gmail's SMTP server). |
-| smtp_port | `int` | The port number for the SMTP server (default is 587 for TLS). |
+| subject | `str` | Subject line for the message. |
+| body | `str` | Message body, plain text or HTML. |
+| recipients_file | `str` | JSON file consumed by :func:`get_recipient_emails`. |
+| credentials_file | `str` | JSON file consumed by :func:`get_credentials`. |
+| text_type | `str`, optional | MIME subtype for the message body. Defaults to ``"plain"``. |
+| smtp_server | `str`, optional | SMTP server hostname. Defaults to ``"smtp.gmail.com"``. |
+| smtp_port | `int`, optional | SMTP port. Defaults to ``587``. |
 
-**Returns**
-` None`
-
-**Raises**
-- None
+**Examples**
+```python
+>>> send_email(
+...     "Experiment finished",
+...     "Model converged successfully.",
+...     "recipients.json",
+...     "credentials.json",
+...     text_type="html",
+... )
+```
 
 ## runtime.monitoring
 
@@ -1882,19 +1938,23 @@ create_run_directory(
     base_dir,
 )
 ```
-Creates a new run directory with an incremented numeric suffix and returns its full path. The directory name is generated using the given prefix followed by the next available number. For example, if directories "run1", "run2", and "run3" exist, calling with prefix="run" will create "run4". Logic: -> Ensure base_dir exists -> List existing directories with matching prefix and numeric suffix -> Parse suffix numbers and find the next available integer -> Construct full path using prefix + next number -> Create the new run directory and return its path
+Create a run directory whose numeric suffix is automatically incremented. The
+directory is created inside ``base_dir`` if it does not already exist.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| prefix | `str` | Prefix to be used in the name of each run directory (e.g., "run"). |
-| base_dir | `str, optional` | Directory under which all runs are stored. Defaults to "runs". |
+| prefix | `str` | Prefix used in the folder name, for example ``"run"``. |
+| base_dir | `str`, optional | Parent directory that holds all runs. Defaults to ``"runs"``. |
 
 **Returns**
-` str: Absolute path to the newly created run directory. Example: run_path = create_run_directory(prefix="run") print(run_path)  # outputs: runs/run1, runs/run2, etc.`
+`str`: Path to the newly created directory relative to ``base_dir``.
 
-**Raises**
-- None
+**Examples**
+```python
+>>> create_run_directory("experiment")
+'runs/experiment1'
+```
 
 ### get_caller_stem
 
@@ -1903,11 +1963,9 @@ get_caller_stem(
     remove='temp_monitor_',
 )
 ```
-Return the stem of the calling script or notebook.
-
-The helper inspects different execution contexts (VS Code notebooks, Python
-scripts or pure notebooks via ``ipynbname``) to infer the file stem. The optional
-``remove`` substring is stripped from the detected stem when present.
+Return the stem of the script or notebook that invoked this helper. Supports
+VS Code notebooks, Python scripts and classic notebooks; optionally removes a
+substring from the detected name.
 
 **Parameters**
 | Name | Type | Description |
@@ -1915,10 +1973,10 @@ scripts or pure notebooks via ``ipynbname``) to infer the file stem. The optiona
 | remove | `Optional[str]` | Substring to remove from the detected stem. |
 
 **Returns**
-` str: The cleaned stem name of the caller.`
+`str`: Cleaned stem of the calling script or notebook.
 
 **Raises**
-- RuntimeError: If the stem name cannot be determined.
+- RuntimeError: If a stem cannot be determined from runtime metadata.
 
 ## utils.misc
 
@@ -2057,18 +2115,17 @@ get_gpu_info(
 
 )
 ```
-Prints detailed TensorFlow and GPU configuration information in nvidia-smi style format. This function reports: - TensorFlow version and CUDA configuration - GPU devices in tabular format similar to nvidia-smi - Memory usage summary - Temperature and utilization data (when available)
+Print detailed TensorFlow and GPU configuration information similar to
+``nvidia-smi``.
 
-**Parameters**
-This function does not accept any arguments.
-
-**Returns**
-` None Example: get_gpu_info()`
-
-**Raises**
-- None
 > [!IMPORTANT]
-> Requires an NVIDIA driver and the `nvidia-smi` utility installed to query hardware information.
+> The most complete output requires an NVIDIA driver and the ``nvidia-smi``
+> utility. Missing tooling degrades the report gracefully.
+
+**Examples**
+```python
+>>> get_gpu_info()
+```
 
 ### gpu_summary
 
@@ -2099,23 +2156,23 @@ log_resources(
     pid=None,
 )
 ```
-Logs selected system and ML resources (CPU, RAM, GPU with temperatures, CUDA, TensorFlow) at regular time intervals. If ``pid`` is provided, CPU usage for that process is also logged.
+Continuously log system metrics (CPU, RAM, GPU, CUDA, TensorFlow) to CSV files.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| log_dir | `str` | Directory where log files will be stored. |
-| interval | `int` | Time interval between consecutive logs in seconds. Defaults to 5. |
-| pid | `int \| None` | Process ID to monitor CPU usage for. Defaults to the current process. |
-| kwargs | `bool` flags | Set a flag to ``True`` to log a given resource. Supported flags: "cpu", "ram", "gpu", "cuda", "tensorflow". |
+| log_dir | `str` | Directory where log files are saved. |
+| interval | `int` | Seconds between samples. Defaults to ``5``. |
+| pid | `int \| None` | Process ID whose CPU usage is recorded. Defaults to the current process. |
+| kwargs | `bool` flags | Flags such as ``cpu=True`` or ``gpu=True`` to enable specific logs. |
 
-**Returns**
-` None Example: log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)`
+**Examples**
+```python
+>>> log_resources("logs", interval=10, pid=os.getpid(), cpu=True, ram=True, gpu=True)
+```
 
-**Raises**
-- None
 > [!CAUTION]
-> Log files are appended indefinitely; on long-running experiments they can grow very large. Ensure there is enough disk space.
+> Log files grow without bound while the monitoring threads are running.
 
 ## visualization.configs
 
@@ -2126,18 +2183,15 @@ config_plt(
     style,
 )
 ```
-Configure matplotlib rcParams for IEEE‑style figures
+Configure Matplotlib defaults for IEEE-style figures.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| style | `str` | Figure style. Use `'single-column'` for narrow figures or `'double-column'` for wide figures. Defaults to `'single-column'`. |
-
-**Returns**
-` None`
+| style | `str` | Either ``"single-column"`` or ``"double-column"`` to apply the corresponding figure preset. |
 
 **Raises**
-- None
+- ValueError: If ``style`` is not supported.
 
 > [!TIP]
-> Use `'double-column'` when creating figures that span both columns in a conference paper for consistent font sizes.
+> Use ``"double-column"`` when creating figures that span both columns in a conference paper.

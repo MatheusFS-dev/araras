@@ -289,9 +289,6 @@ def prune_model_by_config(
         batch_size: Batch size used for memory estimation. Defaults to ``1``.
         verbose: If True, print stats for the model.
 
-    Returns:
-        None
-
     Raises:
         optuna.TrialPruned: If any threshold is exceeded.
 
@@ -299,7 +296,7 @@ def prune_model_by_config(
         When multiple thresholds are provided the model will be pruned as soon
         as the first limit is violated.
 
-    Warning:
+    Warnings:
         The memory estimation relies on :func:`estimate_training_memory` and is
         therefore only an approximation.
     """
@@ -378,12 +375,6 @@ def plot_model_param_distribution(
         plot_model_dir: Directory where model plots are saved. If ``None``, no plots are saved.
             Each model is saved as a PNG file named ``model_{trial_number}.png``.
         show_plot: Whether to display the histogram figure after sampling. Defaults to ``False``.
-
-    Returns:
-        None.
-
-    Raises:
-        None.
 
     Notes:
         Clearing the Keras backend session between trials mitigates

@@ -38,10 +38,7 @@ def plot_contour(
         create_plotly: Whether to save interactive HTML versions of the plots.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: Figures are written to the locations described by ``dirs``.
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

@@ -15,20 +15,17 @@ from araras.ml.optuna.analysis_utils import (
 
 
 def plot_param_importances(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool = False) -> None:
-    """
-    Generate and save parameter importance analysis.
-
-    This function computes parameter importances using Optuna's built-in
-    importance calculation and creates both a CSV table and bar chart
-    visualization to identify which parameters most influence the objective.
+    """Generate bar charts and CSV summaries of Optuna parameter importances.
 
     Args:
-        study (optuna.Study): Optuna study object containing optimization history
-        dirs (Dict[str, str]): Directory paths for saving outputs
-        create_plotly (bool): Whether to save an interactive HTML version
+        study: Optuna study containing the optimisation history.
+        dirs: Mapping of directory identifiers to output folders.
+        create_plotly: Whether to export an interactive HTML bar chart in
+            addition to the static Matplotlib figure.
 
     Returns:
-        None: Saves importance table as CSV and bar chart as pdf
+        None: CSV data files and plots are saved under the paths provided in
+        ``dirs``.
     """
     # Calculate parameter importances using Optuna's algorithm
     importances = get_param_importances(study)

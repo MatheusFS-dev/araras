@@ -7,22 +7,23 @@ from email.mime.multipart import MIMEMultipart
 
 
 def get_credentials(file_path: str) -> tuple[str, str]:
-    """
-    Reads the sender's email and password from a JSON file.
-    The json file format should be:
-    {
-        "email": "your_email@gmail.com",
-        "password": "your_password"
-    }
+    """Load sender credentials from a JSON file.
 
     Args:
-        file_path (str): Path to the credentials JSON file.
+        file_path: Path to a JSON document containing ``"email"`` and
+            ``"password"`` keys.
 
     Returns:
-        tuple[str, str]: A tuple containing the sender email and password.
+        tuple[str, str]: Sender email address and password extracted from the
+        file.
 
     Raises:
-        ValueError: If the credentials cannot be read or parsed.
+        ValueError: If the file cannot be read or does not contain the expected
+        keys.
+
+    Examples:
+        >>> get_credentials("credentials.json")
+        ("your_email@gmail.com", "your_password")
     """
     try:
         # Open and read the JSON file containing credentials
@@ -34,21 +35,21 @@ def get_credentials(file_path: str) -> tuple[str, str]:
 
 
 def get_recipient_emails(file_path: str) -> list[str]:
-    """
-    Reads a list of recipient email addresses from a JSON file.
-    The json file format should be:
-    {
-        "emails": ["recipient1@example.com", "recipient2@example.com"]
-    }
+    """Load recipient addresses from a JSON file.
 
     Args:
-        file_path (str): Path to the recipient JSON file.
+        file_path: Path to a JSON document containing an ``"emails"`` list.
 
     Returns:
-        list[str]: A list of recipient email addresses.
+        list[str]: Email addresses that should receive the notification.
 
     Raises:
-        ValueError: If the file or its contents cannot be read.
+        ValueError: If the file cannot be read or does not include an
+        ``"emails"`` key with an iterable value.
+
+    Examples:
+        >>> get_recipient_emails("recipients.json")
+        ["recipient1@example.com", "recipient2@example.com"]
     """
     try:
         # Open and read the JSON file containing recipient email addresses
@@ -68,23 +69,32 @@ def send_email(
     smtp_server: str = "smtp.gmail.com",
     smtp_port: int = 587,
 ) -> None:
-    """
-    Sends an email notification with the specified subject and body content to multiple recipients.
-
-    Example:
-        send_email("Hi", "This is a test", "recipients.json", "credentials.json", text_type="html")
+    """Send an email notification to every configured recipient.
 
     Args:
-        subject (str): The subject of the email.
-        body (str): The main content of the email.
-        recipients_file (str): Path to the recipients JSON file.
-        credentials_file (str): Path to the credentials JSON file.
-        text_type (str): The type of text content (e.g., "plain" or "html").
-        smtp_server (str): The SMTP server address (default is Gmail's SMTP server).
-        smtp_port (int): The port number for the SMTP server (default is 587 for TLS).
+        subject: Subject line for the message.
+        body: Plain-text or HTML content to send.
+        recipients_file: Path to a JSON file consumed by
+            :func:`get_recipient_emails`.
+        credentials_file: Path to a JSON file understood by
+            :func:`get_credentials`.
+        text_type: MIME subtype to use for the message body (``"plain"`` or
+            ``"html"``).
+        smtp_server: Hostname or IP address of the SMTP server.
+        smtp_port: Port used to connect to the SMTP server.
 
-    Returns:
-        None
+    Notes:
+        Exceptions raised while loading files or sending the message are
+        caught and logged. No exception propagates to the caller.
+
+    Examples:
+        >>> send_email(
+        ...     "Hello",
+        ...     "<p>This is a test</p>",
+        ...     "recipients.json",
+        ...     "credentials.json",
+        ...     text_type="html",
+        ... )
     """
 
     try:

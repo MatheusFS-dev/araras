@@ -25,24 +25,27 @@ def plot_optimal_ranges_analysis(
     create_standalone: bool = False,
     create_plotly: bool = False,
 ) -> None:
-    """
-    Create a single comprehensive visualization showing optimal parameter ranges based on best-performing trials.
+    """Show conservative and aggressive value ranges for numeric parameters.
 
-    This function generates a single plot with subplots for each parameter showing the distribution of parameters
-    in all trials versus best trials, with indicators for conservative and aggressive
-    optimal ranges, plus the median of best trials.
+    Each subplot compares the full trial distribution with the subset of
+    top-performing trials and highlights inter-quantile ranges plus the median
+    value for the best trials.
 
     Args:
-        df (pd.DataFrame): Complete dataset with all trials
-        best (pd.DataFrame): Subset of best-performing trials
-        numeric_cols (List[str]): List of numeric parameter column names
-        dirs (Dict[str, str]): Directory paths for saving outputs
-        param_name_mapping (Dict[str, str]): Optional mapping for parameter display names
-        create_standalone (bool): Whether to create standalone images for each parameter
-        create_plotly (bool): Whether to save interactive HTML versions
+        df: DataFrame containing all recorded trials.
+        best: DataFrame with the best performing trials.
+        numeric_cols: Parameters to include in the range analysis.
+        dirs: Mapping of directory identifiers to filesystem locations for
+            outputs.
+        param_name_mapping: Optional mapping from parameter names to
+            presentation labels.
+        create_standalone: Whether to generate individual figures per
+            parameter.
+        create_plotly: Whether to export interactive versions of the plots.
 
     Returns:
-        None: Saves the optimal ranges visualization to fig_ranges directory
+        None: Output files are saved beneath ``dirs["figs"]`` and related
+        directories.
     """
     if not numeric_cols:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

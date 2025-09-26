@@ -36,10 +36,7 @@ def plot_slice(
         create_plotly: Whether to save interactive HTML versions of the plots.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: Figures are saved to the directories defined in ``dirs``.
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

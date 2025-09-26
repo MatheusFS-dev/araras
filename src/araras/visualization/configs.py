@@ -5,15 +5,14 @@ from cycler import cycler
 
 
 def config_plt(style: str = "single-column") -> None:
-    """
-    Configure matplotlib rcParams for IEEE‑style figures
+    """Configure matplotlib defaults for IEEE-style figures.
 
     Args:
-        style (str): The figure style to use. Options are 'single-column' or
-            'double-column'. Default is 'single-column'.
+        style: Figure layout preset to apply. Supported values are
+            ``"single-column"`` and ``"double-column"``.
 
-    Returns:
-        None
+    Raises:
+        ValueError: If ``style`` is not one of the supported presets.
     """
     if style == "single-column":
         figsize = (3.5, 2.5)

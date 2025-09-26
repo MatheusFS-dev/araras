@@ -1,12 +1,12 @@
-"""
-Module plot_parallel_coordinate of analysis
+"""Parallel coordinate visualisations for Optuna studies.
 
-Functions:
-    - plot_parallel_coordinate: Create a parallel coordinate plot for trials.
+This module exposes :func:`plot_parallel_coordinate`, a convenience wrapper for
+rendering static Matplotlib figures (and optional Plotly dashboards) that show
+parameter interactions across completed trials.
 
-Example:
-    >>> from araras.optuna.analysis.plot_parallel_coordinate import plot_parallel_coordinate
-    >>> plot_parallel_coordinate(...)
+Examples:
+    >>> from araras.ml.optuna.plots.plot_parallel_coordinate import plot_parallel_coordinate
+    >>> plot_parallel_coordinate(study, ["params_learning_rate"], dirs={"figs": "."})
 """
 from araras.core import *
 
@@ -40,11 +40,6 @@ def plot_parallel_coordinate(
         dirs: Dictionary with output directories used for saving figures.
         create_plotly: Whether to save an interactive HTML version of the plot.
 
-    Returns:
-        None
-
-    Raises:
-        None
     """
     if not params:
         fig, ax = plt.subplots(figsize=PLOT_CFG.standalone_size)

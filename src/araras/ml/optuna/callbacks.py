@@ -29,11 +29,6 @@ class ImprovementStagnation:
         improvement_evaluator: Custom improvement evaluator. Defaults to
             :class:`RegretBoundEvaluator`.
 
-    Returns:
-        None
-
-    Raises:
-        None
     """
 
     def __init__(
@@ -189,9 +184,6 @@ class StopWhenNoValueImprovement:
             counter. Defaults to ``0.0``.
         verbose: If ``True``, log a warning when the study is stopped.
 
-    Returns:
-        None
-
     Raises:
         ValueError: If ``patience`` is not positive or ``min_delta`` is negative.
     """
@@ -246,17 +238,14 @@ class StopWhenNoValueImprovement:
 
 
 class NanLossPrunerOptuna(callbacks.Callback):
-    """
-    A custom Keras callback that prunes an Optuna trial if NaN is encountered in training loss.
-
-    This is useful for skipping unpromising model configurations early, especially
-    those that are unstable or diverging during training.
+    """Prune an Optuna trial when the training loss diverges to ``NaN``.
 
     Args:
-        trial (optuna.Trial): The Optuna trial associated with this model run.
+        trial: Optuna trial instance associated with the current Keras model
+            run.
 
-    Example:
-        model.fit(..., callbacks=[NanLossPrunerOptuna(trial)])
+    Examples:
+        >>> model.fit(..., callbacks=[NanLossPrunerOptuna(trial)])
     """
 
     def __init__(self, trial: optuna.Trial) -> None:

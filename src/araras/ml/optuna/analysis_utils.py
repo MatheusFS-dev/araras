@@ -138,9 +138,6 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
         *args: Positional arguments for ``func``.
         **kwargs: Keyword arguments for ``func``.
 
-    Returns:
-        None
-
     Notes:
         Exceptions are logged and printed; they are not raised.
     """
@@ -508,4 +505,3 @@ def analyze_improvement_variance(
             variances.append(float('nan'))
 
     return variances
-

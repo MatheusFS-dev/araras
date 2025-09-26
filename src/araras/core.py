@@ -164,15 +164,6 @@ def supress_optuna_warnings() -> None:
     Notes:
         The :mod:`optuna` import occurs within this function to avoid pulling in
         optional dependencies at module import time.
-
-    Args:
-        None
-
-    Returns:
-        None
-
-    Raises:
-        None
     """
 
     import optuna

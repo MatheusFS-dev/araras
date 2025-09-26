@@ -26,35 +26,38 @@ class WarmupCosine(tf.keras.optimizers.schedules.LearningRateSchedule):
     Where W is warmup_steps and T is total_steps.
 
     Args:
-      base_lr: Target learning rate reached at the end of warmup and used as
-        the peak value before cosine decay starts. Can be float or scalar tensor.
-      warmup_steps: Number of optimizer steps used for linear warmup.
-      total_steps: Total number of optimizer steps for the full schedule.
-      name: Optional name scope for the schedule.
+        base_lr: Target learning rate reached at the end of warmup and used as
+            the peak value before cosine decay starts. Accepts a float or scalar
+            tensor.
+        warmup_steps: Number of optimizer steps used for linear warmup.
+        total_steps: Total number of optimizer steps for the full schedule.
+        name: Optional name scope for the schedule.
 
     Attributes:
-      base_lr: Float, stored as Python float for serialization.
-      warmup_steps: Int, warmup duration in steps.
-      total_steps: Int, total number of steps for the schedule.
-      name: String name for the object.
-      verbose: Int, verbosity level. Either 0 (silent) or 1 (verbose).
+        base_lr: Float, stored as Python float for serialization.
+        warmup_steps: Int, warmup duration in steps.
+        total_steps: Int, total number of steps for the schedule.
+        name: String name for the object.
+        verbose: Int, verbosity level. Either ``0`` (silent) or ``1`` (verbose).
 
-    Example:
-      ```python
-      steps_per_epoch = max(1, len(X_tr) // BATCH_SIZE)
-      total_steps = steps_per_epoch * EPOCHS
-      warmup_steps = max(10, int(0.05 * total_steps))
+    Examples:
+        .. code-block:: python
 
-      lr_schedule = WarmupCosine(base_lr=3e-4,
-                                 warmup_steps=warmup_steps,
-                                 total_steps=total_steps)
+            steps_per_epoch = max(1, len(X_tr) // BATCH_SIZE)
+            total_steps = steps_per_epoch * EPOCHS
+            warmup_steps = max(10, int(0.05 * total_steps))
 
-      optimizer = tf.keras.optimizers.AdamW(
-          learning_rate=lr_schedule,
-          weight_decay=2e-4,
-          clipnorm=1.0
-      )
-      ```
+            lr_schedule = WarmupCosine(
+                base_lr=3e-4,
+                warmup_steps=warmup_steps,
+                total_steps=total_steps,
+            )
+
+            optimizer = tf.keras.optimizers.AdamW(
+                learning_rate=lr_schedule,
+                weight_decay=2e-4,
+                clipnorm=1.0,
+            )
     """
 
     def __init__(self, base_lr, warmup_steps, total_steps, name="warmup_cosine", verbose=0):

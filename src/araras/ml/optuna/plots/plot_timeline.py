@@ -31,10 +31,8 @@ def plot_timeline(study: optuna.Study, dirs: Dict[str, str], create_plotly: bool
         create_plotly: Whether to save an interactive HTML version of the plot.
 
     Returns:
-        None
-
-    Raises:
-        None
+        None: The timeline visualisation is saved within the directories
+        referenced by ``dirs``.
     """
     considered_states = {
         optuna.trial.TrialState.COMPLETE,

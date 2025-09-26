@@ -151,8 +151,8 @@ def analyze_study(
         study: Optuna study object containing trials to analyze.
         table_dir: Directory to save analysis results and figures.
         top_frac: Fraction of best/worst trials to analyze (default: 0.2).
-        param_name_mapping: Optional mapping of parameter names to display names.
-            Example: {'params_learning_rate': 'Learning Rate'}
+        param_name_mapping: Optional mapping of parameter names to display names,
+            for example ``{"params_learning_rate": "Learning Rate"}``.
         create_standalone: If True, generates standalone images for each plot type.
         save_data: If True, saves data for LaTeX plotting into CSV files.
         create_plotly: If True, also saves interactive Plotly HTML versions of the figures.
