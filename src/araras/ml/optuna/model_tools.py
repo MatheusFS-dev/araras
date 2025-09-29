@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Dict, Iterable, Tuple, Union
+from typing import Any, Dict, Iterable, Optional, Tuple, Union
 from collections import Counter
 
 import optuna
@@ -65,6 +65,57 @@ def _dtype_size(dtype: Any, default: int = 4) -> int:
             return int(tf.as_dtype(str(dtype)).size)
         except (TypeError, ValueError):
             return default
+
+
+def _resolve_layer_output_shape(layer: keras.layers.Layer) -> Optional[Any]:
+    """Return the best-effort static output shape for a layer.
+
+    Args:
+        layer (keras.layers.Layer): Layer whose output shape should be resolved.
+
+    Returns:
+        Optional[Any]: A TensorFlow :class:`~tf.TensorShape`, a nested collection
+        of shapes when the layer emits multiple tensors, or ``None`` when no
+        static shape information is available.
+
+    Notes:
+        Starting with Keras 3, ``layer.output_shape`` often returns ``None`` even
+        after the layer is connected to a computation graph. This helper
+        inspects ``layer.output`` (which yields ``KerasTensor`` objects with
+        populated ``shape`` metadata) and gracefully falls back to legacy
+        attributes such as ``output_shape`` or ``get_output_shape_at`` when
+        present.
+
+    Warnings:
+        Custom layers that override ``output`` with side effects or emit ragged
+        tensors may still fail to provide a usable static shape. Callers should
+        handle ``None`` results accordingly.
+    """
+
+    output_shape = getattr(layer, "output_shape", None)
+
+    if output_shape is None and hasattr(layer, "get_output_shape_at"):
+        try:
+            output_shape = layer.get_output_shape_at(0)
+        except Exception:
+            output_shape = None
+
+    if output_shape is None and hasattr(layer, "input_shape") and hasattr(layer, "compute_output_shape"):
+        try:
+            output_shape = layer.compute_output_shape(layer.input_shape)
+        except Exception:
+            output_shape = None
+
+    if output_shape is None:
+        output_tensor = getattr(layer, "output", None)
+        if isinstance(output_tensor, (list, tuple)):
+            shapes = [getattr(tensor, "shape", None) for tensor in output_tensor]
+            if all(shape is not None for shape in shapes):
+                output_shape = shapes
+        elif output_tensor is not None:
+            output_shape = getattr(output_tensor, "shape", None)
+
+    return output_shape
 
 
 def _count_params_and_bytes(weights: Iterable[tf.Variable]) -> Tuple[int, int]:
@@ -271,17 +322,11 @@ def _calculate_activation_memory(
     missing_layers: list[str] = []
 
     for layer in model.layers:
-        output_shape = getattr(layer, "output_shape", None)
-        if output_shape is None and hasattr(layer, "get_output_shape_at"):
-            try:
-                output_shape = layer.get_output_shape_at(0)
-            except Exception:
-                output_shape = None
-        if output_shape is None and hasattr(layer, "input_shape") and hasattr(layer, "compute_output_shape"):
-            try:
-                output_shape = layer.compute_output_shape(layer.input_shape)
-            except Exception:
-                output_shape = None
+        output_shape = _resolve_layer_output_shape(layer)
+
+        if output_shape is None:
+            missing_layers.append(layer.name)
+            continue
 
         try:
             elements = _shape_element_count(output_shape)
