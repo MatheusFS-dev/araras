@@ -1,11 +1,12 @@
+"""Transformer language-model building block."""
+
 from araras.core import *
 
 from collections.abc import Sequence
-from typing import Optional
 
 import optuna
 import tensorflow as tf
-from tensorflow.keras import Model, initializers, layers
+from tensorflow.keras import layers
 
 from araras.ml.model.hyperparams import KParams
 
@@ -13,127 +14,95 @@ from araras.ml.model.hyperparams import KParams
 def build_lm(
     trial: optuna.Trial,
     kparams: KParams,
+    x: layers.Layer,
     sequence_length: int,
-    output_units: int,
-    feature_dim: int = 1,
-    embedding_input_dim: Optional[int] = None,
-    embedding_mask_zero: bool = False,
-    embedding_dim_options: Sequence[int] = (64, 128, 256),
-    heads_options: Sequence[int] = (2, 4, 8),
-    key_dim_options: Sequence[int] = (16, 32, 64),
-    transformer_layers_range: tuple[int, int] = (1, 4),
-    ffn_multiplier_range: tuple[int, int] = (2, 4),
-    head_units_options: Sequence[int] = (128, 256, 512),
-    dropout_range: tuple[float, float] = (0.0, 0.5),
-    dropout_step: float = 0.1,
-    activation_choices: Optional[Sequence[str]] = None,
-    output_activation: Optional[str] = None,
-    show_summary: bool = True,
-    initializer: Optional[initializers.Initializer] = None,
+    token_dim_options: Sequence[int] = (64, 128, 256),
+    head_options: Sequence[int] = (2, 4, 8),
+    transformer_layers_range: tuple[int, int] = (1, 2),
+    ffn_multiplier_options: Sequence[int] = (2, 4),
+    dropout_range: tuple[float, float] = (0.0, 0.3),
+    dropout_step: float = 0.05,
+    trial_kernel_reg: bool = False,
+    trial_activation: bool = True,
     name_prefix: str = "lm",
-) -> Model:
-    """Build a generic transformer-style language model.
+) -> layers.Layer:
+    """Build a configurable Transformer encoder stack for language modeling.
 
-    This architecture accepts either dense feature sequences or integer token identifiers
-    and applies configurable Transformer encoder blocks for contextualization. The
-    resulting token representations are aggregated into a compact sequence embedding and
-    projected onto the requested number of output units, enabling reuse across
-    classification, regression, or multi-label prediction tasks.
+    This builder projects the incoming features into a token embedding space, adds a
+    learned positional encoding, and applies a stack of Transformer encoder blocks.
+    Hyperparameters such as the embedding width, number of attention heads, dropout
+    rates, feed-forward expansion factor, and activation function are optimized via
+    Optuna by sampling from the provided search spaces.
 
     Notes:
-        When ``embedding_input_dim`` is provided the input is assumed to consist of
-        integer token identifiers and an embedding layer is inserted automatically.
-        Otherwise the model expects floating point features with shape ``(sequence_length,
-        feature_dim)``.
+        The function expects the input tensor ``x`` to have shape ``(batch_size,
+        sequence_length, feature_dim)``. The ``sequence_length`` argument must match
+        the second dimension so that the positional embedding table is created with
+        the appropriate size.
 
     Warnings:
-        Large ``sequence_length`` values increase the memory footprint of the positional
-        embeddings and attention mechanism quadratically.
+        A mismatch between ``sequence_length`` and the actual time dimension of
+        ``x`` causes shape inconsistencies when broadcasting the positional
+        embeddings. Ensure these values align to avoid runtime errors.
 
     Args:
-        trial: Hyperparameter sampling interface, typically provided by Optuna.
-        kparams: Helper that supplies optimizers, regularizers, and activations.
-        sequence_length: Number of time steps or tokens consumed by the model.
-        output_units: Size of the final prediction layer.
-        feature_dim: Number of features per token when embeddings are not used.
-        embedding_input_dim: Vocabulary size for the optional embedding layer. If
-            ``None``, the inputs are treated as continuous features.
-        embedding_mask_zero: Whether the embedding layer should mask zero tokens.
-        embedding_dim_options: Candidate output dimensions for the embedding layer.
-        heads_options: Candidate numbers of attention heads.
-        key_dim_options: Candidate key dimensions per attention head.
-        transformer_layers_range: Inclusive range for the number of Transformer blocks.
-        ffn_multiplier_range: Inclusive range for the feed-forward expansion multiplier.
-        head_units_options: Candidate units for the dense head preceding the outputs.
-        dropout_range: Inclusive range for dropout probabilities sampled per trial.
+        trial: Optuna trial used to sample hyperparameters.
+        kparams: Hyperparameter helper that provides regularizers and activations.
+        x: Input tensor or Keras layer representing the token features.
+        sequence_length: Number of tokens per sequence; must be positive.
+        token_dim_options: Candidate embedding widths for the token projection.
+        head_options: Candidate numbers of attention heads.
+        transformer_layers_range: Inclusive range for the number of Transformer
+            encoder blocks to stack.
+        ffn_multiplier_options: Candidate expansion factors applied to the
+            feed-forward network hidden width.
+        dropout_range: Inclusive range for dropout probabilities.
         dropout_step: Step size used when sampling dropout probabilities.
-        activation_choices: Optional sequence of activation names for the feed-forward
-            blocks. Defaults to ("relu", "gelu", "silu").
-        output_activation: Activation function applied to the final Dense layer.
-        show_summary: Whether to display the model summary after construction.
-        initializer: Optional initializer applied to dense and embedding projections. If
-            ``None`` a Glorot uniform initializer seeded with ``kparams.seed`` is used.
-        name_prefix: Prefix applied to generated layer names for easier inspection.
+        trial_kernel_reg: When ``True``, sample a kernel regularizer via
+            :class:`KParams` for the feed-forward layers.
+        trial_activation: When ``True``, sample the feed-forward activation via
+            :class:`KParams`. If ``False``, the activation defaults to ReLU.
+        name_prefix: Prefix used for layer naming.
 
     Returns:
-        Model: A compiled Keras model ready for training.
+        layers.Layer: Output tensor after applying the Transformer stack.
 
     Raises:
-        ValueError: If ``sequence_length`` or ``output_units`` is not positive.
-        ValueError: If ``embedding_input_dim`` is provided but not positive.
-        ValueError: If ``feature_dim`` is not positive when embeddings are disabled.
-        ValueError: If ``dropout_range`` falls outside the ``[0.0, 1.0]`` interval.
+        ValueError: If ``sequence_length`` is not positive.
+        ValueError: If ``token_dim_options`` or ``head_options`` is empty.
+        ValueError: If the sampled embedding width is incompatible with all head
+            options (i.e., it is not divisible by any candidate head count).
+        ValueError: If ``dropout_range`` does not fall within the ``[0.0, 1.0]``
+            interval or ``dropout_range[0]`` exceeds ``dropout_range[1]``.
     """
 
     if sequence_length <= 0:
         raise ValueError("sequence_length must be a positive integer.")
 
-    if output_units <= 0:
-        raise ValueError("output_units must be a positive integer.")
+    if not token_dim_options:
+        raise ValueError("token_dim_options must contain at least one value.")
 
-    if embedding_input_dim is not None and embedding_input_dim <= 0:
-        raise ValueError("embedding_input_dim must be positive when provided.")
-
-    if embedding_input_dim is None and feature_dim <= 0:
-        raise ValueError("feature_dim must be positive when embeddings are disabled.")
+    if not head_options:
+        raise ValueError("head_options must contain at least one value.")
 
     if not (0.0 <= dropout_range[0] <= dropout_range[1] <= 1.0):
         raise ValueError("dropout_range must define values within [0.0, 1.0].")
 
-    activation_choices = activation_choices or ("relu", "gelu", "silu")
+    token_dim = trial.suggest_categorical(
+        f"{name_prefix}_token_dim",
+        list(token_dim_options),
+    )
 
-    if initializer is None:
-        seed = getattr(kparams, "seed", None)
-        initializer = initializers.GlorotUniform(seed=seed)
+    compatible_heads = [head for head in head_options if token_dim % head == 0]
+    if not compatible_heads:
+        raise ValueError(
+            "No compatible attention heads found for the sampled token dimension."
+        )
 
-    if embedding_input_dim is not None:
-        inputs = layers.Input(
-            shape=(sequence_length,),
-            dtype="int32",
-            name=f"{name_prefix}_token_ids",
-        )
-        embedding_dim = trial.suggest_categorical(
-            f"{name_prefix}_embedding_dim",
-            list(embedding_dim_options),
-        )
-        x = layers.Embedding(
-            input_dim=embedding_input_dim,
-            output_dim=embedding_dim,
-            embeddings_initializer=initializer,
-            mask_zero=embedding_mask_zero,
-            name=f"{name_prefix}_token_embedding",
-        )(inputs)
-    else:
-        inputs = layers.Input(
-            shape=(sequence_length, feature_dim),
-            dtype="float32",
-            name=f"{name_prefix}_features",
-        )
-        x = inputs
-
-    heads = trial.suggest_categorical(f"{name_prefix}_attn_heads", list(heads_options))
-    key_dim = trial.suggest_categorical(f"{name_prefix}_attn_key_dim", list(key_dim_options))
-    d_model = heads * key_dim
+    num_heads = trial.suggest_categorical(
+        f"{name_prefix}_num_heads",
+        compatible_heads,
+    )
 
     dropout_rate = trial.suggest_float(
         f"{name_prefix}_dropout",
@@ -142,112 +111,87 @@ def build_lm(
         step=dropout_step,
     )
 
-    if embedding_input_dim is None:
-        x = layers.Dense(
-            d_model,
-            kernel_initializer=initializer,
-            name=f"{name_prefix}_feature_projection",
-        )(x)
-    else:
-        x = layers.Dense(
-            d_model,
-            kernel_initializer=initializer,
-            name=f"{name_prefix}_embedding_projection",
-        )(x)
+    kernel_initializer = kparams.get_initializer(trial, f"{name_prefix}_kernel_init")
+    kernel_regularizer = (
+        kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg")
+        if trial_kernel_reg
+        else None
+    )
+
+    activation = (
+        kparams.get_activation(trial, f"{name_prefix}_ffn_act")
+        if trial_activation
+        else tf.keras.activations.relu
+    )
+
+    # ——————————————————————————————— Tokenization ——————————————————————————————— #
+    x = layers.Dense(
+        token_dim,
+        kernel_initializer=kernel_initializer,
+        kernel_regularizer=kernel_regularizer if trial_kernel_reg else None,
+        name=f"{name_prefix}_embed_points",
+    )(x)
 
     pos_indices = tf.range(start=0, limit=sequence_length, dtype=tf.int32)
     pos_emb_layer = layers.Embedding(
         input_dim=sequence_length,
-        output_dim=d_model,
+        output_dim=token_dim,
+        embeddings_initializer=kernel_initializer,
         name=f"{name_prefix}_positional_embedding",
     )
-    pos_table = pos_emb_layer(pos_indices)
-    pos_table = tf.expand_dims(pos_table, axis=0)
-    x = layers.Add(name=f"{name_prefix}_add_pos")([x, pos_table])
+    pos_emb = pos_emb_layer(pos_indices)
+    pos_emb = tf.expand_dims(pos_emb, axis=0)
+    x = layers.Add(name=f"{name_prefix}_add_pos")([x, pos_emb])
 
-    layer_count = trial.suggest_int(
-        f"{name_prefix}_transformer_layers",
+    # ———————————————————————————————— Transformer ——————————————————————————————— #
+    num_layers = trial.suggest_int(
+        f"{name_prefix}_num_layers",
         transformer_layers_range[0],
         transformer_layers_range[1],
     )
-    ffn_multiplier = trial.suggest_int(
-        f"{name_prefix}_ffn_mult",
-        ffn_multiplier_range[0],
-        ffn_multiplier_range[1],
-    )
-    act_name = trial.suggest_categorical(
-        f"{name_prefix}_ffn_act",
-        list(activation_choices),
-    )
-    activation = tf.keras.activations.get(act_name)
 
-    for idx_block in range(layer_count):
-        attn_norm = layers.LayerNormalization(name=f"{name_prefix}_ln_attn_{idx_block}")(x)
+    ffn_multiplier = trial.suggest_categorical(
+        f"{name_prefix}_ffn_multiplier",
+        list(ffn_multiplier_options),
+    )
+
+    for block_idx in range(num_layers):
+        attn_in = layers.LayerNormalization(name=f"{name_prefix}_ln_attn_{block_idx}")(x)
         attn_out = layers.MultiHeadAttention(
-            num_heads=heads,
-            key_dim=key_dim,
+            num_heads=num_heads,
+            key_dim=token_dim // num_heads,
             dropout=dropout_rate,
-            name=f"{name_prefix}_mha_{idx_block}",
-        )(attn_norm, attn_norm)
+            name=f"{name_prefix}_mha_{block_idx}",
+        )(attn_in, attn_in)
         attn_out = layers.Dropout(
             dropout_rate,
-            name=f"{name_prefix}_drop_attn_{idx_block}",
+            name=f"{name_prefix}_drop_attn_{block_idx}",
         )(attn_out)
-        x = layers.Add(name=f"{name_prefix}_res_attn_{idx_block}")([x, attn_out])
+        x = layers.Add(name=f"{name_prefix}_attn_residual_{block_idx}")([x, attn_out])
 
-        ffn_norm = layers.LayerNormalization(name=f"{name_prefix}_ln_ffn_{idx_block}")(x)
-        ffn_hidden = layers.Dense(
-            ffn_multiplier * d_model,
+        ffn_in = layers.LayerNormalization(name=f"{name_prefix}_ln_ffn_{block_idx}")(x)
+        ffn = layers.Dense(
+            token_dim * ffn_multiplier,
             activation=activation,
-            kernel_initializer=initializer,
-            name=f"{name_prefix}_ffn1_{idx_block}",
-        )(ffn_norm)
-        ffn_hidden = layers.Dropout(
+            kernel_initializer=kernel_initializer,
+            kernel_regularizer=kernel_regularizer,
+            name=f"{name_prefix}_ffn_dense1_{block_idx}",
+        )(ffn_in)
+        ffn = layers.Dropout(
             dropout_rate,
-            name=f"{name_prefix}_drop_ffn1_{idx_block}",
-        )(ffn_hidden)
-        ffn_out = layers.Dense(
-            d_model,
-            kernel_initializer=initializer,
-            name=f"{name_prefix}_ffn2_{idx_block}",
-        )(ffn_hidden)
-        ffn_out = layers.Dropout(
+            name=f"{name_prefix}_drop_ffn1_{block_idx}",
+        )(ffn)
+        ffn = layers.Dense(
+            token_dim,
+            kernel_initializer=kernel_initializer,
+            kernel_regularizer=kernel_regularizer,
+            name=f"{name_prefix}_ffn_dense2_{block_idx}",
+        )(ffn)
+        ffn = layers.Dropout(
             dropout_rate,
-            name=f"{name_prefix}_drop_ffn2_{idx_block}",
-        )(ffn_out)
-        x = layers.Add(name=f"{name_prefix}_res_ffn_{idx_block}")([x, ffn_out])
+            name=f"{name_prefix}_drop_ffn2_{block_idx}",
+        )(ffn)
+        x = layers.Add(name=f"{name_prefix}_ffn_residual_{block_idx}")([x, ffn])
 
-    x = layers.LayerNormalization(name=f"{name_prefix}_ln_out")(x)
-    x = layers.GlobalAveragePooling1D(name=f"{name_prefix}_pool")(x)
+    return x
 
-    head_units = trial.suggest_categorical(
-        f"{name_prefix}_head_units",
-        list(head_units_options),
-    )
-    x = layers.Dense(
-        head_units,
-        activation=tf.keras.activations.get("relu"),
-        kernel_initializer=initializer,
-        name=f"{name_prefix}_head_dense",
-    )(x)
-    x = layers.Dropout(dropout_rate, name=f"{name_prefix}_head_drop")(x)
-
-    outputs = layers.Dense(
-        output_units,
-        activation=output_activation,
-        kernel_initializer=initializer,
-        name=f"{name_prefix}_head_logits",
-    )(x)
-
-    model = Model(inputs=inputs, outputs=outputs, name=f"{name_prefix}_model")
-
-    optimizer = kparams.get_optimizer(trial)
-    if show_summary:
-        model.summary()
-    model.compile(
-        optimizer=optimizer,
-        loss=kparams.get_loss(trial) if hasattr(kparams, "get_loss") else "mse",
-        metrics=kparams.get_metrics(trial) if hasattr(kparams, "get_metrics") else ["mse", "mae"],
-        jit_compile=False,
-    )
-    return model
