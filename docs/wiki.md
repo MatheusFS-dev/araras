@@ -1440,7 +1440,8 @@ A custom Keras callback that prunes an Optuna trial if NaN is encountered in tra
 ```python
 estimate_training_memory(
     model,
-    batch_size,
+    batch_size=32,
+    verbose=0,
 )
 ```
 Estimate total VRAM needed for training a Keras model in bytes.
@@ -1448,14 +1449,21 @@ Estimate total VRAM needed for training a Keras model in bytes.
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| model | `Any` | Keras model object |
-| batch_size | `int` | Training batch size |
+| model | `keras.Model` | Compiled Keras model to analyse. |
+| batch_size | `int` | Training batch size used for the estimate. |
+| verbose | `int` | ``1`` to emit detailed logger messages, ``0`` otherwise. |
 
 **Returns**
-` Total memory needed in bytes`
+`int`: Total memory needed in bytes.
 
 **Raises**
-- None
+- `ValueError`: If ``verbose`` is not ``0`` or ``1``.
+
+**Notes**
+- Includes model weights, gradients, optimizer slots, activations, and framework overhead.
+
+**Warnings**
+- Falls back to heuristics when layer output shapes are unavailable, potentially under-estimating memory.
 
 ### plot_model_param_distribution
 

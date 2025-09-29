@@ -27,97 +27,294 @@ from araras.ml.model.tools import save_model_plot
 # ———————————————————————————————————————————————————————————————————————————— #
 
 
-def _get_model_trainable_params(model: keras.Model) -> int:
-    """Get number of trainable parameters in the model."""
-    return sum([tf.keras.backend.count_params(w) for w in model.trainable_weights])
+def _dtype_size(dtype: Any, default: int = 4) -> int:
+    """Return the storage size in bytes for a TensorFlow dtype.
+
+    Args:
+        dtype (Any): TensorFlow dtype or dtype-compatible spec.
+        default (int): Fallback number of bytes to return when ``dtype`` cannot
+            be resolved. Defaults to ``4`` (float32).
+
+    Returns:
+        int: Number of bytes required to store a scalar element with ``dtype``.
+
+    Raises:
+        ValueError: If ``default`` is negative.
+
+    Notes:
+        TensorFlow raises ``TypeError`` when attempting to convert an invalid
+        dtype. Those errors are suppressed in favour of the provided ``default``
+        value to keep the estimator resilient.
+
+    Warnings:
+        Passing custom dtypes that cannot be resolved by :func:`tf.as_dtype`
+        forces the estimator to use ``default`` which might underestimate memory
+        requirements.
+    """
+
+    if default < 0:
+        raise ValueError("default must be non-negative")
+
+    if dtype is None:
+        return default
+
+    try:
+        return int(tf.as_dtype(dtype).size)
+    except TypeError:
+        try:
+            return int(tf.as_dtype(str(dtype)).size)
+        except (TypeError, ValueError):
+            return default
 
 
-def _get_precision_bytes(model: keras.Model) -> int:
-    """Determine bytes per parameter based on model's actual dtype."""
-    if hasattr(model, "dtype"):
-        dtype = str(model.dtype)
-    else:
-        # Check first layer's dtype
-        for layer in model.layers:
-            if hasattr(layer, "dtype"):
-                dtype = str(layer.dtype)
-                break
-        else:
-            dtype = "float32"  # default
+def _count_params_and_bytes(weights: Iterable[tf.Variable]) -> Tuple[int, int]:
+    """Count parameters and raw storage bytes for a list of variables.
 
-    if "float16" in dtype or "half" in dtype:
-        return 2
-    elif "float32" in dtype:
-        return 4
-    elif "float64" in dtype:
-        return 8
-    else:
-        return 4  # default to fp32
+    Args:
+        weights (Iterable[tf.Variable]): Collection of TensorFlow variables whose
+            parameter count and storage footprint should be measured.
+
+    Returns:
+        Tuple[int, int]: A tuple ``(param_count, byte_size)`` describing the
+        total number of scalar parameters and the corresponding storage
+        requirements.
+
+    Notes:
+        TensorFlow may lazily create optimizer slot variables. Ensure the model
+        is compiled before calling this helper when slot sizes are required.
+
+    Warnings:
+        Mixed precision models that keep shadow copies in higher precision may
+        produce additional variables outside ``model.trainable_weights``. Those
+        are not accounted for here and should be handled separately if needed.
+    """
+
+    total_params = 0
+    total_bytes = 0
+    for weight in weights:
+        params = int(tf.keras.backend.count_params(weight))
+        total_params += params
+        total_bytes += params * _dtype_size(getattr(weight, "dtype", None))
+    return total_params, total_bytes
 
 
-def _get_optimizer_state_factor(model: keras.Model) -> int:
-    """Determine optimizer state factor from compiled model."""
+def _resolve_policy_dtypes(model: keras.Model) -> Tuple[int, int, int]:
+    """Resolve dtype sizes (bytes) for variables, compute path and gradients.
+
+    Args:
+        model (keras.Model): Model whose dtype policy should be analysed.
+
+    Returns:
+        Tuple[int, int, int]: ``(variable_bytes, compute_bytes, gradient_bytes)``
+        describing the dtype sizes used for weights, forward activations and
+        gradients respectively.
+
+    Notes:
+        ``tf.keras.mixed_precision.Policy`` exposes both ``variable_dtype`` and
+        ``compute_dtype`` which the estimator leverages to reason about mixed
+        precision behaviour. Gradient tensors are assumed to use the widest
+        precision among the variable dtype, compute dtype, and the backend
+        default float type.
+
+    Warnings:
+        In custom training loops gradients may be cast to alternative dtypes.
+        The estimator assumes gradients follow the compute dtype.
+    """
+
+    policy = getattr(model, "dtype_policy", None)
+
+    variable_dtype_bytes = _dtype_size(
+        getattr(policy, "variable_dtype", None) if policy is not None else getattr(model, "dtype", None)
+    )
+    compute_dtype_bytes = _dtype_size(
+        getattr(policy, "compute_dtype", None) if policy is not None else getattr(model, "dtype", None),
+        default=variable_dtype_bytes,
+    )
+    gradient_candidates = [compute_dtype_bytes, variable_dtype_bytes]
+    gradient_candidates.append(
+        _dtype_size(tf.keras.backend.floatx(), default=compute_dtype_bytes)
+    )
+    if policy is not None:
+        gradient_candidates.append(
+            _dtype_size(getattr(policy, "compute_dtype", None), default=compute_dtype_bytes)
+        )
+    gradient_dtype_bytes = max(gradient_candidates)
+    return variable_dtype_bytes, compute_dtype_bytes, gradient_dtype_bytes
+
+
+def _get_optimizer_slot_multiplier(model: keras.Model) -> int:
+    """Infer the number of optimizer slot tensors per trainable weight.
+
+    Args:
+        model (keras.Model): Compiled model with an attached optimizer.
+
+    Returns:
+        int: Number of optimizer-maintained slot tensors per weight variable.
+
+    Notes:
+        Slot tensors store optimizer-specific statistics (for example, Adam's
+        first and second moments). When the optimizer is unknown a conservative
+        default of ``1`` slot per weight is used.
+
+    Warnings:
+        Custom optimizers may maintain additional tensors. For accurate results
+        extend this helper accordingly.
+    """
+
     if not hasattr(model, "optimizer") or model.optimizer is None:
-        return 3  # default to Adam-like
+        logger.warning(
+            "Model has no compiled optimizer; assuming zero optimizer slot tensors."
+        )
+        return 0
 
     optimizer_name = model.optimizer.__class__.__name__.lower()
 
-    if "adam" in optimizer_name:
-        return 3  # param + momentum + velocity
-    elif "sgd" in optimizer_name:
-        # Check if momentum is used
-        if hasattr(model.optimizer, "momentum") and model.optimizer.momentum > 0:
-            return 2  # param + momentum
-        else:
-            return 1  # param only
-    elif "rmsprop" in optimizer_name:
-        return 3  # param + accumulator + momentum
-    elif "adagrad" in optimizer_name:
-        return 2  # param + accumulator
-    elif "adadelta" in optimizer_name:
-        return 3  # param + accumulator + delta
+    if "adam" in optimizer_name or "adamax" in optimizer_name or "nadam" in optimizer_name:
+        return 2  # m and v slots
+    if "rmsprop" in optimizer_name:
+        # Accumulator + optional momentum buffer
+        has_momentum = getattr(model.optimizer, "momentum", 0) not in (0, None)
+        return 2 if has_momentum else 1
+    if "adagrad" in optimizer_name:
+        return 1
+    if "adadelta" in optimizer_name:
+        return 2
+    if "sgd" in optimizer_name:
+        momentum = getattr(model.optimizer, "momentum", 0)
+        return 1 if momentum and momentum > 0 else 0
+    return 1  # sensible default if optimizer is unknown
+
+
+def _shape_element_count(shape: Any) -> int:
+    """Compute the element count for a tensor shape without the batch axis.
+
+    Args:
+        shape (Any): Shape descriptor coming from ``layer.output_shape`` or
+            related Keras APIs.
+
+    Returns:
+        int: Number of scalar elements represented by ``shape`` ignoring the
+        leading batch dimension.
+
+    Raises:
+        ValueError: If ``shape`` is not interpretable as a TensorFlow shape.
+
+    Notes:
+        When a dimension is ``None`` the estimator substitutes ``1`` to maintain
+        a conservative footprint.
+
+    Warnings:
+        Shapes corresponding to ragged tensors are not supported and result in a
+        ``ValueError``.
+    """
+
+    if shape is None:
+        return 0
+
+    if isinstance(shape, tf.TensorShape):
+        if shape.rank is None:
+            return 0
+        shape_list = shape.as_list()
     else:
-        return 3  # default to Adam-like
+        if not isinstance(shape, (list, tuple)):
+            raise ValueError("Unsupported shape specification encountered")
+        shape_list = list(shape)
+
+    if shape_list is None or not shape_list:
+        return 0
+
+    first_dim = shape_list[0]
+    if isinstance(first_dim, (list, tuple, tf.TensorShape)):
+        return sum(_shape_element_count(sub_shape) for sub_shape in shape_list)
+
+    dims = [dim if (dim is not None and dim > 0) else 1 for dim in shape_list[1:]]
+    if not dims:
+        return 1
+    return int(np.prod(dims))
 
 
-def _calculate_activation_memory(model: keras.Model, bytes_per_param: int) -> int:
-    """Calculate activation memory needed during forward/backward pass."""
-    try:
-        # Get input shape from model
-        if hasattr(model, "input_shape") and model.input_shape:
-            input_shape = model.input_shape
-            if isinstance(input_shape, list):
-                input_shape = input_shape[0]
+def _calculate_activation_memory(
+    model: keras.Model,
+    batch_size: int,
+    compute_dtype_bytes: int,
+    gradient_dtype_bytes: int,
+    trainable_params: int,
+    *,
+    verbose: bool = False,
+) -> int:
+    """Estimate activation memory using layer output shapes from the model summary.
 
-            # Use batch size of 1 to get per-sample memory, then multiply by actual batch
-            if input_shape[0] is None:
-                dummy_shape = (1,) + input_shape[1:]
-            else:
-                dummy_shape = input_shape
-        else:
-            # Fallback: estimate based on total parameters
-            return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+    Args:
+        model (keras.Model): Model whose activations should be analysed.
+        batch_size (int): Training batch size to scale activation storage.
+        compute_dtype_bytes (int): Number of bytes used for forward activations.
+        gradient_dtype_bytes (int): Number of bytes used for gradient tensors.
+        trainable_params (int): Count of trainable parameters, used for fallback
+            heuristics.
+        verbose (bool): Whether to emit detailed logging for intermediate
+            results.
 
-        # Create dummy input and trace through model
-        dummy_input = tf.random.normal(dummy_shape)
-        total_elements = 0
-        x = dummy_input
+    Returns:
+        int: Estimated activation memory in bytes for one training step.
 
-        for layer in model.layers:
+    Notes:
+        The estimator walks through ``model.layers`` and aggregates the output
+        tensor sizes provided by Keras. The resulting value accounts for both the
+        forward activations and their gradient counterparts.
+
+    Warnings:
+        Layers without a static ``output_shape`` trigger a parameter-based
+        fallback which may under-estimate the true memory requirements.
+    """
+
+    per_sample_bytes = 0
+    missing_layers: list[str] = []
+
+    for layer in model.layers:
+        output_shape = getattr(layer, "output_shape", None)
+        if output_shape is None and hasattr(layer, "get_output_shape_at"):
             try:
-                x = layer(x)
-                if hasattr(x, "shape"):
-                    elements = tf.reduce_prod(x.shape[1:]).numpy()  # Exclude batch dimension
-                    total_elements += elements
-            except:
-                continue
+                output_shape = layer.get_output_shape_at(0)
+            except Exception:
+                output_shape = None
+        if output_shape is None and hasattr(layer, "input_shape") and hasattr(layer, "compute_output_shape"):
+            try:
+                output_shape = layer.compute_output_shape(layer.input_shape)
+            except Exception:
+                output_shape = None
 
-        # Memory per sample * 2 (for gradients) * bytes_per_param
-        return int(total_elements * 2 * bytes_per_param)
+        try:
+            elements = _shape_element_count(output_shape)
+        except ValueError:
+            missing_layers.append(layer.name)
+            continue
+        if elements == 0:
+            missing_layers.append(layer.name)
+            continue
 
-    except Exception:
-        # Fallback calculation
-        return int(_get_model_trainable_params(model) * bytes_per_param * 1.5)
+        layer_dtype_bytes = _dtype_size(
+            getattr(layer, "compute_dtype", None),
+            default=_dtype_size(getattr(layer, "dtype", None), default=compute_dtype_bytes),
+        )
+        per_sample_bytes += elements * layer_dtype_bytes
+
+    if per_sample_bytes == 0:
+        if verbose:
+            if missing_layers:
+                logger.warning(
+                    "Falling back to parameter-based activation estimate; missing output shapes for layers: %s",
+                    ", ".join(sorted(set(missing_layers))),
+                )
+            else:
+                logger.warning(
+                    "Falling back to parameter-based activation estimate; no activation sizes available."
+                )
+        return int(trainable_params * gradient_dtype_bytes * 1.5 * batch_size)
+
+    if verbose:
+        logger.info("Activation memory per sample: %s", format_bytes(per_sample_bytes))
+
+    return int(per_sample_bytes * batch_size * 2)
 
 
 def _get_framework_overhead() -> int:
@@ -138,29 +335,105 @@ def _get_framework_overhead() -> int:
 # ———————————————————————————————————————————————————————————————————————————— #
 
 
-def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
-    """
-    Estimate total VRAM needed for training a Keras model in bytes.
+def estimate_training_memory(model: keras.Model, batch_size: int = 32, verbose: int = 0) -> int:
+    """Estimate the training memory footprint for a compiled Keras model.
+
+    The estimator inspects the model summary to derive parameter counts, per-layer
+    activation sizes, and optimizer state requirements. Optimizer slot variables
+    (for example, Adam's first and second moment estimates) are inferred from the
+    optimizer type. When detailed layer information is not available the function
+    falls back to parameter-based heuristics and emits a warning.
 
     Args:
-        model: Keras model object
-        batch_size: Training batch size
+        model (keras.Model): The compiled Keras model to analyse.
+        batch_size (int): Mini-batch size used for the training step simulation.
+        verbose (int): Controls logging verbosity. ``1`` enables detailed logging
+            through :data:`araras.core.logger`, while ``0`` silences it. Only
+            ``0`` and ``1`` are supported.
 
     Returns:
-        Total memory needed in bytes
-    """
-    # Get model characteristics
-    trainable_params = _get_model_trainable_params(model)
-    bytes_per_param = _get_precision_bytes(model)
-    state_factor = _get_optimizer_state_factor(model)
+        int: Estimated peak memory usage in bytes required to train ``model``.
 
-    # Calculate memory components
-    param_memory = trainable_params * bytes_per_param * state_factor
-    activation_memory_per_sample = _calculate_activation_memory(model, bytes_per_param)
-    activation_memory = activation_memory_per_sample * batch_size
+    Raises:
+        ValueError: If ``verbose`` is not ``0`` or ``1``.
+
+    Notes:
+        The returned value includes model weights, gradient tensors, optimizer
+        slots, activation buffers for the forward/backward passes, and a
+        framework-dependent overhead term. Actual device usage can still differ
+        based on TensorFlow runtime optimisations and operator-level
+        implementations.
+
+    Warnings:
+        Estimations rely on static layer metadata. Models featuring dynamic
+        control flow, ragged tensors, or custom layers without ``output_shape``
+        information can trigger fallback heuristics that may under-estimate the
+        real peak memory usage.
+    """
+
+    if verbose not in (0, 1):
+        raise ValueError("verbose must be 0 or 1")
+
+    log_enabled = bool(verbose)
+
+    def _log_info(message: str, *args: Any) -> None:
+        if log_enabled:
+            logger.info(message, *args)
+
+    _log_info(
+        "Estimating training memory for model '%s' with batch size %d.",
+        getattr(model, "name", "<unnamed>"),
+        batch_size,
+    )
+
+    variable_dtype_bytes, compute_dtype_bytes, gradient_dtype_bytes = _resolve_policy_dtypes(model)
+    _log_info(
+        "Dtype sizes (variable/compute/gradient): %d / %d / %d bytes",
+        variable_dtype_bytes,
+        compute_dtype_bytes,
+        gradient_dtype_bytes,
+    )
+
+    trainable_params, trainable_bytes = _count_params_and_bytes(model.trainable_weights)
+    non_trainable_params, non_trainable_bytes = _count_params_and_bytes(model.non_trainable_weights)
+
+    model_size_bytes = trainable_bytes + non_trainable_bytes
+    gradient_bytes = trainable_params * gradient_dtype_bytes
+
+    slot_multiplier = _get_optimizer_slot_multiplier(model)
+    optimizer_slot_bytes = trainable_params * gradient_dtype_bytes * slot_multiplier
+
+    activation_memory = _calculate_activation_memory(
+        model,
+        batch_size,
+        compute_dtype_bytes,
+        gradient_dtype_bytes,
+        trainable_params,
+        verbose=log_enabled,
+    )
+
     framework_overhead = _get_framework_overhead()
 
-    return param_memory + activation_memory + framework_overhead
+    total_memory = model_size_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory + framework_overhead
+
+    _log_info(
+        "Trainable params: %s (%s)",
+        format_number(trainable_params),
+        format_bytes(trainable_bytes),
+    )
+    _log_info(
+        "Non-trainable params: %s (%s)",
+        format_number(non_trainable_params),
+        format_bytes(non_trainable_bytes),
+    )
+    _log_info("Model size (weights): %s", format_bytes(model_size_bytes))
+    _log_info("Gradient memory: %s", format_bytes(gradient_bytes))
+    _log_info("Optimizer slots (%d per weight): %s", slot_multiplier, format_bytes(optimizer_slot_bytes))
+    _log_info("Activation memory (batch): %s", format_bytes(activation_memory))
+    _log_info("Framework overhead: %s", format_bytes(framework_overhead))
+    _log_info("Total estimated memory: %s", format_bytes(total_memory))
+
+    return int(total_memory)
 
 
 def prune_model_by_config(
@@ -246,6 +519,7 @@ def plot_model_param_distribution(
     corr_csv_path: Optional[str] = None,
     plot_model_dir: Optional[str] = None,
     show_plot: bool = False,
+    verbose: bool = False,
 ) -> None:
     """Sample random models, plot statistics and optionally save the results.
 
@@ -280,6 +554,7 @@ def plot_model_param_distribution(
         plot_model_dir (Optional[str]): Directory where model plots are saved. If ``None``, no plots are saved.
             Each model is saved as a PNG file named ``model_{trial_number}.png``.
         show_plot (bool): Whether to display the histogram figure after sampling. Defaults to ``False``.
+        verbose (bool): If True, print detailed information during sampling.
 
     Notes:
         Clearing the Keras backend session between trials mitigates
@@ -348,13 +623,13 @@ def plot_model_param_distribution(
 
             n_params = model.count_params()
             param_counts.append(n_params)
-
-            size_mb = (n_params * bytes_per_param) / (8 * 1024 * 1024)
+            
+            size_mb = (n_params * bytes_per_param) / (1024 * 1024)
             model_sizes_mb.append(size_mb)
 
             for batch in batch_sizes:
                 training_memory_mb = (
-                    estimate_training_memory(model, batch_size=batch) / (1024 * 1024)
+                    estimate_training_memory(model, batch_size=batch, verbose=verbose) / (1024 * 1024)
                 )
                 training_memory_map[batch].append(training_memory_mb)
             collected_params.append(trial.params)
