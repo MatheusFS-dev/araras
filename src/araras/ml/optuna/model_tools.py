@@ -568,48 +568,74 @@ def plot_model_param_distribution(
 ) -> None:
     """Sample random models, plot statistics and optionally save the results.
 
-    The helper draws ``n_trials`` random models using ``build_model_fn`` and records
-    their parameter counts, approximate model sizes and estimated training memory
+    This helper draws ``n_trials`` random models using ``build_model_fn`` and records
+    their parameter counts, approximate model sizes, and estimated training memory
     consumption. Histograms for each metric can be saved to disk and, optionally,
-    displayed after sampling completes. The TensorFlow session is cleared between
-    trials to release GPU memory. Trials that raise ``tf.errors.ResourceExhaustedError``,
-    ``tf.errors.InternalError``, ``tf.errors.UnavailableError`` or cuDNN scratch-space
-    allocation errors are skipped because they typically indicate Out of Memory
-    (OOM) problems. The number of skipped trials is counted and printed at the end.
-    When ``csv_path`` is provided, the collected statistics are saved to a CSV file,
-    including each trial's parameters and sorted in decreasing order of the estimated
-    training memory. If ``logs_dir`` is set, parameters of failed trials along with the
-    error traceback are saved to individual log files.
+    displayed after sampling completes. TensorFlow sessions are cleared between
+    trials to release GPU memory. Trials that raise
+    :class:`tf.errors.ResourceExhaustedError`, :class:`tf.errors.InternalError`,
+    :class:`tf.errors.UnavailableError`, or cuDNN scratch-space allocation errors are
+    skipped because they typically indicate out-of-memory conditions. The number of
+    skipped trials is counted and printed at the end. When ``csv_path`` is provided,
+    the collected statistics are saved to a CSV file, including each trial's
+    parameters and sorted in decreasing order of the estimated training memory. If
+    ``logs_dir`` is set, parameters of failed trials along with the error traceback
+    are saved to individual log files.
 
     Args:
-        build_model_fn (Callable[[optuna.Trial], tf.keras.Model]): Callable that receives an Optuna ``Trial`` and returns a compiled
+        build_model_fn (Callable[[optuna.Trial], tf.keras.Model]): Callable that receives an
+            Optuna :class:`optuna.Trial` and returns a compiled
             :class:`tf.keras.Model`.
         bytes_per_param (int): Number of bytes used to store each parameter.
-        batch_size (Union[int, Iterable[int]]): Batch size used when estimating the training memory. Can be a single
-            int or an iterable of ints; when multiple values are provided they are all evaluated.
+        batch_size (Union[int, Iterable[int]]): Batch size used when estimating the
+            training memory. Can be a single int or an iterable of ints; when
+            multiple values are provided they are all evaluated.
         n_trials (int): Total number of random trials to sample.
-        fig_save_path (Optional[str]): Optional path to save the figure. If ``None`` and ``show_plot`` is
-            ``True``, the figure is only displayed.
+        fig_save_path (Optional[str]): Optional path to save the figure. If ``None``
+            and ``show_plot`` is ``True``, the figure is only displayed.
         figsize (Tuple[int, int]): Figure size for the histograms.
-        csv_path (Optional[str]): Optional path to store trial results as CSV. The CSV includes the sampled
-            parameters and is sorted by ``training_memory_mb`` in descending order.
-        logs_dir (Optional[str]): Directory where error logs are written. If ``None``, no logs are saved.
-        corr_csv_path (Optional[str]): Optional path to store correlations between numeric hyperparameters and
-            the model parameter count. If ``None`` the correlation analysis is skipped.
-        plot_model_dir (Optional[str]): Directory where model plots are saved. If ``None``, no plots are saved.
-            Each model is saved as a PNG file named ``model_{trial_number}.png``.
-        show_plot (bool): Whether to display the histogram figure after sampling. Defaults to ``False``.
-        verbose (bool): If True, print detailed information during sampling.
+        csv_path (Optional[str]): Optional path to store trial results as CSV. The
+            CSV includes the sampled parameters and is sorted by
+            ``training_memory_mb`` in descending order.
+        logs_dir (Optional[str]): Directory where error logs are written. If
+            ``None``, no logs are saved.
+        corr_csv_path (Optional[str]): Optional path to store correlations between
+            numeric hyperparameters and the model parameter count. If ``None`` the
+            correlation analysis is skipped.
+        plot_model_dir (Optional[str]): Directory where model plots are saved. If
+            ``None``, no plots are saved. Each model is saved as a PNG file named
+            ``model_{trial_number}.png``.
+        show_plot (bool): Whether to display the histogram figure after sampling.
+            Defaults to ``False``. When ``False`` the figure backend is switched to
+            a non-interactive renderer to avoid X11 allocation errors and the plot
+            is only saved.
+        verbose (bool): If ``True``, print detailed information during sampling.
+
+    Returns:
+        None: This function performs its work for side effects and returns ``None``.
+
+    Raises:
+        ValueError: If ``batch_size`` is provided as an empty iterable.
+        TypeError: If ``batch_size`` contains non-integer values.
 
     Notes:
         Clearing the Keras backend session between trials mitigates
-        ``ResourceExhaustedError`` on GPUs with limited VRAM. When ``logs_dir`` is provided,
-        one log file per failed trial is created containing the trial parameters and traceback.
-        Graphviz must be installed to plot models.
+        :class:`tf.errors.ResourceExhaustedError` on GPUs with limited VRAM. When
+        ``logs_dir`` is provided, one log file per failed trial is created
+        containing the trial parameters and traceback. Graphviz must be installed
+        to plot models.
 
     Warnings:
-        Models that trigger ``ResourceExhaustedError`` are ignored in the final statistics.
+        Models that trigger :class:`tf.errors.ResourceExhaustedError` are ignored in
+        the final statistics.
     """
+    if not show_plot:
+        try:
+            plt.switch_backend("Agg")
+        except Exception:
+            # Fallback silently if the backend cannot be switched (e.g., already in use).
+            pass
+
     config_plt("double-column")  # Configure matplotlib for double-column figures
 
     sampler = optuna.samplers.RandomSampler()
@@ -764,7 +790,20 @@ def plot_model_param_distribution(
         fig.savefig(fig_save_path, bbox_inches="tight", dpi=300)
 
     if show_plot:
-        plt.show()
+        try:
+            plt.show()
+        except Exception as exc:
+            print(
+                (
+                    f"{YELLOW}Warning: Unable to display the Optuna search-space plot "
+                    f"due to: {exc}. Common causes include running without an available "
+                    "X11 display, insufficient pixmap memory (e.g., BadAlloc), or using "
+                    "monitor on a headless server. Consider re-running with show_plot="
+                    "False, launching a virtual display (such as Xvfb), or reducing the "
+                    "figure DPI before displaying plots.{RESET}"
+                )
+            )
+            raise
     else:
         plt.close(fig)
 
