@@ -1513,6 +1513,10 @@ Sample random models and plot parameter and size histograms.
   written to individual log files.
 - When ``corr_csv_path`` is set, a Spearman correlation analysis between numeric
   hyperparameters and the number of parameters is written to CSV.
+- High DPI values substantially increase the allocated canvas size. When the
+  helper is invoked from the ``monitor`` CLI on a headless server, prefer the
+  defaults (``show_plot=False``) to avoid ``X Error of
+  failed request: BadAlloc`` failures from the X11 server.
 
 ### set_user_attr_model_stats
 
