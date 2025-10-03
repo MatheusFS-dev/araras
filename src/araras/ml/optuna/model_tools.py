@@ -982,21 +982,31 @@ def set_user_attr_model_stats(
                     display_payload[metric_name] = error_text
                 continue
 
-            component_diff = metric_value.get("difference")
+            delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
+            delta_max = None
+            if isinstance(delta_stats, dict):
+                delta_max = delta_stats.get("max")
             diff_payload[metric_name] = (
-                component_diff if component_diff is not None else "Not measured"
+                delta_max if delta_max is not None else "Not measured"
             )
 
             if metric_name in ram_metrics:
                 component_display: Dict[str, str] = {}
-                for component_name in ("before", "current", "difference"):
-                    component_value = metric_value.get(component_name)
-                    if component_value is None:
+                for component_name in ("before", "during", "delta"):
+                    component_stats = (
+                        metric_value.get(component_name)
+                        if isinstance(metric_value, dict)
+                        else None
+                    )
+                    if not isinstance(component_stats, dict):
                         component_display[component_name] = "Not measured"
-                    elif isinstance(component_value, str):
-                        component_display[component_name] = component_value
+                        continue
+
+                    component_max = component_stats.get("max")
+                    if component_max is None:
+                        component_display[component_name] = "Not measured"
                     else:
-                        component_display[component_name] = _format_ram_display(component_value)
+                        component_display[component_name] = _format_ram_display(component_max)
                 display_payload[metric_name] = component_display
 
         return diff_payload, display_payload
@@ -1016,7 +1026,7 @@ def set_user_attr_model_stats(
         metrics_value: Any,
         metric_name: str,
         component_name: str,
-    ) -> Union[str, int, float]:
+    ) -> Union[str, int, float, None]:
         if isinstance(metrics_value, str):
             return metrics_value
         metric_block = metrics_value.get(metric_name, "Not measured")
@@ -1027,10 +1037,11 @@ def set_user_attr_model_stats(
             if not error_text.lower().startswith("error"):
                 error_text = f"Error: {error_text}"
             return error_text
-        component_value = metric_block.get(component_name)
-        if component_value is None:
+        target_stats = metric_block.get(component_name)
+        if not isinstance(target_stats, dict):
             return "Not measured"
-        return component_value
+        value = target_stats.get("max")
+        return "Not measured" if value is None else value
 
     avg_power_map: Dict[str, Any] = {}
     avg_energy_map: Dict[str, Any] = {}
@@ -1138,7 +1149,7 @@ def set_user_attr_model_stats(
         display_entry = resource_usage_display_map.get(device_label)
         for metric_name in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
             before_value = _metric_component_for_device(metrics_value, metric_name, "before")
-            current_value = _metric_component_for_device(metrics_value, metric_name, "current")
+            current_value = _metric_component_for_device(metrics_value, metric_name, "during")
             if isinstance(diff_entry, dict):
                 diff_value = diff_entry.get(metric_name, "Not measured")
             else:
@@ -1159,11 +1170,11 @@ def set_user_attr_model_stats(
                         )
                         trial.set_user_attr(
                             f"{attr_prefix}_current_display",
-                            metric_display_entry.get("current", "Not measured"),
+                            metric_display_entry.get("during", "Not measured"),
                         )
                         trial.set_user_attr(
                             f"{attr_prefix}_diff_display",
-                            metric_display_entry.get("difference", "Not measured"),
+                            metric_display_entry.get("delta", "Not measured"),
                         )
                     elif isinstance(metric_display_entry, str):
                         trial.set_user_attr(f"{attr_prefix}_display", metric_display_entry)

@@ -363,13 +363,17 @@ def save_top_k_trials(
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metric_payload)
 
-            before_value = metric_payload.get("before")
-            current_value = metric_payload.get("current")
-            diff_value = metric_payload.get("difference")
+            before_stats = metric_payload.get("before") if isinstance(metric_payload, dict) else None
+            during_stats = metric_payload.get("during") if isinstance(metric_payload, dict) else None
+            delta_stats = metric_payload.get("delta") if isinstance(metric_payload, dict) else None
+
+            before_value = None if not isinstance(before_stats, dict) else before_stats.get("max")
+            during_value = None if not isinstance(during_stats, dict) else during_stats.get("max")
+            diff_value = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
             return format_metric_summary_line(
                 label,
                 before_value,
-                current_value,
+                during_value,
                 diff_value,
                 is_byte_metric=is_ram,
             )

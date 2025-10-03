@@ -87,13 +87,31 @@ def test_measure_gpu_memory_during_inference() -> None:
         pytest.skip("GPU RAM metrics unavailable (nvidia-smi missing?)")
 
     assert isinstance(gpu_metrics, dict)
-    for key in ("before", "current", "difference", "final"):
-        assert key in gpu_metrics
-        assert isinstance(gpu_metrics[key], (int, float))
-        assert gpu_metrics[key] >= 0
+    for phase in ("before", "during", "delta"):
+        assert phase in gpu_metrics
+        phase_stats = gpu_metrics[phase]
+        assert isinstance(phase_stats, dict)
+        for stat_key in ("measurements", "min", "max", "avg", "std", "var"):
+            assert stat_key in phase_stats
+        measurements = phase_stats["measurements"]
+        assert isinstance(measurements, list)
+        if measurements:
+            assert all(isinstance(item, (int, float)) for item in measurements)
 
-    gpu_metrics_mib = {key: round(_bytes_to_mib(value), 3) for key, value in gpu_metrics.items()}
-    print(f"GPU RAM metrics (MiB): {gpu_metrics_mib}")
+    delta_max = gpu_metrics["delta"]["max"]
+    if delta_max is not None:
+        assert isinstance(delta_max, (int, float))
+        assert delta_max >= 0
+
+    gpu_metrics_mib = {
+        phase: (
+            round(_bytes_to_mib(stats["max"]), 3)
+            if isinstance(stats, dict) and stats.get("max") is not None
+            else None
+        )
+        for phase, stats in gpu_metrics.items()
+    }
+    print(f"GPU RAM metrics max (MiB): {gpu_metrics_mib}")
 
 
 if __name__ == "__main__":

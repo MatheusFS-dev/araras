@@ -215,24 +215,55 @@ def _run_config(cfg: TrainingConfig, default_policy: str) -> None:
         print(f"Mixed precision policy: {cfg.mixed_policy}")
     gpu_ram_metrics = metrics_summary.get("gpu_ram", "Not measured")
     if isinstance(gpu_ram_metrics, dict):
-        before = int(round(gpu_ram_metrics.get("before", 0)))
-        peak = int(round(gpu_ram_metrics.get("current", 0)))
-        diff = int(round(gpu_ram_metrics.get("difference", 0)))
-        final = int(round(gpu_ram_metrics.get("final", peak)))
+        before_stats = gpu_ram_metrics.get("before") if isinstance(gpu_ram_metrics, dict) else None
+        during_stats = gpu_ram_metrics.get("during") if isinstance(gpu_ram_metrics, dict) else None
+        delta_stats = gpu_ram_metrics.get("delta") if isinstance(gpu_ram_metrics, dict) else None
+
+        before_value = 0
+        if isinstance(before_stats, dict) and before_stats.get("max") is not None:
+            before_value = int(round(before_stats["max"]))
+
+        peak_value = 0
+        during_measurements = []
+        if isinstance(during_stats, dict):
+            if during_stats.get("max") is not None:
+                peak_value = int(round(during_stats["max"]))
+            during_measurements = during_stats.get("measurements", []) or []
+
+        diff_value = 0
+        if isinstance(delta_stats, dict) and delta_stats.get("max") is not None:
+            diff_value = int(round(delta_stats["max"]))
+
+        final_measurement = peak_value
+        if during_measurements:
+            last_value = during_measurements[-1]
+            if isinstance(last_value, (int, float)):
+                final_measurement = int(round(last_value))
+
         print("GPU RAM (bytes):")
-        print(f"  before : {_format_bytes(before)}")
-        print(f"  peak   : {_format_bytes(peak)}")
-        print(f"  delta  : {_format_bytes(diff)}")
-        print(f"  final  : {_format_bytes(final)}")
+        print(f"  before : {_format_bytes(before_value)}")
+        print(f"  peak   : {_format_bytes(peak_value)}")
+        print(f"  delta  : {_format_bytes(diff_value)}")
+        print(f"  final  : {_format_bytes(final_measurement)}")
     else:
         print(f"GPU RAM metrics: {gpu_ram_metrics}")
 
     gpu_usage_metrics = metrics_summary.get("gpu_usage", "Not measured")
     if isinstance(gpu_usage_metrics, dict):
-        before = gpu_usage_metrics.get("before")
-        peak = gpu_usage_metrics.get("current")
-        diff = gpu_usage_metrics.get("difference")
-        final = gpu_usage_metrics.get("final", peak)
+        before_stats = gpu_usage_metrics.get("before") if isinstance(gpu_usage_metrics, dict) else None
+        during_stats = gpu_usage_metrics.get("during") if isinstance(gpu_usage_metrics, dict) else None
+        delta_stats = gpu_usage_metrics.get("delta") if isinstance(gpu_usage_metrics, dict) else None
+
+        before = before_stats.get("max") if isinstance(before_stats, dict) else None
+        peak = during_stats.get("max") if isinstance(during_stats, dict) else None
+        diff = delta_stats.get("max") if isinstance(delta_stats, dict) else None
+
+        final = peak
+        during_measurements = during_stats.get("measurements") if isinstance(during_stats, dict) else None
+        if isinstance(during_measurements, list) and during_measurements:
+            last_value = during_measurements[-1]
+            if isinstance(last_value, (int, float)):
+                final = last_value
 
         def _fmt_percent(value: object) -> str:
             if isinstance(value, (int, float)):

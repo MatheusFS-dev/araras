@@ -1,10 +1,24 @@
+import math
 import os
 import time
+import statistics
 import psutil
 import subprocess
 from datetime import datetime
-from threading import Event, Lock, Thread
-from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple, TypeVar, Union, cast
+from threading import Thread
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+    cast,
+)
 
 import tensorflow as tf
 
@@ -12,8 +26,10 @@ from araras.core import *
 from araras.utils.misc import format_bytes, format_number_commas
 
 MetricSnapshot = Dict[str, Optional[float]]
-MetricTotals = Dict[str, Dict[str, float]]
 MetricExtractors = Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]
+MetricSamples = Dict[str, Dict[str, List[float]]]
+MetricStatistics = Dict[str, Union[List[Union[int, float]], Union[int, float], None]]
+MetricSummary = Dict[str, Union[str, Dict[str, MetricStatistics]]]
 TCallableReturn = TypeVar("TCallableReturn")
 
 # ———————————————————————————————————————————————————————————————————————————— #
@@ -23,19 +39,22 @@ TCallableReturn = TypeVar("TCallableReturn")
 def format_metric_summary_line(
     label: str,
     before: Union[None, str, int, float],
-    current: Union[None, str, int, float],
-    difference: Union[None, str, int, float],
+    during: Union[None, str, int, float],
+    delta: Union[None, str, int, float],
     *,
     is_byte_metric: bool = False,
     percent_precision: int = 2,
 ) -> str:
-    """Format metric snapshots into a single descriptive line.
+    """Format metric statistics into a single descriptive line.
 
     Args:
         label (str): Human readable label for the metric (e.g. ``"System RAM"``).
-        before (Union[None, str, int, float]): Baseline value captured before executing the workload.
-        current (Union[None, str, int, float]): Peak or final value captured during the workload.
-        difference (Union[None, str, int, float]): Delta between ``current`` and ``before``.
+        before (Union[None, str, int, float]): Representative "before" statistic, typically the
+            maximum observed prior to executing the workload.
+        during (Union[None, str, int, float]): Representative "during" statistic, typically the
+            maximum observed while the workload was executing.
+        delta (Union[None, str, int, float]): Difference between the "during" and "before"
+            statistics (e.g. ``during - before``).
         is_byte_metric (bool): Flag indicating whether the values represent bytes.
         percent_precision (int): Decimal precision when formatting percentage metrics.
 
@@ -45,7 +64,13 @@ def format_metric_summary_line(
             System RAM: 14,828,216,975 B (13.81 GB) - 14,834,859,049 B (13.82 GB) = 6,642,074 B (6.33 MB)
 
         Metrics lacking numeric data return ``"<label>: Not measured"``.
+
+    Raises:
+        ValueError: If ``percent_precision`` is negative.
     """
+
+    if percent_precision < 0:
+        raise ValueError("percent_precision must be non-negative")
 
     def _is_not_measured(value: Union[None, str, int, float]) -> bool:
         if value is None:
@@ -73,10 +98,10 @@ def format_metric_summary_line(
             return "Not measured"
 
     before_missing = _is_not_measured(before)
-    current_missing = _is_not_measured(current)
-    difference_missing = _is_not_measured(difference)
+    during_missing = _is_not_measured(during)
+    delta_missing = _is_not_measured(delta)
 
-    if before_missing and current_missing and difference_missing:
+    if before_missing and during_missing and delta_missing:
         return f"{label}: Not measured"
 
     fragments: List[str] = []
@@ -89,14 +114,14 @@ def format_metric_summary_line(
         else:
             fragments.append(text)
 
-    if not current_missing:
-        _append_fragment(_format_component(current))
+    if not during_missing:
+        _append_fragment(_format_component(during))
 
     if not before_missing:
         _append_fragment(_format_component(before), "-")
 
-    if not difference_missing:
-        _append_fragment(_format_component(difference), "=")
+    if not delta_missing:
+        _append_fragment(_format_component(delta), "=")
 
     if not fragments:
         return f"{label}: Not measured"
@@ -669,10 +694,15 @@ def measure_current_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> L
 class ResourceMonitor:
     """Utility class to capture and summarize system resource usage.
 
-    The monitor samples the system state before and after executing callables,
-    aggregates the collected values and provides averaged statistics. By
-    default, the class tracks RAM consumption, GPU utilisation (if available)
-    and CPU utilisation, but the extraction logic can be fully customized.
+    The monitor collects multiple snapshots of each configured metric before
+    running the monitored callable and continues sampling while the callable is
+    executing. The resulting time series are converted into descriptive
+    statistics (minimum, maximum, arithmetic mean, population standard
+    deviation and population variance) for both the *before* and *during*
+    phases, together with a *delta* distribution computed from their
+    pairwise differences. By default, the class tracks RAM consumption, GPU
+    utilisation (if available) and CPU utilisation, but the extraction logic can
+    be fully customized.
 
     Args:
         metrics (Any): Sequence of metric identifiers to request from
@@ -691,6 +721,9 @@ class ResourceMonitor:
         sample_interval (Any): Sampling cadence in seconds while the monitored
             callable executes. Values smaller than ``0.01`` are clamped to that
             minimum to avoid overwhelming the system.
+        sample_count (Any): Number of snapshots collected before execution and
+            the minimum number gathered while the callable runs. Defaults to
+            ``10``.
 
     Raises:
         ValueError: If ``metric_extractors`` is empty after initialisation.
@@ -706,6 +739,7 @@ class ResourceMonitor:
         metric_extractors: Optional[MetricExtractors] = None,
         byte_metrics: Optional[Iterable[str]] = None,
         sample_interval: float = 0.1,
+        sample_count: int = 10,
     ) -> None:
         self._metrics: Sequence[str] = metrics or self._DEFAULT_METRICS
         self._metric_extractors = (
@@ -720,9 +754,11 @@ class ResourceMonitor:
         self._tracked_metrics: Tuple[str, ...] = tuple(self._metric_extractors.keys())
         self._byte_metrics = set(byte_metrics or ("system_ram", "gpu_ram"))
         self._sample_interval = max(sample_interval, 0.01)
+        if sample_count < 1:
+            raise ValueError("sample_count must be at least 1")
+        self._sample_count = sample_count
 
-        self._totals: MetricTotals = {}
-        self._counts: Dict[str, int] = {}
+        self._samples: MetricSamples = {}
         self.reset()
 
     @staticmethod
@@ -792,11 +828,10 @@ class ResourceMonitor:
     def reset(self) -> None:
         """Reset the internal aggregation buffers."""
 
-        self._totals = {
-            key: {"before": 0.0, "current": 0.0, "difference": 0.0, "final": 0.0}
+        self._samples = {
+            key: {"before": [], "during": []}
             for key in self._tracked_metrics
         }
-        self._counts = {key: 0 for key in self._tracked_metrics}
 
     def capture_snapshot(self) -> MetricSnapshot:
         """Collect a snapshot of the configured metrics.
@@ -822,71 +857,10 @@ class ResourceMonitor:
 
         return snapshot
 
-    def record(
-        self,
-        before: MetricSnapshot,
-        after: MetricSnapshot,
-        *,
-        final: Optional[MetricSnapshot] = None,
-    ) -> None:
-        """Update aggregate statistics using captured snapshots.
-
-        Args:
-            before (MetricSnapshot): Snapshot captured immediately before running the workload.
-            after (MetricSnapshot): Snapshot captured immediately after running the workload.
-            final (Optional[MetricSnapshot]): Optional snapshot captured once the workload has completed.
-        """
-
-        for key in self._tracked_metrics:
-            before_val = before.get(key)
-            after_val = after.get(key)
-            if before_val is None or after_val is None:
-                continue
-
-            diff = after_val - before_val
-            if diff < 0:
-                diff = 0.0
-
-            self._totals[key]["before"] += before_val
-            self._totals[key]["current"] += after_val
-            self._totals[key]["difference"] += diff
-            final_snapshot = final or after
-            final_val = final_snapshot.get(key) if final_snapshot else None
-            if final_val is not None:
-                self._totals[key]["final"] += final_val
-            else:
-                self._totals[key]["final"] += after_val
-            self._counts[key] += 1
-
     def _cast_metric_value(self, key: str, value: float) -> Union[int, float]:
         if key in self._byte_metrics:
             return int(round(value))
         return value
-
-    def finalize(self) -> Dict[str, Union[str, Dict[str, Union[int, float]]]]:
-        """Compute the averaged resource usage summary.
-
-        Returns:
-            Dict[str, Union[str, Dict[str, Union[int, float]]]]: Aggregated metrics
-            with ``before``, ``current`` and ``difference`` values for every tracked
-            metric. Metrics without valid samples return ``"Not measured"``.
-        """
-
-        summary: Dict[str, Union[str, Dict[str, Union[int, float]]]] = {}
-        for key in self._tracked_metrics:
-            count = self._counts[key]
-            if count == 0:
-                summary[key] = "Not measured"
-                continue
-
-            summary[key] = {
-                "before": self._cast_metric_value(key, self._totals[key]["before"] / count),
-                "current": self._cast_metric_value(key, self._totals[key]["current"] / count),
-                "difference": self._cast_metric_value(key, self._totals[key]["difference"] / count),
-                "final": self._cast_metric_value(key, self._totals[key]["final"] / count),
-            }
-
-        return summary
 
     def measure_callable(
         self,
@@ -894,27 +868,29 @@ class ResourceMonitor:
         *args: Any,
         repeat: int = 1,
         **kwargs: Any,
-    ) -> Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
-        """Execute a callable and summarise the resource usage.
+    ) -> Tuple[MetricSummary, TCallableReturn]:
+        """Execute ``func`` while sampling resource usage statistics.
 
-        The callable runs synchronously in the current thread while a background
-        sampler polls the configured metrics at regular intervals determined by
-        ``sample_interval``. The peaks observed during each execution are used to
-        compute the aggregated statistics.
+        The monitor collects :attr:`sample_count` snapshots before executing
+        ``func`` and repeatedly samples while the callable is running. Each
+        execution contributes to aggregated statistics summarised through
+        minimum, maximum, average, standard deviation and variance values for
+        every tracked metric. Differences between the "during" and "before"
+        measurements are reported as *delta* values.
 
         Args:
             func (Callable[..., TCallableReturn]): Callable to execute.
             *args (Any): Positional arguments forwarded to ``func``.
-            repeat (int): Number of times ``func`` should be executed for measurement.
+            repeat (int): Number of times the callable should be executed.
             **kwargs (Any): Keyword arguments forwarded to ``func``.
 
         Returns:
-            Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
-            A tuple containing the aggregated metrics and the result returned by
-            the last invocation of ``func``.
+            Tuple[MetricSummary, TCallableReturn]:
+            Aggregated statistics per metric alongside the callable's return
+            value from the final execution.
 
         Raises:
-            ValueError: If ``repeat`` is less than 1.
+            ValueError: If ``repeat`` is less than ``1``.
         """
 
         if repeat < 1:
@@ -922,49 +898,113 @@ class ResourceMonitor:
 
         self.reset()
         result: TCallableReturn = cast(TCallableReturn, None)
+        aggregated_samples: MetricSamples = self._samples
+
         for _ in range(repeat):
-            before_snapshot = self.capture_snapshot()
-            peaks: MetricSnapshot = {key: before_snapshot.get(key) for key in self._tracked_metrics}
-            lock = Lock()
-            stop_event = Event()
+            before_snapshots = self._collect_snapshots(self._sample_count)
 
-            def sampler() -> None:
-                while not stop_event.is_set():
-                    snapshot = self.capture_snapshot()
-                    with lock:
-                        for key in self._tracked_metrics:
-                            value = snapshot.get(key)
-                            if value is None:
-                                continue
-                            peak_value = peaks.get(key)
-                            if peak_value is None or value > peak_value:
-                                peaks[key] = value
-                    if stop_event.wait(self._sample_interval):
-                        break
-
-            sampler_thread = Thread(target=sampler, daemon=True)
-            sampler_thread.start()
-            try:
-                result = func(*args, **kwargs)
-            finally:
-                stop_event.set()
-                sampler_thread.join()
-
-            final_snapshot = self.capture_snapshot()
-            with lock:
-                for key in self._tracked_metrics:
-                    final_value = final_snapshot.get(key)
-                    if final_value is None:
+            def _extract_values(
+                snapshots: List[MetricSnapshot],
+                metric: str,
+            ) -> List[float]:
+                values: List[float] = []
+                for snapshot in snapshots:
+                    value = snapshot.get(metric)
+                    if value is None:
                         continue
-                    peak_value = peaks.get(key)
-                    if peak_value is None or final_value > peak_value:
-                        peaks[key] = final_value
-                peak_snapshot: MetricSnapshot = {key: peaks.get(key) for key in self._tracked_metrics}
+                    values.append(float(value))
+                return values
 
-            self.record(before_snapshot, peak_snapshot, final=final_snapshot)
+            during_snapshots: List[MetricSnapshot] = []
+            exception_holder: Dict[str, BaseException] = {}
+            result_holder: Dict[str, TCallableReturn] = {}
 
-        metrics_summary = self.finalize()
-        return metrics_summary, result
+            def _runner() -> None:
+                try:
+                    result_holder["value"] = func(*args, **kwargs)
+                except BaseException as exc:  # pragma: no cover - defensive safeguard
+                    exception_holder["error"] = exc
+
+            worker = Thread(target=_runner)
+            worker.start()
+
+            try:
+                while worker.is_alive() or len(during_snapshots) < self._sample_count:
+                    during_snapshots.append(self.capture_snapshot())
+                    if not worker.is_alive() and len(during_snapshots) >= self._sample_count:
+                        break
+                    time.sleep(self._sample_interval)
+            finally:
+                worker.join()
+
+            if "error" in exception_holder:
+                raise exception_holder["error"]
+
+            if "value" in result_holder:
+                result = result_holder["value"]
+
+            for key in self._tracked_metrics:
+                aggregated_samples[key]["before"].extend(
+                    _extract_values(before_snapshots, key)
+                )
+                aggregated_samples[key]["during"].extend(
+                    _extract_values(during_snapshots, key)
+                )
+
+        summary: MetricSummary = {}
+        for key in self._tracked_metrics:
+            before_values = aggregated_samples[key]["before"]
+            during_values = aggregated_samples[key]["during"]
+
+            if not before_values and not during_values:
+                summary[key] = "Not measured"
+                continue
+
+            delta_values: List[float] = []
+            for during_value, before_value in zip(during_values, before_values):
+                delta_values.append(during_value - before_value)
+
+            summary[key] = {
+                "before": self._summarize_metric(key, before_values),
+                "during": self._summarize_metric(key, during_values),
+                "delta": self._summarize_metric(key, delta_values),
+            }
+
+        return summary, result
+
+    def _collect_snapshots(self, count: int) -> List[MetricSnapshot]:
+        snapshots: List[MetricSnapshot] = []
+        for index in range(count):
+            snapshots.append(self.capture_snapshot())
+            if index + 1 < count:
+                time.sleep(self._sample_interval)
+        return snapshots
+
+    def _summarize_metric(self, key: str, values: List[float]) -> MetricStatistics:
+        if not values:
+            return {
+                "measurements": [],
+                "min": None,
+                "max": None,
+                "avg": None,
+                "std": None,
+                "var": None,
+            }
+
+        minimum = min(values)
+        maximum = max(values)
+        average = statistics.fmean(values)
+        variance = statistics.pvariance(values) if len(values) > 1 else 0.0
+        std_dev = math.sqrt(variance)
+
+        return {
+            "measurements": [self._cast_metric_value(key, value) for value in values],
+            "min": self._cast_metric_value(key, minimum),
+            "max": self._cast_metric_value(key, maximum),
+            "avg": self._cast_metric_value(key, average),
+            "std": self._cast_metric_value(key, std_dev),
+            "var": self._cast_metric_value(key, variance),
+        }
 
 
 def measure_callable_resource_usage(
@@ -975,8 +1015,10 @@ def measure_callable_resource_usage(
     repeat: int = 100,
     metric_extractors: Optional[MetricExtractors] = None,
     byte_metrics: Optional[Iterable[str]] = None,
+    sample_count: int = 10,
+    show_table: bool = True,
     **kwargs: Any,
-) -> Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
+) -> Tuple[MetricSummary, TCallableReturn]:
     """Measure system resource usage for an arbitrary callable.
 
     Args:
@@ -990,11 +1032,18 @@ def measure_callable_resource_usage(
         metric_extractors (Optional[MetricExtractors]): Optional custom extractor mapping for the monitor.
         byte_metrics (Optional[Iterable[str]]): Iterable of metric identifiers that should be rounded to
             integers when summarising results.
+        sample_count (int): Number of snapshots to collect before the callable
+            executes and the minimum to gather while it runs.
+        show_table (bool): Whether to print a human readable table with
+            summarised statistics. Defaults to ``True``.
         **kwargs (Any): Keyword arguments forwarded to ``func``.
 
     Returns:
-        Tuple[Dict[str, Union[str, Dict[str, Union[int, float]]]], TCallableReturn]:
+        Tuple[MetricSummary, TCallableReturn]:
         Aggregated metric summary and the callable's final return value.
+
+    Raises:
+        ValueError: If ``sample_count`` is less than ``1`` or ``repeat`` is less than ``1``.
     """
 
     monitor = ResourceMonitor(
@@ -1002,5 +1051,32 @@ def measure_callable_resource_usage(
         target_gpu_index=target_gpu_index,
         metric_extractors=metric_extractors,
         byte_metrics=byte_metrics,
+        sample_count=sample_count,
     )
-    return monitor.measure_callable(func, *args, repeat=repeat, **kwargs)
+    summary, result = monitor.measure_callable(func, *args, repeat=repeat, **kwargs)
+
+    if show_table:
+        for metric, payload in summary.items():
+            if isinstance(payload, str):
+                print(f"{metric}: {payload}")
+                continue
+
+            before_stats = cast(Dict[str, Any], payload.get("before", {}))
+            during_stats = cast(Dict[str, Any], payload.get("during", {}))
+            delta_stats = cast(Dict[str, Any], payload.get("delta", {}))
+
+            before_max = before_stats.get("max")
+            during_max = during_stats.get("max")
+            delta_max = delta_stats.get("max")
+
+            print(
+                format_metric_summary_line(
+                    metric,
+                    before_max,
+                    during_max,
+                    delta_max,
+                    is_byte_metric=metric in monitor._byte_metrics,
+                )
+            )
+
+    return summary, result

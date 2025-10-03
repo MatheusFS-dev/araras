@@ -27,7 +27,8 @@ from araras.utils.system import (
     measure_current_system_resources,
 )
 
-ResourceMetricValue = Union[str, Dict[str, Union[int, float]]]
+MetricStatistic = Dict[str, Union[List[Union[int, float]], Union[int, float], None]]
+ResourceMetricValue = Union[str, Dict[str, MetricStatistic]]
 ResourceMetrics = Dict[str, ResourceMetricValue]
 DeviceKind = Literal["cpu", "gpu", "both"]
 
@@ -150,7 +151,7 @@ def get_memory_and_time(
     batch_size: int = 1,
     device: Union[int, str] = "both",
     warmup_runs: int = 10,
-    test_runs: int = 50,
+    test_runs: int = 20,
     verbose: bool = True,
 ) -> Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
     """
@@ -226,6 +227,8 @@ def get_memory_and_time(
         resource_monitor = ResourceMonitor(
             metrics=monitor_metrics,
             target_gpu_index=gpu_index,
+            sample_count=5,
+            sample_interval=0.25,
         )
 
         gpus = tf.config.list_physical_devices("GPU")
@@ -717,21 +720,33 @@ def write_model_stats_to_file(
                     display_payload[metric_name] = error_text
                 continue
 
-            component_diff = metric_value.get("difference")
+            delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
+            delta_max = None
+            if isinstance(delta_stats, dict):
+                delta_max = delta_stats.get("max")
             diff_payload[metric_name] = (
-                component_diff if component_diff is not None else "Not measured"
+                delta_max if delta_max is not None else "Not measured"
             )
 
             if metric_name in ram_metrics:
                 component_display: Dict[str, str] = {}
-                for component_name in ("before", "current", "difference"):
-                    component_value = metric_value.get(component_name)
-                    if component_value is None:
+                for component_name in ("before", "during", "delta"):
+                    component_stats = (
+                        metric_value.get(component_name)
+                        if isinstance(metric_value, dict)
+                        else None
+                    )
+                    if not isinstance(component_stats, dict):
                         component_display[component_name] = "Not measured"
-                    elif isinstance(component_value, str):
-                        component_display[component_name] = component_value
+                        continue
+
+                    component_max = component_stats.get("max")
+                    if component_max is None:
+                        component_display[component_name] = "Not measured"
                     else:
-                        component_display[component_name] = f"{int(round(component_value))} B ({format_bytes(component_value)})"
+                        component_display[component_name] = (
+                            f"{int(round(component_max))} B ({format_bytes(component_max)})"
+                        )
                 display_payload[metric_name] = component_display
 
         return diff_payload, display_payload
@@ -907,13 +922,17 @@ def write_model_stats_to_file(
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metric_payload)
 
-            before_value = metric_payload.get("before")
-            current_value = metric_payload.get("current")
-            diff_value = metric_payload.get("difference")
+            before_stats = metric_payload.get("before") if isinstance(metric_payload, dict) else None
+            during_stats = metric_payload.get("during") if isinstance(metric_payload, dict) else None
+            delta_stats = metric_payload.get("delta") if isinstance(metric_payload, dict) else None
+
+            before_value = None if not isinstance(before_stats, dict) else before_stats.get("max")
+            during_value = None if not isinstance(during_stats, dict) else during_stats.get("max")
+            diff_value = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
             return format_metric_summary_line(
                 label,
                 before_value,
-                current_value,
+                during_value,
                 diff_value,
                 is_byte_metric=is_ram,
             )
