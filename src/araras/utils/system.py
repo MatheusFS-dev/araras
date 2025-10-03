@@ -534,7 +534,7 @@ def measure_callable_resource_usage(
     *args: Any,
     metrics: Optional[Sequence[str]] = None,
     target_gpu_index: Optional[int] = None,
-    repeat: int = 1,
+    repeat: int = 100,
     metric_extractors: Optional[MetricExtractors] = None,
     byte_metrics: Optional[Iterable[str]] = None,
     **kwargs: Any,

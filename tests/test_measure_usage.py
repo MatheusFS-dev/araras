@@ -1,59 +1,104 @@
-"""Demonstrate ``measure_callable_resource_usage`` on a simple workload.
-
-Run this module directly to see the collected metrics:
-
-    python tests/demo_measure_usage.py
-"""
+"""Validate GPU memory tracking with a tiny Keras workload."""
 
 from __future__ import annotations
 
+import os
 import sys
-import time
 import types
 from pathlib import Path
 
+import numpy as np
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.modules.setdefault("optuna", types.ModuleType("optuna"))
-sys.modules.setdefault("tensorflow", types.ModuleType("tensorflow"))
-
-from araras.utils.system import measure_callable_resource_usage
 
 
-def _allocate_blocks(block_size: int, iterations: int) -> int:
-    """Allocate and release bytearrays to create a predictable RAM profile."""
+def _resolve_gpu_index() -> int:
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES")
+    if visible:
+        first = visible.split(",")[0].strip()
+        if first:
+            try:
+                return int(first)
+            except ValueError:
+                pass
+    return 0
 
-    blocks = []
-    for _ in range(iterations):
-        blocks.append(bytearray(block_size))
-        time.sleep(0.05)
-    blocks.clear()
-    return block_size * iterations
+
+def _build_toy_model(tf):
+    tf.keras.backend.clear_session()
+    inputs = tf.keras.Input(shape=(32,), name="features")
+    x = tf.keras.layers.Dense(32, activation="relu")(inputs)
+    x = tf.keras.layers.Dense(16, activation="relu")(x)
+    outputs = tf.keras.layers.Dense(1, name="prediction")(x)
+    model = tf.keras.Model(inputs=inputs, outputs=outputs)
+    model.compile(optimizer="adam", loss="mse")
+    return model
 
 
-def main() -> None:
-    block_size = 256 * 1024  # 256 KiB per allocation
-    iterations = 8
-    expected_bytes = block_size * iterations
+def _train_toy_model(tf, model) -> None:
+    features = tf.random.uniform((128, 32), dtype=tf.float32)
+    targets = tf.random.uniform((128, 1), dtype=tf.float32)
+    model.fit(features, targets, epochs=1, batch_size=32, verbose=0)
 
-    summary, result = measure_callable_resource_usage(
-        _allocate_blocks,
-        block_size,
-        iterations,
-        metrics=("ram",),
+
+def _bytes_to_mib(value: float) -> float:
+    return float(value) / (1024 * 1024)
+
+
+def test_measure_gpu_memory_during_inference() -> None:
+    tf = pytest.importorskip("tensorflow")
+    from araras.utils.system import measure_callable_resource_usage
+
+    physical_gpus = tf.config.list_physical_devices("GPU")
+    if not physical_gpus:
+        pytest.skip("TensorFlow GPU support not available")
+
+    for device in physical_gpus:
+        try:
+            tf.config.experimental.set_memory_growth(device, True)
+        except Exception:
+            continue
+
+    np.random.seed(42)
+    tf.random.set_seed(42)
+
+    model = _build_toy_model(tf)
+    _train_toy_model(tf, model)
+
+    inference_batch = tf.random.uniform((64, 32), dtype=tf.float32)
+
+    def run_inference() -> float:
+        predictions = model.predict(inference_batch, batch_size=32, verbose=0)
+        return float(np.mean(predictions))
+
+    summary, _ = measure_callable_resource_usage(
+        run_inference,
+        metrics=("gpu_ram",),
+        target_gpu_index=_resolve_gpu_index(),
+        repeat=1000,
     )
+    
+    print(summary)
 
-    system_ram = summary.get("system_ram")
+    gpu_metrics = summary.get("gpu_ram")
+    if gpu_metrics == "Not measured":
+        pytest.skip("GPU RAM metrics unavailable (nvidia-smi missing?)")
 
-    print(f"Expected peak allocation: {expected_bytes} bytes")
-    print(f"Callable reported allocating {result} bytes")
-    if isinstance(system_ram, dict):
-        print("Measured RAM usage (bytes):")
-        for key in ("before", "current", "difference", "final"):
-            value = system_ram.get(key, "n/a")
-            print(f"  {key}: {value}")
-    else:
-        print(f"RAM metrics: {system_ram}")
+    assert isinstance(gpu_metrics, dict)
+    for key in ("before", "current", "difference", "final"):
+        assert key in gpu_metrics
+        assert isinstance(gpu_metrics[key], (int, float))
+        assert gpu_metrics[key] >= 0
+
+    gpu_metrics_mib = {key: round(_bytes_to_mib(value), 3) for key, value in gpu_metrics.items()}
+    print(f"GPU RAM metrics (MiB): {gpu_metrics_mib}")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        test_measure_gpu_memory_during_inference()
+        print("Measurement test completed successfully.")
+    except pytest.SkipTest as exc:
+        print(f"Skipped: {exc}")
