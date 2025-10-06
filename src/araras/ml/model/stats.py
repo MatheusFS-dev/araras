@@ -242,11 +242,14 @@ def get_memory_and_time(
         for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
 
+        progress_description = (
+            f"Profiling inference latency on GPU:{gpu_index}"
+        )
         progress_iter = (
             iter(
                 white_track(
                     range(test_runs),
-                    description="Measuring GPU",
+                    description=progress_description,
                     total=test_runs,
                 )
             )
@@ -289,11 +292,12 @@ def get_memory_and_time(
             for _ in range(warmup_runs - 1):
                 _ = infer(*dummy_inputs)
 
+        progress_description = "Profiling inference latency on CPU:0"
         progress_iter = (
             iter(
                 white_track(
                     range(test_runs),
-                    description="Measuring CPU",
+                    description=progress_description,
                     total=test_runs,
                 )
             )
@@ -504,9 +508,12 @@ def get_model_usage_stats(
             try:
                 progress_iter = range(n_trials)
                 if verbose:
+                    device_label = (
+                        f"GPU:{device_index}" if device_index >= 0 else "CPU:0"
+                    )
                     progress_iter = white_track(
                         progress_iter,
-                        description="Measuring usage",
+                        description=f"Collecting usage statistics on {device_label}",
                         total=n_trials,
                     )
 

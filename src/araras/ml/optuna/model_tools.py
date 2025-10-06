@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Dict, Iterable, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 from collections import Counter
 
 import optuna
@@ -847,7 +847,6 @@ def plot_model_param_distribution(
         print(f"{RED}Skipped {unavailable_count} trial(s) due to UnavailableError.{RESET}")
         print(f"{RED}Skipped {scratch_error_count} trial(s) due to cuDNN scratch space error.{RESET}")
 
-
 def set_user_attr_model_stats(
     trial: optuna.Trial,
     model: tf.keras.Model,
@@ -855,41 +854,123 @@ def set_user_attr_model_stats(
     batch_size: int,
     n_trials: int = 10000,
     device: Union[int, str] = "both",
+    stats_to_measure: Iterable[str] = (
+        "parameters",
+        "flops",
+        "macs",
+        "summary",
+        "resource_usage",
+        "usage_stats",
+    ),
     verbose: bool = False,
 ) -> Dict[str, Any]:
-    """
-    Extract and return model statistics from the given Optuna trial.
-    
-    Statistics include:
-        - Number of parameters
-        - Model size in bits
-        - FLOPs (floating-point operations)
-        - MACs (multiply-accumulate operations)
-        - Model summary
-        - Average per-inference resource stats (before, current, delta for system RAM, GPU RAM, GPU usage %, CPU usage %)
-        - Inference time
-        - Average power consumption
-        - Average energy consumption
+    """Collect model statistics and store them as Optuna user attributes.
+
+    The helper estimates parameter counts, model size, FLOPs, MACs, model
+    summaries, resource usage, inference time, and usage statistics (power,
+    energy, and per-run time). Callers can limit the amount of profiling work by
+    explicitly selecting which statistic groups to measure through
+    ``stats_to_measure``. Any disabled group is reported back as skipped to make
+    omissions explicit in user attributes and the returned payload.
 
     Args:
-        trial (optuna.Trial): The Optuna trial object
-        model (tf.keras.Model): The Keras model to analyze.
-        policy (tf.keras.DTypePolicy): The precision policy used for the model.
-        batch_size (int): The batch size to simulate for input.
-        n_trials (int): Number of trials for power and energy measurement.
-        device (int | str): GPU index to run the model on. Use ``-1``/``"cpu"`` for
-            CPU measurements or ``"both"``/``"both:<index>"`` to profile CPU and GPU
-            sequentially (GPU index defaults to 0). Defaults to ``"both"``.
-        verbose (bool): If True, print detailed information.
+        trial (optuna.Trial): Optuna trial that will receive user attributes.
+        model (tf.keras.Model): Keras model whose statistics are extracted.
+        bytes_per_param (int): Storage size for each parameter, in bytes.
+        batch_size (int): Mini-batch size used during resource profiling.
+        n_trials (int): Number of inference runs used to estimate usage stats.
+        device (int | str): Device selection for profiling. Use ``-1`` or
+            ``"cpu"`` to enforce CPU runs, integer values to pick a GPU index, or
+            ``"both"``/``"both:<index>"`` to profile CPU and GPU sequentially. The
+            default ``"both"`` profiles GPU index 0 and the CPU.
+        stats_to_measure (Iterable[str]): Iterable describing which statistic
+            groups to compute. Use ``"parameters"`` to gather parameter counts
+            and serialized size estimates, ``"flops"`` for floating-point
+            operation counts, ``"macs"`` for multiply-accumulate estimates,
+            ``"summary"`` to capture the ``model.summary`` output,
+            ``"resource_usage"`` for exclusive RAM/VRAM consumption and
+            inference latency, and ``"usage_stats"`` for power, energy, and
+            per-run timing metrics gathered from resource monitoring. Any
+            iterable omitting one or more of these values skips the respective
+            measurement.
+        verbose (bool): When ``True``, print detailed progress information during
+            profiling.
 
     Returns:
-        Dict[str, Any]: A dictionary containing model statistics and formatted strings
+        Dict[str, Any]: Dictionary containing the collected statistics and the
+        formatted strings stored in trial attributes.
+
+    Raises:
+        TypeError: If ``stats_to_measure`` is ``None`` or not iterable.
+        ValueError: If ``stats_to_measure`` includes values outside the supported
+            set.
+
+    Notes:
+        Skipped statistics return ``None`` for raw numeric values and
+        ``"Not measured (skipped)"`` for their formatted display strings to make
+        omissions explicit.
+
+    Warnings:
+        Measuring resource usage and usage statistics can significantly increase
+        runtime for large models. Restrict ``stats_to_measure`` to the required
+        groups when profiling time is a concern.
     """
-    params = model.count_params()
-    model_size_bytes = params * bytes_per_param
-    flops = get_flops(model)
-    macs = get_macs(model)
-    model_summary = capture_model_summary(model)
+
+    supported_stats: Tuple[str, ...] = (
+        "parameters",
+        "flops",
+        "macs",
+        "summary",
+        "resource_usage",
+        "usage_stats",
+    )
+    allowed_stats = set(supported_stats)
+    selected_stats: List[str] = []
+    invalid_entries: List[str] = []
+
+    if stats_to_measure is None:
+        raise TypeError("stats_to_measure must be an iterable of statistic names")
+
+    stats_iterable = stats_to_measure
+
+    for raw_entry in stats_iterable:
+        normalized_entry = str(raw_entry).strip().lower()
+        if not normalized_entry:
+            continue
+        if normalized_entry not in allowed_stats:
+            invalid_entries.append(str(raw_entry))
+            continue
+        if normalized_entry not in selected_stats:
+            selected_stats.append(normalized_entry)
+
+    if invalid_entries:
+        valid_options = ", ".join(supported_stats)
+        raise ValueError(
+            "Unsupported statistics requested: "
+            f"{invalid_entries}. Valid options are: {valid_options}."
+        )
+
+    measure_parameters = "parameters" in selected_stats
+    measure_flops = "flops" in selected_stats
+    measure_macs = "macs" in selected_stats
+    measure_summary = "summary" in selected_stats
+    measure_resource_usage = "resource_usage" in selected_stats
+    measure_usage_stats = "usage_stats" in selected_stats
+
+    not_measured = "Not measured"
+    skipped_text = "Not measured (skipped)"
+
+    params: Optional[int] = None
+    model_size_bytes: Optional[int] = None
+    if measure_parameters:
+        params = model.count_params()
+        model_size_bytes = params * bytes_per_param
+
+    flops: Optional[int] = get_flops(model) if measure_flops else None
+    macs: Optional[int] = get_macs(model) if measure_macs else None
+    model_summary = (
+        capture_model_summary(model) if measure_summary else skipped_text
+    )
 
     def _resolve_device_mode(device_spec: Union[int, str]) -> str:
         if isinstance(device_spec, str):
@@ -903,12 +984,19 @@ def set_user_attr_model_stats(
 
     device_mode = _resolve_device_mode(device)
 
-    resource_usage_raw, inference_time_raw = get_memory_and_time(
-        model, batch_size=batch_size, device=device, verbose=verbose
-    )
-    usage_stats_raw = get_model_usage_stats(
-        model, device=device, n_trials=n_trials, verbose=verbose
-    )
+    per_device_resource_usage: Dict[str, Any] = {}
+    per_device_inference_time: Dict[str, Any] = {}
+    resource_usage_diff_map: Dict[str, Any] = {}
+    resource_usage_display_map: Dict[str, Any] = {}
+    resource_usage_primary: Any = not_measured
+    resource_usage_diff_primary: Any = not_measured
+    resource_usage_display_primary: Any = {}
+    inference_time_primary: Any = not_measured
+    inference_time_gpu: Any = not_measured
+    inference_time_cpu: Any = not_measured
+    multi_device = False
+    default_resource_text = not_measured
+    default_inference_text = not_measured
 
     def _normalize_resource_usage(raw: Any) -> Dict[str, Any]:
         if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
@@ -931,15 +1019,15 @@ def set_user_attr_model_stats(
                 value = raw[key]
                 if isinstance(value, dict):
                     normalized[key] = {
-                        "per_run_time": value.get("per_run_time", "Not measured"),
-                        "avg_power": value.get("avg_power", "Not measured"),
-                        "avg_energy": value.get("avg_energy", "Not measured"),
+                        "per_run_time": value.get("per_run_time", not_measured),
+                        "avg_power": value.get("avg_power", not_measured),
+                        "avg_energy": value.get("avg_energy", not_measured),
                     }
                 else:
                     normalized[key] = {
                         "per_run_time": value,
-                        "avg_power": "Not measured",
-                        "avg_energy": "Not measured",
+                        "avg_power": not_measured,
+                        "avg_energy": not_measured,
                     }
             return normalized
         per_run_time_value, avg_power_value, avg_energy_value = raw
@@ -950,10 +1038,6 @@ def set_user_attr_model_stats(
             "avg_energy": avg_energy_value,
         }
         return normalized
-
-    per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
-    per_device_inference_time = _normalize_inference_time(inference_time_raw)
-    per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
 
     ram_metrics = {"system_ram", "gpu_ram"}
 
@@ -987,7 +1071,7 @@ def set_user_attr_model_stats(
             if isinstance(delta_stats, dict):
                 delta_max = delta_stats.get("max")
             diff_payload[metric_name] = (
-                delta_max if delta_max is not None else "Not measured"
+                delta_max if delta_max is not None else not_measured
             )
 
             if metric_name in ram_metrics:
@@ -999,28 +1083,41 @@ def set_user_attr_model_stats(
                         else None
                     )
                     if not isinstance(component_stats, dict):
-                        component_display[component_name] = "Not measured"
+                        component_display[component_name] = not_measured
                         continue
 
                     component_max = component_stats.get("max")
                     if component_max is None:
-                        component_display[component_name] = "Not measured"
+                        component_display[component_name] = not_measured
                     else:
                         component_display[component_name] = _format_ram_display(component_max)
                 display_payload[metric_name] = component_display
 
         return diff_payload, display_payload
 
-    resource_usage_diff_map: Dict[str, Any] = {}
-    resource_usage_display_map: Dict[str, Any] = {}
-
-    for device_label, metrics_value in per_device_resource_usage.items():
-        diff_payload, display_payload = _build_resource_views(metrics_value)
-        resource_usage_diff_map[device_label] = diff_payload
-        if isinstance(display_payload, dict) and display_payload:
-            resource_usage_display_map[device_label] = display_payload
-        elif isinstance(display_payload, str):
-            resource_usage_display_map[device_label] = display_payload
+    if measure_resource_usage:
+        resource_usage_raw, inference_time_raw = get_memory_and_time(
+            model, batch_size=batch_size, device=device, verbose=verbose
+        )
+        per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
+        per_device_inference_time = _normalize_inference_time(inference_time_raw)
+        for device_label, metrics_value in per_device_resource_usage.items():
+            diff_payload, display_payload = _build_resource_views(metrics_value)
+            resource_usage_diff_map[device_label] = diff_payload
+            if isinstance(display_payload, dict) and display_payload:
+                resource_usage_display_map[device_label] = display_payload
+            elif isinstance(display_payload, str):
+                resource_usage_display_map[device_label] = display_payload
+        multi_device = len(per_device_resource_usage) > 1
+    else:
+        resource_usage_primary = skipped_text
+        resource_usage_diff_primary = skipped_text
+        resource_usage_display_primary = {}
+        inference_time_primary = skipped_text
+        inference_time_gpu = skipped_text
+        inference_time_cpu = skipped_text
+        default_resource_text = skipped_text
+        default_inference_text = skipped_text
 
     def _metric_component_for_device(
         metrics_value: Any,
@@ -1029,7 +1126,7 @@ def set_user_attr_model_stats(
     ) -> Union[str, int, float, None]:
         if isinstance(metrics_value, str):
             return metrics_value
-        metric_block = metrics_value.get(metric_name, "Not measured")
+        metric_block = metrics_value.get(metric_name, not_measured)
         if isinstance(metric_block, str):
             return metric_block
         if isinstance(metric_block, dict) and metric_block.get("error"):
@@ -1039,17 +1136,25 @@ def set_user_attr_model_stats(
             return error_text
         target_stats = metric_block.get(component_name)
         if not isinstance(target_stats, dict):
-            return "Not measured"
+            return not_measured
         value = target_stats.get("max")
-        return "Not measured" if value is None else value
+        return not_measured if value is None else value
+
+    if measure_usage_stats:
+        usage_stats_raw = get_model_usage_stats(
+            model, device=device, n_trials=n_trials, verbose=verbose
+        )
+        per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
+    else:
+        per_device_usage_stats = {}
 
     avg_power_map: Dict[str, Any] = {}
     avg_energy_map: Dict[str, Any] = {}
     per_run_time_map: Dict[str, Any] = {}
     for device_label, stats_payload in per_device_usage_stats.items():
-        avg_power_map[device_label] = stats_payload.get("avg_power", "Not measured")
-        avg_energy_map[device_label] = stats_payload.get("avg_energy", "Not measured")
-        per_run_time_map[device_label] = stats_payload.get("per_run_time", "Not measured")
+        avg_power_map[device_label] = stats_payload.get("avg_power", not_measured)
+        avg_energy_map[device_label] = stats_payload.get("avg_energy", not_measured)
+        per_run_time_map[device_label] = stats_payload.get("per_run_time", not_measured)
 
     if device_mode == "cpu":
         primary_order: Tuple[str, ...] = ("cpu", "gpu")
@@ -1060,30 +1165,29 @@ def set_user_attr_model_stats(
 
     def _pick_primary(container: Dict[str, Any]) -> Any:
         if not container:
-            return "Not measured"
+            return not_measured
         for key in primary_order:
             if key in container:
                 return container[key]
         return next(iter(container.values()))
 
     def _value_for(container: Dict[str, Any], key: str) -> Any:
-        return container.get(key, "Not measured")
+        return container.get(key, not_measured)
 
-    multi_device = len(per_device_resource_usage) > 1
+    if measure_resource_usage:
+        resource_usage_primary = _pick_primary(per_device_resource_usage)
+        resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
+        resource_usage_display_primary = (
+            _pick_primary(resource_usage_display_map) if resource_usage_display_map else {}
+        )
+        inference_time_primary = _pick_primary(per_device_inference_time)
+        inference_time_gpu = _value_for(per_device_inference_time, "gpu")
+        inference_time_cpu = _value_for(per_device_inference_time, "cpu")
 
-    resource_usage_primary = _pick_primary(per_device_resource_usage)
-    resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
-    resource_usage_display_primary = (
-        _pick_primary(resource_usage_display_map) if resource_usage_display_map else {}
-    )
-
-    inference_time_primary = _pick_primary(per_device_inference_time)
     avg_power_primary = _pick_primary(avg_power_map)
     avg_energy_primary = _pick_primary(avg_energy_map)
     per_run_time_primary = _pick_primary(per_run_time_map)
 
-    inference_time_gpu = _value_for(per_device_inference_time, "gpu")
-    inference_time_cpu = _value_for(per_device_inference_time, "cpu")
     avg_power_gpu = _value_for(avg_power_map, "gpu")
     avg_power_cpu = _value_for(avg_power_map, "cpu")
     avg_energy_gpu = _value_for(avg_energy_map, "gpu")
@@ -1091,9 +1195,22 @@ def set_user_attr_model_stats(
     per_run_time_gpu = _value_for(per_run_time_map, "gpu")
     per_run_time_cpu = _value_for(per_run_time_map, "cpu")
 
+    default_usage_text = not_measured
+    if not measure_usage_stats:
+        avg_power_primary = skipped_text
+        avg_energy_primary = skipped_text
+        per_run_time_primary = skipped_text
+        avg_power_gpu = skipped_text
+        avg_power_cpu = skipped_text
+        avg_energy_gpu = skipped_text
+        avg_energy_cpu = skipped_text
+        per_run_time_gpu = skipped_text
+        per_run_time_cpu = skipped_text
+        default_usage_text = skipped_text
+
     trial.set_user_attr("resource_usage", resource_usage_primary)
     trial.set_user_attr("resource_usage_diff", resource_usage_diff_primary)
-    if resource_usage_display_primary not in (None, {}, "Not measured"):
+    if resource_usage_display_primary not in (None, {}, not_measured, skipped_text):
         trial.set_user_attr("resource_usage_display", resource_usage_display_primary)
     trial.set_user_attr("resource_usage_details", per_device_resource_usage)
     trial.set_user_attr("resource_usage_diff_details", resource_usage_diff_map)
@@ -1101,15 +1218,15 @@ def set_user_attr_model_stats(
     for device_label in ("gpu", "cpu"):
         trial.set_user_attr(
             f"resource_usage_{device_label}",
-            per_device_resource_usage.get(device_label, "Not measured"),
+            per_device_resource_usage.get(device_label, default_resource_text),
         )
         trial.set_user_attr(
             f"resource_usage_diff_{device_label}",
-            resource_usage_diff_map.get(device_label, "Not measured"),
+            resource_usage_diff_map.get(device_label, default_resource_text),
         )
         trial.set_user_attr(
             f"resource_usage_display_{device_label}",
-            resource_usage_display_map.get(device_label, "Not measured"),
+            resource_usage_display_map.get(device_label, default_resource_text),
         )
 
     trial.set_user_attr("inference_time", inference_time_primary)
@@ -1120,7 +1237,7 @@ def set_user_attr_model_stats(
 
     for device_label in ("gpu", "cpu"):
         if device_label not in per_device_inference_time:
-            trial.set_user_attr(f"inference_time_{device_label}", "Not measured")
+            trial.set_user_attr(f"inference_time_{device_label}", default_inference_text)
 
     trial.set_user_attr("avg_power", avg_power_primary)
     trial.set_user_attr("avg_energy", avg_energy_primary)
@@ -1130,28 +1247,34 @@ def set_user_attr_model_stats(
     trial.set_user_attr("per_run_time_details", per_run_time_map)
 
     for device_label in per_device_usage_stats:
-        trial.set_user_attr(f"avg_power_{device_label}", avg_power_map.get(device_label, "Not measured"))
-        trial.set_user_attr(f"avg_energy_{device_label}", avg_energy_map.get(device_label, "Not measured"))
+        trial.set_user_attr(
+            f"avg_power_{device_label}",
+            avg_power_map.get(device_label, not_measured),
+        )
+        trial.set_user_attr(
+            f"avg_energy_{device_label}",
+            avg_energy_map.get(device_label, not_measured),
+        )
         trial.set_user_attr(
             f"per_run_time_{device_label}",
-            per_run_time_map.get(device_label, "Not measured"),
+            per_run_time_map.get(device_label, not_measured),
         )
 
     for device_label in ("gpu", "cpu"):
         if device_label not in per_device_usage_stats:
-            trial.set_user_attr(f"avg_power_{device_label}", "Not measured")
-            trial.set_user_attr(f"avg_energy_{device_label}", "Not measured")
-            trial.set_user_attr(f"per_run_time_{device_label}", "Not measured")
+            trial.set_user_attr(f"avg_power_{device_label}", default_usage_text)
+            trial.set_user_attr(f"avg_energy_{device_label}", default_usage_text)
+            trial.set_user_attr(f"per_run_time_{device_label}", default_usage_text)
 
     for device_label, metrics_value in per_device_resource_usage.items():
         suffix = "" if not multi_device else ("" if device_label == "gpu" else f"_{device_label}")
-        diff_entry = resource_usage_diff_map.get(device_label, "Not measured")
+        diff_entry = resource_usage_diff_map.get(device_label, default_resource_text)
         display_entry = resource_usage_display_map.get(device_label)
         for metric_name in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
             before_value = _metric_component_for_device(metrics_value, metric_name, "before")
             current_value = _metric_component_for_device(metrics_value, metric_name, "during")
             if isinstance(diff_entry, dict):
-                diff_value = diff_entry.get(metric_name, "Not measured")
+                diff_value = diff_entry.get(metric_name, default_resource_text)
             else:
                 diff_value = diff_entry
 
@@ -1166,15 +1289,15 @@ def set_user_attr_model_stats(
                     if isinstance(metric_display_entry, dict):
                         trial.set_user_attr(
                             f"{attr_prefix}_before_display",
-                            metric_display_entry.get("before", "Not measured"),
+                            metric_display_entry.get("before", not_measured),
                         )
                         trial.set_user_attr(
                             f"{attr_prefix}_current_display",
-                            metric_display_entry.get("during", "Not measured"),
+                            metric_display_entry.get("during", not_measured),
                         )
                         trial.set_user_attr(
                             f"{attr_prefix}_diff_display",
-                            metric_display_entry.get("delta", "Not measured"),
+                            metric_display_entry.get("delta", not_measured),
                         )
                     elif isinstance(metric_display_entry, str):
                         trial.set_user_attr(f"{attr_prefix}_display", metric_display_entry)
@@ -1215,10 +1338,25 @@ def set_user_attr_model_stats(
             return f"{value} B"
         return f"{value} B ({human_readable})"
 
-    num_params_display = _format_metric_with_suffix(params, "parameters", joiner=" ")
-    model_size_display = _format_bytes_with_suffix(model_size_bytes)
-    flops_display = _format_metric_with_suffix(flops, "FLOPs")
-    macs_display = _format_metric_with_suffix(macs, "MACs")
+    if params is not None:
+        num_params_display = _format_metric_with_suffix(params, "parameters", joiner=" ")
+    else:
+        num_params_display = skipped_text
+
+    if model_size_bytes is not None:
+        model_size_display = _format_bytes_with_suffix(model_size_bytes)
+    else:
+        model_size_display = skipped_text
+
+    if flops is not None:
+        flops_display = _format_metric_with_suffix(flops, "FLOPs")
+    else:
+        flops_display = skipped_text
+
+    if macs is not None:
+        macs_display = _format_metric_with_suffix(macs, "MACs")
+    else:
+        macs_display = skipped_text
 
     trial.set_user_attr("num_params", params)
     trial.set_user_attr("num_params_display", num_params_display)
@@ -1246,12 +1384,12 @@ def set_user_attr_model_stats(
         "resource_usage_details": per_device_resource_usage,
         "resource_usage_diff_details": resource_usage_diff_map,
         "resource_usage_display_details": resource_usage_display_map,
-        "resource_usage_gpu": per_device_resource_usage.get("gpu", "Not measured"),
-        "resource_usage_cpu": per_device_resource_usage.get("cpu", "Not measured"),
-        "resource_usage_diff_gpu": resource_usage_diff_map.get("gpu", "Not measured"),
-        "resource_usage_diff_cpu": resource_usage_diff_map.get("cpu", "Not measured"),
-        "resource_usage_display_gpu": resource_usage_display_map.get("gpu", "Not measured"),
-        "resource_usage_display_cpu": resource_usage_display_map.get("cpu", "Not measured"),
+        "resource_usage_gpu": per_device_resource_usage.get("gpu", default_resource_text),
+        "resource_usage_cpu": per_device_resource_usage.get("cpu", default_resource_text),
+        "resource_usage_diff_gpu": resource_usage_diff_map.get("gpu", default_resource_text),
+        "resource_usage_diff_cpu": resource_usage_diff_map.get("cpu", default_resource_text),
+        "resource_usage_display_gpu": resource_usage_display_map.get("gpu", default_resource_text),
+        "resource_usage_display_cpu": resource_usage_display_map.get("cpu", default_resource_text),
         "inference_time": inference_time_result,
         "inference_time_details": per_device_inference_time,
         "inference_time_gpu": inference_time_gpu,

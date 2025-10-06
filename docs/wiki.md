@@ -1526,9 +1526,17 @@ set_user_attr_model_stats(
     model,
     bytes_per_param,
     batch_size,
-    n_trials,
-    device,
-    verbose,
+    n_trials=10000,
+    device="both",
+    stats_to_measure=(
+        "parameters",
+        "flops",
+        "macs",
+        "summary",
+        "resource_usage",
+        "usage_stats",
+    ),
+    verbose=False,
 )
 ```
 Extract and return model statistics from the given Optuna trial.
@@ -1538,17 +1546,19 @@ Extract and return model statistics from the given Optuna trial.
 |------|------|-------------|
 | trial | `optuna.Trial` | The Optuna trial object |
 | model | `tf.keras.Model` | The Keras model to analyze. |
-| policy | `tf.keras.DTypePolicy` | The precision policy used for the model. |
+| bytes_per_param | `int` | Number of bytes allocated per parameter. |
 | batch_size | `int` | The batch size to simulate for input. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
-| device | `int` | GPU index to run the model on. Use ``-1`` for CPU. |
+| device | `int \| str` | Device selection. ``-1``/``"cpu"`` forces CPU, integers pick a GPU index, and ``"both"`` profiles sequentially. |
+| stats_to_measure | `Iterable[str]` | Collection of statistic groups to measure. Use ``"parameters"`` for parameter counts and serialized size, ``"flops"`` for floating-point operations, ``"macs"`` for multiply-accumulate estimates, ``"summary"`` for captured ``model.summary`` output, ``"resource_usage"`` for exclusive RAM/VRAM consumption with latency, and ``"usage_stats"`` for power, energy, and per-run timing metrics. Defaults to measuring every group. |
 | verbose | `bool` | If True, print detailed information. |
 
 **Returns**
-` Dict[str, float]: A dictionary containing model statistics`
+`Dict[str, Any]`: A dictionary containing the collected statistics and formatted displays.
 
 **Raises**
-- None
+- `TypeError`: If `stats_to_measure` is `None` or not iterable.
+- `ValueError`: If `stats_to_measure` includes unsupported statistic names.
 
 ## ml.optuna.utils
 
