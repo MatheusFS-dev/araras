@@ -116,8 +116,10 @@ def white_track(iterable, *, description: str, total: int):
 
     This helper wraps ``iterable`` and yields each item while displaying a
     progress bar using :class:`tqdm.tqdm`. The bar is rendered in white with an
-    arrow style (``=>``) to indicate progress and shows ``done/total`` along with
-    the remaining time.
+    ASCII style (``.#``) to indicate progress and shows ``done/total`` along with
+    the remaining time. Once iteration completes, the bar is explicitly advanced
+    to ``100%`` to avoid lingering at an incomplete state when generators exit
+    early.
 
     Args:
         iterable (Iterable): The iterable to wrap and iterate over.
@@ -127,30 +129,50 @@ def white_track(iterable, *, description: str, total: int):
     Yields:
         Any: Items from ``iterable``.
 
+    Returns:
+        None: This generator does not return a value because it yields items
+        from ``iterable``.
+
     Notes:
         The progress bar uses ASCII characters to maximise compatibility across
-        different terminals. The ``=>`` symbol represents the current progress
-        pointer.
+        different terminals. The ``.#`` symbols represent the empty and filled
+        portions of the bar, respectively.
 
-    Warning:
+    Warnings:
         The ``total`` parameter **must** accurately reflect the length of the
         iterable; otherwise the progress bar will display incorrect percentages
         and estimated remaining time.
+
+    Raises:
+        None.
     """
 
-    bar_fmt = "{percentage:3.0f}% [{bar}] {n_fmt}/{total_fmt} in {remaining}"
+    bar_fmt = (
+        "{desc}: {percentage:3.0f}% [{bar}] {n_fmt}/{total_fmt} in {remaining}"
+    )
     with tqdm(
         iterable,
         total=total,
         desc=description,
         colour="white",
-        ncols=50,
+        ncols=70,
         ascii=".#",
         bar_format=bar_fmt,
         unit="",  # remove default “it” label
     ) as pbar:
-        for item in pbar:
-            yield item
+        try:
+            for item in pbar:
+                yield item
+        finally:
+            if pbar.total is not None:
+                remaining = pbar.total - pbar.n
+                if remaining > 0:
+                    pbar.update(remaining)
+                elif remaining < 0:
+                    # Guard against incorrect totals to avoid negative updates.
+                    pbar.n = pbar.total
+            pbar.refresh()
+            pbar.close()
 
 
 # ————————————————————————————— Supress warnings ————————————————————————————— #

@@ -667,7 +667,7 @@ def plot_model_param_distribution(
     if n_trials:
         progress_iter = white_track(
             progress_iter,
-            description="Sampling models",
+            description="Sampling trials",
             total=n_trials,
         )
 

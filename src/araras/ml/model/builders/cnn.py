@@ -297,7 +297,15 @@ def generate_conv1d_pool_table(
 
     total = (len(kernel_sizes) * len(pool_sizes) * len(filters)) ** n_layers
     combo_iter = product(kernel_sizes, pool_sizes, filters, repeat=n_layers)
-    iterator = white_track(combo_iter, description="Combos", total=total) if verbose else combo_iter
+    iterator = (
+        white_track(
+            combo_iter,
+            description="Enumerating CNN combos",
+            total=total,
+        )
+        if verbose
+        else combo_iter
+    )
 
     rows = []
 

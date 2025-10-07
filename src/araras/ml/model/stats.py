@@ -243,7 +243,7 @@ def get_memory_and_time(
             _ = infer(*dummy_inputs)
 
         progress_description = (
-            f"Profiling inference latency on GPU:{gpu_index}"
+            f"Calculating latency on GPU:{gpu_index}"
         )
         progress_iter = (
             iter(
@@ -513,7 +513,7 @@ def get_model_usage_stats(
                     )
                     progress_iter = white_track(
                         progress_iter,
-                        description=f"Collecting usage statistics on {device_label}",
+                        description=f"Collecting stats on {device_label}",
                         total=n_trials,
                     )
 
@@ -633,8 +633,7 @@ def write_model_stats_to_file(
         "usage_stats",
     ),
 ) -> None:
-    """
-    Write model statistics to a file.
+    """Write model statistics to a file.
 
     Statistics include:
         - Number of parameters
@@ -646,8 +645,9 @@ def write_model_stats_to_file(
         - Average power consumption
         - Average energy consumption
 
-    The measured groups are controlled by ``stats_to_measure`` and any group
-    not requested is reported as skipped in the generated report.
+    Notes:
+        The measured groups are controlled by ``stats_to_measure`` and any group
+        not requested is reported as skipped in the generated report.
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -659,11 +659,14 @@ def write_model_stats_to_file(
             sequentially (defaults to ``"both"``).
         n_trials (int): Number of trials for power and energy measurement.
         extra_attrs (Optional[Dict[str, Any]]): Additional attributes to write to the file.
-        verbose (bool): If True, print detailed information.
+        verbose (bool): If ``True``, print detailed information.
         stats_to_measure (Iterable[str]): Collection of statistic groups to compute.
             Supported values are ``"parameters"``, ``"flops"``, ``"macs"``,
             ``"summary"``, ``"resource_usage"`` and ``"usage_stats"``. Any omitted
             group is skipped.
+
+    Returns:
+        None: The report is written directly to ``file_path``.
 
     Raises:
         TypeError: If ``stats_to_measure`` is ``None`` or not iterable.
