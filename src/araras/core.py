@@ -92,13 +92,6 @@ logger_time = make_logger(
 )
 logger_time.handlers[0].setFormatter(UTCFormatter("[%(asctime)s] %(levelname)s: %(message)s"))
 
-# —————————————————————————————————— Errors —————————————————————————————————— #
-from rich.traceback import install
-
-install(
-    # show_locals=True,
-)
-
 # —————————————————————————————————— Checks —————————————————————————————————— #
 from matplotlib import font_manager
 
