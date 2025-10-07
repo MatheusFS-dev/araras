@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, Literal
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union, Literal
 
 import time
 import warnings
@@ -614,6 +614,7 @@ def get_model_usage_stats(
     }
 
 
+
 def write_model_stats_to_file(
     model: tf.keras.Model,
     file_path: str,
@@ -623,19 +624,30 @@ def write_model_stats_to_file(
     n_trials: int = 1000,
     extra_attrs: Optional[Dict[str, Any]] = None,
     verbose: bool = False,
+    stats_to_measure: Iterable[str] = (
+        "parameters",
+        "flops",
+        "macs",
+        "summary",
+        "resource_usage",
+        "usage_stats",
+    ),
 ) -> None:
     """
     Write model statistics to a file.
-    
+
     Statistics include:
         - Number of parameters
-        - Model size in bits
+        - Model size in bytes
         - FLOPs (Floating Point Operations)
         - MACs (Multiply-Accumulate operations)
-        - Average per-inference resource deltas (system RAM, GPU RAM, GPU usage %, CPU usage %)
+        - Resource usage deltas (system RAM, GPU RAM, GPU usage %, CPU usage %)
         - Inference time
         - Average power consumption
         - Average energy consumption
+
+    The measured groups are controlled by ``stats_to_measure`` and any group
+    not requested is reported as skipped in the generated report.
 
     Args:
         model (tf.keras.Model): The Keras model to analyze.
@@ -648,16 +660,87 @@ def write_model_stats_to_file(
         n_trials (int): Number of trials for power and energy measurement.
         extra_attrs (Optional[Dict[str, Any]]): Additional attributes to write to the file.
         verbose (bool): If True, print detailed information.
-    """
-    params = model.count_params()
-    device_kind, _ = _parse_device_request(device)
+        stats_to_measure (Iterable[str]): Collection of statistic groups to compute.
+            Supported values are ``"parameters"``, ``"flops"``, ``"macs"``,
+            ``"summary"``, ``"resource_usage"`` and ``"usage_stats"``. Any omitted
+            group is skipped.
 
-    resource_usage_raw, inference_time_raw = get_memory_and_time(
-        model, batch_size=batch_size, device=device, verbose=verbose
+    Raises:
+        TypeError: If ``stats_to_measure`` is ``None`` or not iterable.
+        ValueError: If ``stats_to_measure`` includes unsupported statistic names.
+    """
+
+    supported_stats: Tuple[str, ...] = (
+        "parameters",
+        "flops",
+        "macs",
+        "summary",
+        "resource_usage",
+        "usage_stats",
     )
-    usage_stats_raw = get_model_usage_stats(
-        model, device=device, n_trials=n_trials, verbose=verbose
-    )
+    if stats_to_measure is None:
+        raise TypeError("stats_to_measure must be an iterable of statistic names")
+
+    try:
+        stats_iterable = list(stats_to_measure)
+    except TypeError as exc:
+        raise TypeError("stats_to_measure must be an iterable of statistic names") from exc
+
+    allowed_stats = set(supported_stats)
+    selected_stats: List[str] = []
+    invalid_entries: List[str] = []
+
+    for raw_entry in stats_iterable:
+        normalized_entry = str(raw_entry).strip().lower()
+        if not normalized_entry:
+            continue
+        if normalized_entry not in allowed_stats:
+            invalid_entries.append(str(raw_entry))
+            continue
+        if normalized_entry not in selected_stats:
+            selected_stats.append(normalized_entry)
+
+    if invalid_entries:
+        valid_options = ", ".join(supported_stats)
+        raise ValueError(
+            "Unsupported statistics requested: "
+            f"{invalid_entries}. Valid options are: {valid_options}."
+        )
+
+    measure_parameters = "parameters" in selected_stats
+    measure_flops = "flops" in selected_stats
+    measure_macs = "macs" in selected_stats
+    measure_summary = "summary" in selected_stats
+    measure_resource_usage = "resource_usage" in selected_stats
+    measure_usage_stats = "usage_stats" in selected_stats
+
+    not_measured = "Not measured"
+    skipped_text = "Not measured (skipped)"
+
+    params_value: Union[int, str]
+    model_size_value: Union[int, str]
+    if measure_parameters:
+        params_value = model.count_params()
+        model_size_value = params_value * bytes_per_param
+    else:
+        params_value = skipped_text
+        model_size_value = skipped_text
+
+    flops_value: Union[int, str]
+    if measure_flops:
+        flops_value = get_flops(model)
+    else:
+        flops_value = skipped_text
+
+    macs_value: Union[int, str]
+    if measure_macs:
+        macs_value = get_macs(model)
+    else:
+        macs_value = skipped_text
+
+    model_summary_value = capture_model_summary(model) if measure_summary else skipped_text
+
+    device_kind, _ = _parse_device_request(device)
 
     def _normalize_resource_usage(raw: Any) -> Dict[str, Any]:
         if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
@@ -680,15 +763,15 @@ def write_model_stats_to_file(
                 value = raw[key]
                 if isinstance(value, dict):
                     normalized[key] = {
-                        "per_run_time": value.get("per_run_time", "Not measured"),
-                        "avg_power": value.get("avg_power", "Not measured"),
-                        "avg_energy": value.get("avg_energy", "Not measured"),
+                        "per_run_time": value.get("per_run_time", not_measured),
+                        "avg_power": value.get("avg_power", not_measured),
+                        "avg_energy": value.get("avg_energy", not_measured),
                     }
                 else:
                     normalized[key] = {
                         "per_run_time": value,
-                        "avg_power": "Not measured",
-                        "avg_energy": "Not measured",
+                        "avg_power": not_measured,
+                        "avg_energy": not_measured,
                     }
             return normalized
         per_run_time_value, avg_power_value, avg_energy_value = raw
@@ -700,9 +783,42 @@ def write_model_stats_to_file(
         }
         return normalized
 
-    per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
-    per_device_inference_time = _normalize_inference_time(inference_time_raw)
-    per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
+    per_device_resource_usage: Dict[str, Any] = {}
+    per_device_inference_time: Dict[str, Any] = {}
+    per_device_usage_stats: Dict[str, Dict[str, Any]] = {}
+    resource_usage_diff_map: Dict[str, Any] = {}
+    resource_usage_display_map: Dict[str, Any] = {}
+
+    resource_usage_primary: Any = not_measured
+    resource_usage_diff_primary: Any = not_measured
+    resource_usage_display_primary: Any = not_measured
+    resource_usage_gpu: Any = not_measured
+    resource_usage_cpu: Any = not_measured
+    resource_usage_diff_gpu: Any = not_measured
+    resource_usage_diff_cpu: Any = not_measured
+    resource_usage_display_gpu: Any = not_measured
+    resource_usage_display_cpu: Any = not_measured
+
+    inference_time_primary: Any = not_measured
+    inference_time_gpu: Any = not_measured
+    inference_time_cpu: Any = not_measured
+
+    avg_power_map: Dict[str, Any] = {}
+    avg_energy_map: Dict[str, Any] = {}
+    per_run_time_map: Dict[str, Any] = {}
+    avg_power_primary: Any = not_measured
+    avg_energy_primary: Any = not_measured
+    per_run_time_primary: Any = not_measured
+    avg_power_gpu: Any = not_measured
+    avg_power_cpu: Any = not_measured
+    avg_energy_gpu: Any = not_measured
+    avg_energy_cpu: Any = not_measured
+    per_run_time_gpu: Any = not_measured
+    per_run_time_cpu: Any = not_measured
+
+    default_resource_text = not_measured
+    default_inference_text = not_measured
+    default_usage_text = not_measured
 
     ram_metrics = {"system_ram", "gpu_ram"}
 
@@ -732,7 +848,7 @@ def write_model_stats_to_file(
             if isinstance(delta_stats, dict):
                 delta_max = delta_stats.get("max")
             diff_payload[metric_name] = (
-                delta_max if delta_max is not None else "Not measured"
+                delta_max if delta_max is not None else not_measured
             )
 
             if metric_name in ram_metrics:
@@ -744,12 +860,12 @@ def write_model_stats_to_file(
                         else None
                     )
                     if not isinstance(component_stats, dict):
-                        component_display[component_name] = "Not measured"
+                        component_display[component_name] = not_measured
                         continue
 
                     component_max = component_stats.get("max")
                     if component_max is None:
-                        component_display[component_name] = "Not measured"
+                        component_display[component_name] = not_measured
                     else:
                         component_display[component_name] = (
                             f"{int(round(component_max))} B ({format_bytes(component_max)})"
@@ -757,25 +873,6 @@ def write_model_stats_to_file(
                 display_payload[metric_name] = component_display
 
         return diff_payload, display_payload
-
-    resource_usage_diff_map: Dict[str, Any] = {}
-    resource_usage_display_map: Dict[str, Any] = {}
-
-    for device_label, metrics_value in per_device_resource_usage.items():
-        diff_payload, display_payload = _build_resource_views(metrics_value)
-        resource_usage_diff_map[device_label] = diff_payload
-        if isinstance(display_payload, dict) and display_payload:
-            resource_usage_display_map[device_label] = display_payload
-        elif isinstance(display_payload, str):
-            resource_usage_display_map[device_label] = display_payload
-
-    avg_power_map: Dict[str, Any] = {}
-    avg_energy_map: Dict[str, Any] = {}
-    per_run_time_map: Dict[str, Any] = {}
-    for device_label, stats_payload in per_device_usage_stats.items():
-        avg_power_map[device_label] = stats_payload.get("avg_power", "Not measured")
-        avg_energy_map[device_label] = stats_payload.get("avg_energy", "Not measured")
-        per_run_time_map[device_label] = stats_payload.get("per_run_time", "Not measured")
 
     if device_kind == "cpu":
         primary_order: Tuple[str, ...] = ("cpu", "gpu")
@@ -786,53 +883,115 @@ def write_model_stats_to_file(
 
     def _pick_primary(container: Dict[str, Any]) -> Any:
         if not container:
-            return "Not measured"
+            return not_measured
         for key in primary_order:
             if key in container:
                 return container[key]
         return next(iter(container.values()))
 
-    def _value_for(container: Dict[str, Any], key: str) -> Any:
-        return container.get(key, "Not measured")
+    def _value_for(container: Dict[str, Any], key: str, default: Any) -> Any:
+        return container.get(key, default)
 
-    resource_usage_primary = _pick_primary(per_device_resource_usage)
-    resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
-    resource_usage_display_primary = (
-        _pick_primary(resource_usage_display_map) if resource_usage_display_map else {}
-    )
+    if measure_resource_usage:
+        resource_usage_raw, inference_time_raw = get_memory_and_time(
+            model, batch_size=batch_size, device=device, verbose=verbose
+        )
+        per_device_resource_usage = _normalize_resource_usage(resource_usage_raw)
+        per_device_inference_time = _normalize_inference_time(inference_time_raw)
 
-    inference_time_primary = _pick_primary(per_device_inference_time)
-    avg_power_primary = _pick_primary(avg_power_map)
-    avg_energy_primary = _pick_primary(avg_energy_map)
-    per_run_time_primary = _pick_primary(per_run_time_map)
+        for device_label, metrics_value in per_device_resource_usage.items():
+            diff_payload, display_payload = _build_resource_views(metrics_value)
+            resource_usage_diff_map[device_label] = diff_payload
+            if isinstance(display_payload, dict) and display_payload:
+                resource_usage_display_map[device_label] = display_payload
+            elif isinstance(display_payload, str):
+                resource_usage_display_map[device_label] = display_payload
 
-    inference_time_gpu = _value_for(per_device_inference_time, "gpu")
-    inference_time_cpu = _value_for(per_device_inference_time, "cpu")
-    avg_power_gpu = _value_for(avg_power_map, "gpu")
-    avg_power_cpu = _value_for(avg_power_map, "cpu")
-    avg_energy_gpu = _value_for(avg_energy_map, "gpu")
-    avg_energy_cpu = _value_for(avg_energy_map, "cpu")
-    per_run_time_gpu = _value_for(per_run_time_map, "gpu")
-    per_run_time_cpu = _value_for(per_run_time_map, "cpu")
+        resource_usage_primary = _pick_primary(per_device_resource_usage)
+        resource_usage_diff_primary = _pick_primary(resource_usage_diff_map)
+        resource_usage_display_primary = (
+            _pick_primary(resource_usage_display_map) if resource_usage_display_map else not_measured
+        )
+        inference_time_primary = _pick_primary(per_device_inference_time)
+        inference_time_gpu = _value_for(per_device_inference_time, "gpu", not_measured)
+        inference_time_cpu = _value_for(per_device_inference_time, "cpu", not_measured)
+
+        resource_usage_gpu = _value_for(per_device_resource_usage, "gpu", not_measured)
+        resource_usage_cpu = _value_for(per_device_resource_usage, "cpu", not_measured)
+        resource_usage_diff_gpu = _value_for(resource_usage_diff_map, "gpu", not_measured)
+        resource_usage_diff_cpu = _value_for(resource_usage_diff_map, "cpu", not_measured)
+        resource_usage_display_gpu = _value_for(
+            resource_usage_display_map, "gpu", not_measured
+        )
+        resource_usage_display_cpu = _value_for(
+            resource_usage_display_map, "cpu", not_measured
+        )
+    else:
+        resource_usage_primary = skipped_text
+        resource_usage_diff_primary = skipped_text
+        resource_usage_display_primary = skipped_text
+        inference_time_primary = skipped_text
+        inference_time_gpu = skipped_text
+        inference_time_cpu = skipped_text
+        resource_usage_gpu = skipped_text
+        resource_usage_cpu = skipped_text
+        resource_usage_diff_gpu = skipped_text
+        resource_usage_diff_cpu = skipped_text
+        resource_usage_display_gpu = skipped_text
+        resource_usage_display_cpu = skipped_text
+        default_resource_text = skipped_text
+        default_inference_text = skipped_text
+
+    if measure_usage_stats:
+        usage_stats_raw = get_model_usage_stats(
+            model, device=device, n_trials=n_trials, verbose=verbose
+        )
+        per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
+        for device_label, stats_payload in per_device_usage_stats.items():
+            avg_power_map[device_label] = stats_payload.get("avg_power", not_measured)
+            avg_energy_map[device_label] = stats_payload.get("avg_energy", not_measured)
+            per_run_time_map[device_label] = stats_payload.get("per_run_time", not_measured)
+
+        avg_power_primary = _pick_primary(avg_power_map)
+        avg_energy_primary = _pick_primary(avg_energy_map)
+        per_run_time_primary = _pick_primary(per_run_time_map)
+
+        avg_power_gpu = _value_for(avg_power_map, "gpu", not_measured)
+        avg_power_cpu = _value_for(avg_power_map, "cpu", not_measured)
+        avg_energy_gpu = _value_for(avg_energy_map, "gpu", not_measured)
+        avg_energy_cpu = _value_for(avg_energy_map, "cpu", not_measured)
+        per_run_time_gpu = _value_for(per_run_time_map, "gpu", not_measured)
+        per_run_time_cpu = _value_for(per_run_time_map, "cpu", not_measured)
+    else:
+        avg_power_primary = skipped_text
+        avg_energy_primary = skipped_text
+        per_run_time_primary = skipped_text
+        avg_power_gpu = skipped_text
+        avg_power_cpu = skipped_text
+        avg_energy_gpu = skipped_text
+        avg_energy_cpu = skipped_text
+        per_run_time_gpu = skipped_text
+        per_run_time_cpu = skipped_text
+        default_usage_text = skipped_text
 
     model_stats = {
-        "num_params": params,
-        "model_size": params * bytes_per_param,
-        "flops": get_flops(model),
-        "macs": get_macs(model),
-        "model_summary": capture_model_summary(model),
+        "num_params": params_value,
+        "model_size": model_size_value,
+        "flops": flops_value,
+        "macs": macs_value,
+        "model_summary": model_summary_value,
         "resource_usage": resource_usage_primary,
         "resource_usage_diff": resource_usage_diff_primary,
         "resource_usage_display": resource_usage_display_primary,
         "resource_usage_details": per_device_resource_usage,
         "resource_usage_diff_details": resource_usage_diff_map,
         "resource_usage_display_details": resource_usage_display_map,
-        "resource_usage_gpu": per_device_resource_usage.get("gpu", "Not measured"),
-        "resource_usage_cpu": per_device_resource_usage.get("cpu", "Not measured"),
-        "resource_usage_diff_gpu": resource_usage_diff_map.get("gpu", "Not measured"),
-        "resource_usage_diff_cpu": resource_usage_diff_map.get("cpu", "Not measured"),
-        "resource_usage_display_gpu": resource_usage_display_map.get("gpu", "Not measured"),
-        "resource_usage_display_cpu": resource_usage_display_map.get("cpu", "Not measured"),
+        "resource_usage_gpu": resource_usage_gpu,
+        "resource_usage_cpu": resource_usage_cpu,
+        "resource_usage_diff_gpu": resource_usage_diff_gpu,
+        "resource_usage_diff_cpu": resource_usage_diff_cpu,
+        "resource_usage_display_gpu": resource_usage_display_gpu,
+        "resource_usage_display_cpu": resource_usage_display_cpu,
         "inference_time": inference_time_primary,
         "inference_time_details": per_device_inference_time,
         "inference_time_gpu": inference_time_gpu,
@@ -854,10 +1013,29 @@ def write_model_stats_to_file(
     extra_attrs = extra_attrs or {}
 
     with open(file_path, "w") as file:
-        file.write(f"Number of parameters: {format_number_commas(model_stats['num_params'])}\n")
-        file.write(f"Model size: {format_bytes(model_stats['model_size'])}\n")
-        file.write(f"FLOPs: {format_number(model_stats['flops'])}FLOPs\n")
-        file.write(f"MACs: {format_number(model_stats['macs'])}MACs\n")
+        num_params_entry = model_stats["num_params"]
+        if isinstance(num_params_entry, str):
+            file.write(f"Number of parameters: {num_params_entry}\n")
+        else:
+            file.write(f"Number of parameters: {format_number_commas(num_params_entry)}\n")
+
+        model_size_entry = model_stats["model_size"]
+        if isinstance(model_size_entry, str):
+            file.write(f"Model size: {model_size_entry}\n")
+        else:
+            file.write(f"Model size: {format_bytes(model_size_entry)}\n")
+
+        flops_entry = model_stats["flops"]
+        if isinstance(flops_entry, str):
+            file.write(f"FLOPs: {flops_entry}\n")
+        else:
+            file.write(f"FLOPs: {format_number(flops_entry)}FLOPs\n")
+
+        macs_entry = model_stats["macs"]
+        if isinstance(macs_entry, str):
+            file.write(f"MACs: {macs_entry}\n")
+        else:
+            file.write(f"MACs: {format_number(macs_entry)}MACs\n")
 
         device_keys = list(per_device_resource_usage.keys())
         if not device_keys:
@@ -885,8 +1063,12 @@ def write_model_stats_to_file(
         multiple_devices = len(actual_measured) > 1
 
         def _format_failure(device_label: str, label: str, reason: str | None) -> str:
-            if device_label in optional_devices and (reason is None or str(reason).strip().lower() == "not measured"):
-                return f"{label}: Not measured"
+            normalized_reason = None if reason is None else str(reason).strip().lower()
+            if device_label in optional_devices:
+                if reason is None or normalized_reason == "not measured":
+                    return f"{label}: Not measured"
+                if normalized_reason and normalized_reason.startswith("not measured (skipped"):
+                    return f"{label}: {reason}"
 
             text = "Not measured" if reason is None else str(reason)
             lowered = text.strip().lower()
@@ -907,9 +1089,11 @@ def write_model_stats_to_file(
             *,
             is_ram: bool = False,
         ) -> Optional[str]:
-            metrics_value = per_device_resource_usage.get(device_label, "Not measured")
+            metrics_value = per_device_resource_usage.get(device_label, default_resource_text)
             if isinstance(metrics_value, str):
                 lowered = metrics_value.strip().lower()
+                if lowered.startswith("not measured (skipped"):
+                    return f"{label}: {metrics_value}"
                 if lowered == "not measured" and (
                     device_label in optional_devices or not multiple_devices
                 ):
@@ -923,6 +1107,8 @@ def write_model_stats_to_file(
                 return None
             if isinstance(metric_payload, str):
                 lowered = metric_payload.strip().lower()
+                if lowered.startswith("not measured (skipped"):
+                    return f"{label}: {metric_payload}"
                 if lowered == "not measured" and (
                     device_label in optional_devices or not multiple_devices
                 ):
@@ -953,6 +1139,8 @@ def write_model_stats_to_file(
         ) -> Optional[str]:
             if isinstance(value, str):
                 lowered = value.strip().lower()
+                if lowered.startswith("not measured (skipped"):
+                    return f"{label}: {value}"
                 if lowered == "not measured" and (
                     device_label in optional_devices or not multiple_devices
                 ):
@@ -1001,7 +1189,7 @@ def write_model_stats_to_file(
             inference_line = _scalar_line(
                 device_label,
                 "Inference Time",
-                per_device_inference_time.get(device_label, "Not measured"),
+                per_device_inference_time.get(device_label, default_inference_text),
                 unit="s",
             )
             if inference_line:
@@ -1010,7 +1198,7 @@ def write_model_stats_to_file(
             power_line = _scalar_line(
                 device_label,
                 "Power Consumption",
-                avg_power_map.get(device_label, "Not measured"),
+                avg_power_map.get(device_label, default_usage_text),
                 unit="W",
             )
             if power_line:
@@ -1019,7 +1207,7 @@ def write_model_stats_to_file(
             energy_line = _scalar_line(
                 device_label,
                 "Energy Consumption",
-                avg_energy_map.get(device_label, "Not measured"),
+                avg_energy_map.get(device_label, default_usage_text),
                 unit="J",
             )
             if energy_line:

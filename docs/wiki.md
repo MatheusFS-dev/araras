@@ -1073,6 +1073,7 @@ write_model_stats_to_file(
     n_trials,
     extra_attrs,
     verbose,
+    stats_to_measure,
 )
 ```
 Write model statistics to a file.
@@ -1084,19 +1085,25 @@ Write model statistics to a file.
 | file_path | `str` | The path to the output file. |
 | bytes_per_param | `int` | Number of bytes per parameter for model size calculation. |
 | batch_size | `int` | The batch size to simulate for input. |
-| device | `int` | GPU index to run the model on. Use ``-1`` for CPU. |
+| device | `int \| str` | Device selection. Use ``-1``/``"cpu"`` to force CPU execution, a non-negative integer for a specific GPU index, or ``"both"``/``"both:<index>"`` to profile GPU and CPU sequentially. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
 | extra_attrs | `Optional[Dict[str, Any]]` | Mapping of attribute names to values written after the main statistics. |
 | verbose | `bool` | If True, print detailed information. |
+| stats_to_measure | `Iterable[str]` | Collection of statistic groups to compute. Accepted values are ``"parameters"``, ``"flops"``, ``"macs"``, ``"summary"``, ``"resource_usage"``, and ``"usage_stats"``. Any omitted group is skipped. |
 
 > [!NOTE]
 > Extra attributes can be used to record custom metrics such as accuracy or F1 score alongside the default statistics.
+
+> [!TIP]
+> Skipping expensive groups (for example resource usage or usage statistics) can
+> significantly reduce profiling time when only lightweight metrics are needed.
 
 **Returns**
 `Any`
 
 **Raises**
-- None
+- TypeError: If ``stats_to_measure`` is ``None`` or not iterable.
+- ValueError: If ``stats_to_measure`` contains unsupported statistic names.
 
 ## ml.model.tools
 
