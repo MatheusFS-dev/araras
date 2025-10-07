@@ -14,8 +14,13 @@ import traceback
 import os
 import math
 
-from araras.ml.model.stats import get_flops, get_macs, get_memory_and_time, get_model_usage_stats
-from araras.ml.model.utils import capture_model_summary
+from araras.ml.model.stats import (
+    get_flops,
+    get_macs,
+    get_memory_and_time,
+    get_model_usage_stats,
+)
+from araras.ml.model.utils import capture_model_summary, parse_device_spec
 from araras.utils.misc import format_number, format_bytes
 
 from araras.visualization.configs import config_plt
@@ -853,7 +858,7 @@ def set_user_attr_model_stats(
     bytes_per_param: int,
     batch_size: int,
     n_trials: int = 10000,
-    device: Union[int, str] = "both",
+    device: str = "both/0",
     stats_to_measure: Iterable[str] = (
         "parameters",
         "flops",
@@ -879,10 +884,9 @@ def set_user_attr_model_stats(
         bytes_per_param (int): Storage size for each parameter, in bytes.
         batch_size (int): Mini-batch size used during resource profiling.
         n_trials (int): Number of inference runs used to estimate usage stats.
-        device (int | str): Device selection for profiling. Use ``-1`` or
-            ``"cpu"`` to enforce CPU runs, integer values to pick a GPU index, or
-            ``"both"``/``"both:<index>"`` to profile CPU and GPU sequentially. The
-            default ``"both"`` profiles GPU index 0 and the CPU.
+        device (str): Canonical device specifier. Use ``"cpu"`` for CPU-only
+            profiling, ``"gpu/<index>"`` for a single GPU, or ``"both/<index>"`` to
+            profile CPU and GPU ``<index>`` sequentially. Defaults to ``"both/0"``.
         stats_to_measure (Iterable[str]): Iterable describing which statistic
             groups to compute. Use ``"parameters"`` to gather parameter counts
             and serialized size estimates, ``"flops"`` for floating-point
@@ -903,7 +907,8 @@ def set_user_attr_model_stats(
     Raises:
         TypeError: If ``stats_to_measure`` is ``None`` or not iterable.
         ValueError: If ``stats_to_measure`` includes values outside the supported
-            set.
+            set or ``device`` is not expressed as ``"cpu"``, ``"gpu/<index>"``, or
+            ``"both/<index>"``.
 
     Notes:
         Skipped statistics return ``None`` for raw numeric values and
@@ -972,17 +977,8 @@ def set_user_attr_model_stats(
         capture_model_summary(model) if measure_summary else skipped_text
     )
 
-    def _resolve_device_mode(device_spec: Union[int, str]) -> str:
-        if isinstance(device_spec, str):
-            normalized = device_spec.strip().lower()
-            if normalized.startswith("both"):
-                return "both"
-            if normalized in {"cpu", "-1"}:
-                return "cpu"
-            return "gpu"
-        return "cpu" if device_spec == -1 else "gpu"
-
-    device_mode = _resolve_device_mode(device)
+    device_kind, _ = parse_device_spec(device)
+    device_mode = device_kind
 
     per_device_resource_usage: Dict[str, Any] = {}
     per_device_inference_time: Dict[str, Any] = {}

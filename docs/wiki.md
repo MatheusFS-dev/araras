@@ -1019,7 +1019,7 @@ Measures the peak memory usage and average inference time of a Keras model on GP
 |------|------|-------------|
 | model | `tf.keras.Model` | The Keras model to analyze. |
 | batch_size | `int` | The batch size to simulate for input. Defaults to 1. Measure with batch_size=1 to get base per-sample latency. |
-| device | `int` | GPU index to run the model on. Use ``-1`` to run on CPU. |
+| device | `str` | Canonical device selector. Use ``"cpu"`` for CPU-only profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"`` to profile CPU and GPU sequentially. |
 | warmup_runs | `int` | Number of warm-up runs before timing. Defaults to 10. |
 | test_runs | `int` | Number of runs to measure average inference time. Defaults to 50. |
 | verbose | `bool` | If True, displays a progress bar during test runs. |
@@ -1049,8 +1049,8 @@ Estimate average power draw and energy usage. Careful with the RAPL path; it may
 | Name | Type | Description |
 |------|------|-------------|
 | saved_model | `str | tf.keras.Model` | Path to the TensorFlow SavedModel directory, a .keras model file, or a Keras Model instance. |
-| n_trials | `int` | Number of inference trials to perform. Defaults to 100000. |
-| device | `int` | GPU index for power measurement, or ``-1`` to use the CPU. |
+| n_trials | `int` | Number of inference trials to perform. Defaults to 10000. |
+| device | `str` | Canonical device string. Use ``"cpu"`` for CPU-only profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"`` to profile CPU and GPU sequentially. |
 | rapl_path | `str` | Path to the RAPL energy counter file for CPU measurements. |
 | verbose | `bool` | If True, displays a progress bar during the trials. |
 
@@ -1059,7 +1059,7 @@ Estimate average power draw and energy usage. Careful with the RAPL path; it may
 
 **Raises**
 - RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
-- ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
+- ValueError: If ``device`` is not ``"cpu"``, ``"gpu/<index>"``, or ``"both/<index>"``.
 
 ### write_model_stats_to_file
 
@@ -1085,7 +1085,7 @@ Write model statistics to a file.
 | file_path | `str` | The path to the output file. |
 | bytes_per_param | `int` | Number of bytes per parameter for model size calculation. |
 | batch_size | `int` | The batch size to simulate for input. |
-| device | `int \| str` | Device selection. Use ``-1``/``"cpu"`` to force CPU execution, a non-negative integer for a specific GPU index, or ``"both"``/``"both:<index>"`` to profile GPU and CPU sequentially. |
+| device | `str` | Device selection. Use ``"cpu"`` for CPU-only execution, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"`` to profile CPU and GPU sequentially. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
 | extra_attrs | `Optional[Dict[str, Any]]` | Mapping of attribute names to values written after the main statistics. |
 | verbose | `bool` | If True, print detailed information. |
@@ -1534,7 +1534,7 @@ set_user_attr_model_stats(
     bytes_per_param,
     batch_size,
     n_trials=10000,
-    device="both",
+    device="both/0",
     stats_to_measure=(
         "parameters",
         "flops",
@@ -1556,7 +1556,7 @@ Extract and return model statistics from the given Optuna trial.
 | bytes_per_param | `int` | Number of bytes allocated per parameter. |
 | batch_size | `int` | The batch size to simulate for input. |
 | n_trials | `int` | Number of trials for power and energy measurement. |
-| device | `int \| str` | Device selection. ``-1``/``"cpu"`` forces CPU, integers pick a GPU index, and ``"both"`` profiles sequentially. |
+| device | `str` | Device selection. Use ``"cpu"`` for CPU-only profiling, ``"gpu/<index>"`` for a dedicated GPU, or ``"both/<index>"`` to profile CPU and GPU sequentially (default ``"both/0"``). |
 | stats_to_measure | `Iterable[str]` | Collection of statistic groups to measure. Use ``"parameters"`` for parameter counts and serialized size, ``"flops"`` for floating-point operations, ``"macs"`` for multiply-accumulate estimates, ``"summary"`` for captured ``model.summary`` output, ``"resource_usage"`` for exclusive RAM/VRAM consumption with latency, and ``"usage_stats"`` for power, energy, and per-run timing metrics. Defaults to measuring every group. |
 | verbose | `bool` | If True, print detailed information. |
 

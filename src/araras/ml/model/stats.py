@@ -1,6 +1,6 @@
 from araras.core import *
 
-from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union, Literal
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import time
 import warnings
@@ -14,7 +14,7 @@ from tensorflow.keras import backend as K
 from tensorflow.python.profiler.model_analyzer import profile
 from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
-from araras.ml.model.utils import capture_model_summary
+from araras.ml.model.utils import DeviceKind, capture_model_summary, parse_device_spec
 from araras.utils.misc import (
     format_number,
     format_bytes,
@@ -30,61 +30,6 @@ from araras.utils.system import (
 MetricStatistic = Dict[str, Union[List[Union[int, float]], Union[int, float], None]]
 ResourceMetricValue = Union[str, Dict[str, MetricStatistic]]
 ResourceMetrics = Dict[str, ResourceMetricValue]
-DeviceKind = Literal["cpu", "gpu", "both"]
-
-
-def _parse_device_request(device: Union[int, str]) -> Tuple[DeviceKind, Optional[int]]:
-    """Normalize ``device`` into a device kind and optional GPU index."""
-
-    if isinstance(device, str):
-        text = device.strip().lower()
-        if not text:
-            raise ValueError("device cannot be empty")
-
-        if text.startswith("both"):
-            gpu_index = 0
-            if ":" in text:
-                _, candidate = text.split(":", 1)
-                candidate = candidate.strip()
-                if candidate:
-                    gpu_index = int(candidate)
-            if gpu_index < 0:
-                raise ValueError("GPU index for 'both' must be non-negative")
-            return "both", gpu_index
-
-        if text.startswith("gpu"):
-            gpu_index = 0
-            if ":" in text:
-                _, candidate = text.split(":", 1)
-                candidate = candidate.strip()
-                if candidate:
-                    gpu_index = int(candidate)
-            if gpu_index < 0:
-                raise ValueError("GPU index must be non-negative")
-            return "gpu", gpu_index
-
-        if text in {"cpu", "-1"}:
-            return "cpu", None
-
-        try:
-            index = int(text)
-        except ValueError as exc:  # pragma: no cover - defensive parsing
-            raise ValueError(f"Unsupported device specification: {device}") from exc
-
-        if index == -1:
-            return "cpu", None
-        if index < -1:
-            raise ValueError(f"Unsupported device index {index}")
-        return "gpu", index
-
-    if isinstance(device, int):
-        if device == -1:
-            return "cpu", None
-        if device < -1:
-            raise ValueError(f"Unsupported device index {device}")
-        return "gpu", device
-
-    raise TypeError("device must be specified as an int or string")
 
 
 def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
@@ -149,11 +94,14 @@ def get_macs(model: tf.keras.Model, batch_size: int = 1) -> int:
 def get_memory_and_time(
     model: tf.keras.Model,
     batch_size: int = 1,
-    device: Union[int, str] = "both",
+    device: str = "both/0",
     warmup_runs: int = 10,
     test_runs: int = 20,
     verbose: bool = True,
-) -> Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
+) -> Tuple[
+    Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]],
+    Union[float, Dict[str, Union[float, str]]],
+]:
     """
     Measure the exclusive resource footprint and average inference time of a
     ``tf.keras.Model`` on GPU or CPU.
@@ -182,17 +130,18 @@ def get_memory_and_time(
     Args:
         model (tf.keras.Model): The Keras model to analyze.
         batch_size (int): The batch size to simulate for input. Defaults to 1.
-            Measure with batch_size=1 to get base per-sample latency.
-        device (int | str):
-            Target device selection. Use ``-1`` or ``"cpu"`` to run on CPU,
-            a non-negative integer or ``"gpu[:index]"`` for a specific GPU, or
-            ``"both"``/``"both:<index>"`` to measure GPU and CPU sequentially.
-        warmup_runs (int): Number of warm-up runs before timing. Defaults to 10.
-        test_runs (int): Number of runs to measure average inference time. Defaults to 50.
-        verbose (bool): If True, displays a progress bar during test runs.
+            Measure with ``batch_size=1`` to get base per-sample latency.
+        device (str): Canonical device selector. Accepts ``"cpu"`` for CPU-only
+            profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"``
+            to measure the CPU alongside GPU ``<index>``. Defaults to ``"both/0"``.
+        warmup_runs (int): Number of warm-up runs before timing. Defaults to ``10``.
+        test_runs (int): Number of runs to measure average inference time. Defaults
+            to ``50``.
+        verbose (bool): If ``True``, displays a progress bar during test runs.
 
     Raises:
         RuntimeError: If the specified GPU or CPU device cannot be found.
+        ValueError: If ``device`` is not ``"cpu"``, ``"gpu/<index>"``, or ``"both/<index>"``.
 
     Returns:
         Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
@@ -220,7 +169,9 @@ def get_memory_and_time(
             )
             return model(list(args), training=False)
 
-    device_kind, resolved_gpu_index = _parse_device_request(device)
+    device_kind: DeviceKind
+    resolved_gpu_index: Optional[int]
+    device_kind, resolved_gpu_index = parse_device_spec(device)
 
     def _measure_gpu(gpu_index: int) -> Tuple[ResourceMetrics, float]:
         monitor_metrics: Tuple[str, ...] = ("ram", "gpu_ram")
@@ -357,7 +308,7 @@ def get_memory_and_time(
 def get_model_usage_stats(
     saved_model: str | tf.keras.Model,
     n_trials: int = 10000,
-    device: Union[int, str] = "both",
+    device: str = "both/0",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
     verbose: bool = True,
 ) -> Union[
@@ -386,17 +337,17 @@ def get_model_usage_stats(
     Args:
         saved_model (str | tf.keras.Model): Path to the TensorFlow SavedModel directory,
             a .keras model file, or a Keras Model instance.
-        n_trials (int): Number of inference trials to perform. Defaults to 100000.
-        device (int | str):
-            GPU index for power measurement, ``-1``/``"cpu"`` for CPU, or
-            ``"both"``/``"both:<index>"`` to measure GPU and CPU sequentially
-            (defaults to ``"both"``).
+        n_trials (int): Number of inference trials to perform. Defaults to ``10000``.
+        device (str): Canonical device string. Use ``"cpu"`` for CPU-only
+            profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"``
+            to measure CPU usage alongside GPU ``<index>``. Defaults to
+            ``"both/0"``.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
-        verbose (bool): If True, displays a progress bar during the trials.
+        verbose (bool): If ``True``, displays a progress bar during the trials.
 
     Raises:
         RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
-        ValueError: If ``device`` is neither ``-1`` nor a valid GPU index.
+        ValueError: If ``device`` is not ``"cpu"``, ``"gpu/<index>"``, or ``"both/<index>"``.
 
     Returns:
         Union[Tuple[Union[float, str], Union[float, str], Union[float, str]], Dict[str, Dict[str, Union[float, str]]]]:
@@ -482,7 +433,9 @@ def get_model_usage_stats(
     # Print the shapes of the input tensors
     # print(f"Input tensor shapes: {[t.shape for t in dummy_inputs.values()]}")
 
-    device_kind, resolved_gpu_index = _parse_device_request(device)
+    device_kind: DeviceKind
+    resolved_gpu_index: Optional[int]
+    device_kind, resolved_gpu_index = parse_device_spec(device)
 
     def _measure_for_device(device_index: int) -> Tuple[float, float, float]:
         MAX_RETRIES = 2
@@ -620,7 +573,7 @@ def write_model_stats_to_file(
     file_path: str,
     bytes_per_param: int,
     batch_size: int,
-    device: Union[int, str] = "both",
+    device: str = "both/0",
     n_trials: int = 1000,
     extra_attrs: Optional[Dict[str, Any]] = None,
     verbose: bool = False,
@@ -654,9 +607,9 @@ def write_model_stats_to_file(
         file_path (str): The path to the output file.
         bytes_per_param (int): Number of bytes per parameter for model size calculation.
         batch_size (int): The batch size to simulate for input.
-        device (int | str): GPU index to run the model on. Use ``-1``/``"cpu"`` for
-            CPU measurements or ``"both"``/``"both:<index>"`` to profile CPU and GPU
-            sequentially (defaults to ``"both"``).
+        device (str): Canonical device selection string. Use ``"cpu"`` for CPU-only
+            profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>"`` to
+            profile CPU and GPU sequentially (defaults to ``"both/0"``).
         n_trials (int): Number of trials for power and energy measurement.
         extra_attrs (Optional[Dict[str, Any]]): Additional attributes to write to the file.
         verbose (bool): If ``True``, print detailed information.
@@ -743,7 +696,7 @@ def write_model_stats_to_file(
 
     model_summary_value = capture_model_summary(model) if measure_summary else skipped_text
 
-    device_kind, _ = _parse_device_request(device)
+    device_kind, _ = parse_device_spec(device)
 
     def _normalize_resource_usage(raw: Any) -> Dict[str, Any]:
         if isinstance(raw, dict) and all(key in {"cpu", "gpu"} for key in raw.keys()):
