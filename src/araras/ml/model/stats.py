@@ -10,6 +10,7 @@ from araras.ml.model.utils import (
     parse_device_spec,
     run_dummy_inference,
 )
+from araras.utils.misc import format_bytes, format_number, format_scientific
 from araras.utils.loading_bar import gen_loading_bar
 from araras.utils.resource_monitor import ResourceMonitor
 from araras.utils.verbose_printer import VerbosePrinter
@@ -147,6 +148,7 @@ def get_model_stats(
     *,
     stats_to_measure: Iterable[str] = (
         "parameters",
+        "model_size",
         "flops",
         "macs",
         "summary",
@@ -161,6 +163,7 @@ def get_model_stats(
     ),
     test_runs: int = 10,
     verbose: int = 1,
+    bytes_per_param: int = 4,
 ) -> Dict[str, Any]:
     """Collect structural and runtime statistics for a Keras model.
 
@@ -182,17 +185,21 @@ def get_model_stats(
             Defaults to ``10``.
         verbose (int): Verbosity level. Values above ``0`` render progress
             bars. Defaults to ``1``.
+        bytes_per_param (int): Number of bytes assigned to each trainable
+            parameter when estimating the model size. Defaults to ``4`` (the
+            footprint of ``float32`` weights).
 
     Returns:
         Dict[str, Any]: Mapping from metric names to their computed statistics.
         Latency metrics return a mapping with ``average_s`` and ``peak_s``.
         Resource metrics provide aggregation metadata, the collected
-        measurements, and simple summary statistics. Metrics that cannot be
+        measurements, and simple summary statistics. The ``model_size`` metric
+        reports the estimated footprint in bytes. Metrics that cannot be
         computed return ``None`` or an error string.
 
     Raises:
-        ValueError: If ``device`` resolves to ``"both"`` or if ``test_runs`` is
-            less than ``1``.
+        ValueError: If ``device`` resolves to ``"both"``, if ``test_runs`` is
+            less than ``1``, or if ``bytes_per_param`` is less than ``1``.
         RuntimeError: If the requested GPU index is unavailable on the current
             system.
 
@@ -210,6 +217,9 @@ def get_model_stats(
 
     if test_runs < 1:
         raise ValueError("test_runs must be at least 1")
+
+    if bytes_per_param < 1:
+        raise ValueError("bytes_per_param must be at least 1")
 
     # —————————————————————————————— Device Handling ————————————————————————————— #
     device_kind, gpu_index = parse_device_spec(device)
@@ -231,6 +241,14 @@ def get_model_stats(
     # —————————————————————————— Setup for Measurements —————————————————————————— #
     stats_sequence = list(dict.fromkeys(stats_to_measure))
     results: Dict[str, Any] = {}
+
+    parameter_cache: Optional[int] = None
+
+    def _get_parameter_count() -> int:
+        nonlocal parameter_cache
+        if parameter_cache is None:
+            parameter_cache = int(model.count_params())
+        return parameter_cache
 
     def _measure_resource_metric(metric_name: str) -> Any:
         if metric_name in GPU_ONLY_METRICS and device_kind != "gpu":
@@ -300,7 +318,10 @@ def get_model_stats(
     # ———————————————————— Calculate each requested statistic ———————————————————— #
     for stat in stats_sequence:
         if stat == "parameters":
-            results[stat] = int(model.count_params())
+            results[stat] = _get_parameter_count()
+        elif stat == "model_size":
+            param_count = _get_parameter_count()
+            results[stat] = int(param_count * bytes_per_param)
         elif stat == "flops":
             results[stat] = int(get_flops(model, batch_size))
         elif stat == "macs":
@@ -321,7 +342,284 @@ def get_model_stats(
             results[stat] = _measure_resource_metric(stat)
         else:
             raise ValueError(
-                f"Unknown statistic '{stat}' requested\nAccepted values: {list(RESOURCE_METRIC_AGGREGATIONS.keys()) + ['parameters', 'flops', 'macs', 'summary', 'inference_latency']}"
+                f"Unknown statistic '{stat}' requested\nAccepted values: {list(RESOURCE_METRIC_AGGREGATIONS.keys()) + ['parameters', 'model_size', 'flops', 'macs', 'summary', 'inference_latency']}"
             )
 
     return results
+
+
+def render_model_stats_report(
+    structural_stats: Dict[str, Any],
+    *,
+    cpu_stats: Optional[Dict[str, Any]] = None,
+    gpu_stats: Optional[Dict[str, Any]] = None,
+    extra_attrs: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Render a textual report summarising collected model statistics.
+
+    The helper accepts raw metric dictionaries produced by
+    :func:`get_model_stats` and organises them into the same
+    human-readable layout consumed by :func:`write_model_stats_to_file`.
+    Engineering and scientific notation are used for improved readability
+    while still retaining the original numeric values.
+
+    Args:
+        structural_stats (Dict[str, Any]): Baseline statistics such as parameter
+            count, FLOPs, MACs, and model summary text. Typically this is one of
+            the dictionaries returned by :func:`get_model_stats`.
+        cpu_stats (Optional[Dict[str, Any]]): Statistics gathered on the CPU, if
+            available. Defaults to ``None``.
+        gpu_stats (Optional[Dict[str, Any]]): Statistics gathered on the GPU, if
+            available. Defaults to ``None``.
+        extra_attrs (Optional[Dict[str, Any]]): Additional attributes appended to
+            the end of the report. Defaults to ``None``.
+
+    Returns:
+        str: Multiline textual summary ready to be written to a file or stored
+        in trial metadata.
+
+    Notes:
+        Missing metrics render as ``"N/A"`` to highlight unavailable
+        measurements without raising exceptions.
+
+    Warnings:
+        Supplying dictionaries that do not match the schema returned by
+        :func:`get_model_stats` may result in incomplete or mislabelled
+        sections in the generated text.
+    """
+
+    extra_attrs = extra_attrs or {}
+    structural_stats = structural_stats or {}
+
+    def _format_plain(value: Optional[Any]) -> str:
+        return "N/A" if value is None else str(value)
+
+    def _format_engineering(value: Optional[Any]) -> str:
+        return "N/A" if value is None else format_number(value, precision=2)
+
+    def _format_bytes(value: Optional[Any]) -> str:
+        return "N/A" if value is None else format_bytes(value, precision=2)
+
+    def _format_scientific(value: Optional[Any]) -> str:
+        return "N/A" if value is None else format_scientific(value, max_precision=4)
+
+    def _get_summary_metric(
+        stats: Optional[Dict[str, Any]], key: str, field: str = "average"
+    ) -> Optional[float]:
+        if not stats:
+            return None
+        data = stats.get(key)
+        if isinstance(data, dict):
+            return data.get(field)
+        return data  # type: ignore[return-value]
+
+    def _get_latency(stats: Optional[Dict[str, Any]]) -> Tuple[Optional[float], Optional[float]]:
+        if not stats:
+            return None, None
+        data = stats.get("inference_latency")
+        if isinstance(data, dict):
+            return data.get("average_s"), data.get("peak_s")
+        return None, None
+
+    lines: List[str] = []
+
+    parameter_count = structural_stats.get("parameters")
+    lines.append(
+        f"Number of Parameters: {_format_plain(parameter_count)} parameters ({_format_engineering(parameter_count)})"
+    )
+
+    model_size_bytes = structural_stats.get("model_size")
+    lines.append(
+        f"Model Size: {_format_plain(model_size_bytes)} B ({_format_bytes(model_size_bytes)})"
+    )
+
+    flops = structural_stats.get("flops")
+    lines.append(f"FLOPs: {_format_plain(flops)} FLOPs ({_format_engineering(flops)})")
+
+    macs = structural_stats.get("macs")
+    lines.append(f"MACs: {_format_plain(macs)} MACs ({_format_engineering(macs)})")
+
+    lines.append("")
+
+    if gpu_stats:
+        gpu_avg_latency, gpu_peak_latency = _get_latency(gpu_stats)
+        gpu_system_memory = _get_summary_metric(gpu_stats, "ram_used_bytes")
+        gpu_memory = _get_summary_metric(gpu_stats, "gpu_mem_used_bytes")
+        gpu_usage = _get_summary_metric(gpu_stats, "gpu_util_percent")
+        gpu_power_peak = _get_summary_metric(gpu_stats, "gpu_power_w", field="peak")
+        gpu_power_avg = _get_summary_metric(gpu_stats, "gpu_power_w")
+        gpu_energy = None
+        if gpu_power_avg is not None and gpu_avg_latency is not None:
+            gpu_energy = gpu_power_avg * gpu_avg_latency
+
+        lines.append("GPU Inference:")
+        lines.append(
+            f"    - System Memory: {_format_plain(gpu_system_memory)} B ({_format_bytes(gpu_system_memory)})"
+        )
+        lines.append(
+            f"    - GPU Memory: {_format_plain(gpu_memory)} B ({_format_bytes(gpu_memory)})"
+        )
+        gpu_usage_str = "N/A" if gpu_usage is None else f"{gpu_usage:.2f} %"
+        lines.append(f"    - GPU Usage: {gpu_usage_str}")
+        lines.append(f"    - GPU Power: {_format_scientific(gpu_power_peak)} W")
+        lines.append(
+            "    - Inference Time (avg/peak): "
+            f"{_format_scientific(gpu_avg_latency)} s / {_format_scientific(gpu_peak_latency)} s"
+        )
+        lines.append(f"    - Power Consumption: {_format_scientific(gpu_power_avg)} W")
+        lines.append(f"    - Energy Consumption: {_format_scientific(gpu_energy)} J")
+
+    if cpu_stats:
+        cpu_avg_latency, cpu_peak_latency = _get_latency(cpu_stats)
+        cpu_system_memory = _get_summary_metric(cpu_stats, "ram_used_bytes")
+        cpu_usage_summary = cpu_stats.get("cpu_util_percent") if isinstance(cpu_stats, dict) else None
+        cpu_power_peak = _get_summary_metric(cpu_stats, "cpu_power_rapl_w", field="peak")
+        cpu_power_avg = _get_summary_metric(cpu_stats, "cpu_power_rapl_w")
+        cpu_energy = None
+        if cpu_power_avg is not None and cpu_avg_latency is not None:
+            cpu_energy = cpu_power_avg * cpu_avg_latency
+
+        usage_line = "N/A"
+        if isinstance(cpu_usage_summary, dict):
+            usage_max = cpu_usage_summary.get("max")
+            usage_min = cpu_usage_summary.get("min")
+            if usage_max is not None and usage_min is not None:
+                usage_delta = usage_max - usage_min
+                usage_line = f"{usage_max:.2f}% - {usage_min:.2f}% = {usage_delta:.2f}%"
+
+        lines.append("CPU Inference:")
+        lines.append(
+            f"    - System Memory: {_format_plain(cpu_system_memory)} B ({_format_bytes(cpu_system_memory)})"
+        )
+        lines.append(f"    - CPU Usage: {usage_line}")
+        lines.append(f"    - CPU Power: {_format_scientific(cpu_power_peak)} W")
+        lines.append(
+            "    - Inference Time (avg/peak): "
+            f"{_format_scientific(cpu_avg_latency)} s / {_format_scientific(cpu_peak_latency)} s"
+        )
+        lines.append(f"    - Power Consumption: {_format_scientific(cpu_power_avg)} W")
+        lines.append(f"    - Energy Consumption: {_format_scientific(cpu_energy)} J")
+
+    lines.append("")
+
+    summary_text = structural_stats.get("summary")
+    lines.append("Model Summary:")
+    if isinstance(summary_text, str) and summary_text.strip():
+        lines.extend(summary_text.splitlines())
+    else:
+        lines.append("N/A")
+
+    if extra_attrs:
+        lines.append("")
+        for key, value in extra_attrs.items():
+            lines.append(f"{key}: {value}")
+
+    return "\n".join(lines)
+
+
+def write_model_stats_to_file(
+    model: tf.keras.Model,
+    file_path: str,
+    *,
+    batch_size: int = 1,
+    device: str = "both/0",
+    stats_to_measure: Iterable[str] = (
+        "parameters",
+        "model_size",
+        "flops",
+        "macs",
+        "summary",
+        "inference_latency",
+        "cpu_util_percent",
+        "cpu_power_rapl_w",
+        "ram_used_bytes",
+        "ram_util_percent",
+        "gpu_util_percent",
+        "gpu_mem_used_bytes",
+        "gpu_power_w",
+    ),
+    test_runs: int = 10,
+    verbose: int = 1,
+    bytes_per_param: int = 4,
+    extra_attrs: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Persist model statistics obtained via :func:`get_model_stats` to a file.
+
+    Args:
+        model (tf.keras.Model): Model instance analysed for statistics.
+        file_path (str): Destination path of the report file. Intermediate
+            directories must already exist.
+        batch_size (int): Batch size forwarded to :func:`get_model_stats`.
+            Defaults to ``1``.
+        device (str): Canonical device selector. Use ``"cpu"`` for CPU-only
+            profiling, ``"gpu/<index>"`` for a specific GPU, or ``"both/<index>``
+            to capture CPU and GPU statistics sequentially. Defaults to
+            ``"both/0"``.
+        stats_to_measure (Iterable[str]): Metric identifiers forwarded to
+            :func:`get_model_stats`. Defaults to the standard metric set.
+        test_runs (int): Number of repetitions for each resource metric. Defaults
+            to ``10``.
+        verbose (int): Verbosity forwarded to :func:`get_model_stats`. Defaults
+            to ``1``.
+        bytes_per_param (int): Number of bytes assigned to each model parameter
+            when estimating the ``model_size`` metric. Defaults to ``4``.
+        extra_attrs (Optional[Dict[str, Any]]): Additional attributes appended to
+            the report after the model summary. Defaults to ``None``.
+
+    Raises:
+        ValueError: If ``device`` cannot be parsed or resolves to ``"both"``
+            without an index, or if ``bytes_per_param`` is less than ``1``.
+        RuntimeError: Propagated if the requested GPU index is unavailable.
+
+    Notes:
+        The function overwrites ``file_path`` if it already exists. Extra
+        attributes are emitted in the order provided by ``extra_attrs``.
+
+    Warnings:
+        Missing sensors or monitoring permissions can lead to ``"N/A"`` values
+        in the report because :func:`get_model_stats` silently skips metrics
+        that cannot be collected.
+    """
+
+    if bytes_per_param < 1:
+        raise ValueError("bytes_per_param must be at least 1")
+
+    extra_attrs = extra_attrs or {}
+
+    stats_kwargs = {
+        "batch_size": batch_size,
+        "stats_to_measure": stats_to_measure,
+        "test_runs": test_runs,
+        "verbose": verbose,
+        "bytes_per_param": bytes_per_param,
+    }
+
+    device_kind, gpu_index = parse_device_spec(device)
+
+    cpu_stats: Optional[Dict[str, Any]] = None
+    gpu_stats: Optional[Dict[str, Any]] = None
+
+    if device_kind == "both":
+        if gpu_index is None:
+            raise ValueError("GPU device index could not be resolved for combined profiling")
+        gpu_device = f"gpu/{gpu_index}"
+        gpu_stats = get_model_stats(model, device=gpu_device, **stats_kwargs)
+        cpu_stats = get_model_stats(model, device="cpu", **stats_kwargs)
+    elif device_kind == "gpu":
+        if gpu_index is None:
+            raise ValueError("GPU device index could not be resolved")
+        gpu_device = f"gpu/{gpu_index}"
+        gpu_stats = get_model_stats(model, device=gpu_device, **stats_kwargs)
+    else:
+        cpu_stats = get_model_stats(model, device="cpu", **stats_kwargs)
+
+    structural_stats = next((stats for stats in (gpu_stats, cpu_stats) if stats), {})
+    report_text = render_model_stats_report(
+        structural_stats,
+        cpu_stats=cpu_stats,
+        gpu_stats=gpu_stats,
+        extra_attrs=extra_attrs,
+    )
+
+    with open(file_path, "w", encoding="utf-8") as report_file:
+        report_file.write(report_text + "\n")
