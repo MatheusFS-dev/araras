@@ -366,10 +366,18 @@ def save_top_k_trials(
             before_stats = metric_payload.get("before") if isinstance(metric_payload, dict) else None
             during_stats = metric_payload.get("during") if isinstance(metric_payload, dict) else None
             delta_stats = metric_payload.get("delta") if isinstance(metric_payload, dict) else None
+            aggregation_kind = (
+                metric_payload.get("aggregation")
+                if isinstance(metric_payload, dict)
+                else "delta"
+            )
 
             before_value = None if not isinstance(before_stats, dict) else before_stats.get("max")
             during_value = None if not isinstance(during_stats, dict) else during_stats.get("max")
-            diff_value = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
+            if aggregation_kind == "peak":
+                diff_value = during_value
+            else:
+                diff_value = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
             return format_metric_summary_line(
                 label,
                 before_value,
@@ -492,6 +500,29 @@ def save_top_k_trials(
                     lambda v: f"{format_number(v)} MACs",
                 )
             )
+
+            # Local helper mirroring model_tools._metric_component_for_device
+            def _metric_component_for_device(
+                metrics_value: Any,
+                metric_name: str,
+                component_name: str,
+            ) -> Union[str, int, float, None]:
+                not_measured = "Not measured"
+                if isinstance(metrics_value, str):
+                    return metrics_value
+                metric_block = metrics_value.get(metric_name, not_measured)
+                if isinstance(metric_block, str):
+                    return metric_block
+                if isinstance(metric_block, dict) and metric_block.get("error"):
+                    error_text = str(metric_block.get("error", "Unknown error"))
+                    if not error_text.lower().startswith("error"):
+                        error_text = f"Error: {error_text}"
+                    return error_text
+                target_stats = metric_block.get(component_name)
+                if not isinstance(target_stats, dict):
+                    return not_measured
+                value = target_stats.get("max")
+                return not_measured if value is None else value
             for index, device_label in enumerate(device_order):
                 metrics_value = per_device_resource_usage.get(device_label, "Not measured")
                 if isinstance(metrics_value, str) and metrics_value.lower().startswith("error"):
@@ -502,31 +533,67 @@ def save_top_k_trials(
                 device_name = {"gpu": "GPU", "cpu": "CPU"}.get(device_label, device_label.upper())
                 file.write(f"{device_name} Inference:\n")
 
-                system_line = _metric_line(device_label, "system_ram", "System Memory", is_ram=True)
+                system_line = _metric_line(device_label, "ram_used_bytes", "System Memory", is_ram=True)
                 if system_line:
                     file.write(f"    - {system_line}\n")
 
                 if device_label == "gpu":
-                    gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                    gpu_mem_line = _metric_line(device_label, "gpu_mem_used_bytes", "GPU Memory", is_ram=True)
                     if gpu_mem_line:
                         file.write(f"    - {gpu_mem_line}\n")
-                    gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                    gpu_usage_line = _metric_line(device_label, "gpu_util_percent", "GPU Usage")
                     if gpu_usage_line:
                         file.write(f"    - {gpu_usage_line}\n")
+                    gpu_power_line = _scalar_line(
+                        device_label,
+                        "GPU Power",
+                        # Power uses peak policy (during-phase peak)
+                        _metric_component_for_device(metrics_value, "gpu_power_w", "during"),
+                        unit="W",
+                    )
+                    if gpu_power_line:
+                        file.write(f"    - {gpu_power_line}\n")
                 elif device_label == "cpu":
-                    cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                    cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                     if cpu_usage_line:
                         file.write(f"    - {cpu_usage_line}\n")
+                    cpu_power_line = _scalar_line(
+                        device_label,
+                        "CPU Power",
+                        # Power uses peak policy (during-phase peak)
+                        _metric_component_for_device(metrics_value, "cpu_power_rapl_w", "during"),
+                        unit="W",
+                    )
+                    if cpu_power_line:
+                        file.write(f"    - {cpu_power_line}\n")
                 else:
-                    gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                    gpu_mem_line = _metric_line(device_label, "gpu_mem_used_bytes", "GPU Memory", is_ram=True)
                     if gpu_mem_line:
                         file.write(f"    - {gpu_mem_line}\n")
-                    gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                    gpu_usage_line = _metric_line(device_label, "gpu_util_percent", "GPU Usage")
                     if gpu_usage_line:
                         file.write(f"    - {gpu_usage_line}\n")
-                    cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                    cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                     if cpu_usage_line:
                         file.write(f"    - {cpu_usage_line}\n")
+                    gpu_power_line = _scalar_line(
+                        device_label,
+                        "GPU Power",
+                        # Power uses peak policy (during-phase peak)
+                        _metric_component_for_device(metrics_value, "gpu_power_w", "during"),
+                        unit="W",
+                    )
+                    if gpu_power_line:
+                        file.write(f"    - {gpu_power_line}\n")
+                    cpu_power_line = _scalar_line(
+                        device_label,
+                        "CPU Power",
+                        # Power uses peak policy (during-phase peak)
+                        _metric_component_for_device(metrics_value, "cpu_power_rapl_w", "during"),
+                        unit="W",
+                    )
+                    if cpu_power_line:
+                        file.write(f"    - {cpu_power_line}\n")
 
                 inference_line = _scalar_line(
                     device_label,

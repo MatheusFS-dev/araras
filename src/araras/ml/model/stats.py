@@ -21,14 +21,12 @@ from araras.utils.misc import (
     format_scientific,
     format_number_commas,
 )
-from araras.utils.system import (
-    ResourceMonitor,
-    format_metric_summary_line,
-    measure_current_system_resources,
-)
+from araras.utils.resource_monitor import ResourceMonitor
+from araras.utils.system import format_metric_summary_line
 
 MetricStatistic = Dict[str, Union[List[Union[int, float]], Union[int, float], None]]
-ResourceMetricValue = Union[str, Dict[str, MetricStatistic]]
+ResourceMetricPayload = Dict[str, Union[str, MetricStatistic]]
+ResourceMetricValue = Union[str, ResourceMetricPayload]
 ResourceMetrics = Dict[str, ResourceMetricValue]
 
 
@@ -146,11 +144,11 @@ def get_memory_and_time(
     Returns:
         Tuple[Union[ResourceMetrics, Dict[str, Union[ResourceMetrics, str]]], Union[float, Dict[str, Union[float, str]]]]:
             - When a single device is measured, returns a ``ResourceMetrics`` mapping
-              ``system_ram``, ``gpu_ram``, ``gpu_usage`` and ``cpu_usage`` to their
-              respective statistics. When ``device`` requests both CPU and GPU, a
-              dictionary keyed by ``"gpu"`` and ``"cpu"`` is returned. Each value is
-              either a ``ResourceMetrics`` instance or ``"Error"`` if the measurement
-              failed.
+              ``ram_used_bytes``, ``gpu_mem_used_bytes``, ``gpu_util_percent`` and
+              ``cpu_util_percent`` to their respective statistics. When ``device``
+              requests both CPU and GPU, a dictionary keyed by ``"gpu"`` and
+              ``"cpu"`` is returned. Each value is either a ``ResourceMetrics``
+              instance or ``"Error"`` if the measurement failed.
             - Average inference time in seconds for the measured device. When both
               devices are measured, returns a dictionary keyed by ``"gpu"`` and
               ``"cpu"`` with float values or ``"Error"`` if the run failed.
@@ -173,15 +171,54 @@ def get_memory_and_time(
     resolved_gpu_index: Optional[int]
     device_kind, resolved_gpu_index = parse_device_spec(device)
 
-    def _measure_gpu(gpu_index: int) -> Tuple[ResourceMetrics, float]:
-        monitor_metrics: Tuple[str, ...] = ("ram", "gpu_ram")
-        resource_monitor = ResourceMonitor(
-            metrics=monitor_metrics,
-            target_gpu_index=gpu_index,
-            sample_count=5,
-            sample_interval=0.25,
-        )
+    byte_metrics = {"ram_used_bytes", "gpu_mem_used_bytes"}
 
+    def _empty_stats() -> MetricStatistic:
+        return {
+            "measurements": [],
+            "min": None,
+            "max": None,
+            "avg": None,
+            "std": None,
+            "var": None,
+        }
+
+    def _build_stats(metric_name: str, value: Optional[float]) -> MetricStatistic:
+        if value is None:
+            return _empty_stats()
+        cast_value: Union[int, float]
+        if metric_name in byte_metrics:
+            cast_value = int(round(value))
+        else:
+            cast_value = float(value)
+        return {
+            "measurements": [cast_value],
+            "min": cast_value,
+            "max": cast_value,
+            "avg": cast_value,
+            "std": 0.0,
+            "var": 0.0,
+        }
+
+    def _summarize_monitor(
+        monitor: ResourceMonitor, results: Dict[str, Optional[float]]
+    ) -> Dict[str, ResourceMetricPayload]:
+        summary: Dict[str, ResourceMetricPayload] = {}
+        before_peaks = monitor.last_before_peaks
+        during_peaks = monitor.last_during_peaks
+        for metric_name, aggregation in monitor.metrics.items():
+            before_value = before_peaks.get(metric_name)
+            during_value = during_peaks.get(metric_name)
+            aggregated_value = results.get(metric_name)
+            summary[metric_name] = {
+                "aggregation": aggregation,
+                "before": _build_stats(metric_name, before_value),
+                "during": _build_stats(metric_name, during_value),
+                "delta": _build_stats(metric_name, aggregated_value),
+            }
+        return summary
+
+    def _measure_gpu(gpu_index: int) -> Tuple[ResourceMetrics, float]:
         gpus = tf.config.list_physical_devices("GPU")
         if not gpus or gpu_index >= len(gpus):
             raise RuntimeError(f"No GPU found for index {gpu_index}")
@@ -193,49 +230,62 @@ def get_memory_and_time(
         for _ in range(warmup_runs - 1):
             _ = infer(*dummy_inputs)
 
-        progress_description = (
-            f"Calculating latency on GPU:{gpu_index}"
-        )
-        progress_iter = (
-            iter(
-                white_track(
-                    range(test_runs),
-                    description=progress_description,
-                    total=test_runs,
-                )
-            )
-            if verbose
-            else iter(range(test_runs))
+        monitor = ResourceMonitor(
+            metrics={
+                "ram_used_bytes": "delta",
+                "ram_util_percent": "delta",
+                "gpu_mem_used_bytes": "delta",
+                "gpu_util_percent": "delta",
+                "gpu_power_w": "peak",
+                "cpu_util_percent": "delta",
+                "cpu_power_rapl_w": "peak",
+            },
+            before_repetitions=3,
+            during_repetitions=1,
+            sample_interval_s=0.25,
+            gpu_index=gpu_index,
+            verbose=verbose,
         )
 
         times: List[float] = []
 
-        def run_gpu_inference() -> float:
-            next(progress_iter, None)
-            t0 = time.perf_counter()
-            out = infer(*dummy_inputs)
-            tf.nest.map_structure(lambda t: t.numpy(), out)
-            elapsed = time.perf_counter() - t0
-            times.append(elapsed)
-            return elapsed
+        def _workload() -> None:
+            iterator = (
+                white_track(
+                    range(test_runs),
+                    description=f"Calculating latency on GPU:{gpu_index}",
+                    total=test_runs,
+                )
+                if verbose
+                else range(test_runs)
+            )
+            for _ in iterator:
+                t0 = time.perf_counter()
+                out = infer(*dummy_inputs)
+                tf.nest.map_structure(lambda t: t.numpy(), out)
+                times.append(time.perf_counter() - t0)
 
-        resource_metrics, _ = resource_monitor.measure_callable(
-            run_gpu_inference,
-            repeat=test_runs,
-        )
-
+        results = monitor.run_and_measure(_workload)
         avg_time = sum(times) / len(times) if times else 0.0
-        return resource_metrics, avg_time
+        return _summarize_monitor(monitor, results), avg_time
 
     def _measure_cpu() -> Tuple[ResourceMetrics, float]:
         if not tf.config.list_physical_devices("CPU"):
             raise RuntimeError("No CPU device found")
 
         cpu_index = 0
-        monitor_metrics: Tuple[str, ...] = ("ram", "cpu")
-        resource_monitor = ResourceMonitor(
-            metrics=monitor_metrics,
-            target_gpu_index=None,
+        monitor = ResourceMonitor(
+            metrics={
+                "ram_used_bytes": "delta",
+                "ram_util_percent": "delta",
+                "cpu_util_percent": "delta",
+                "cpu_power_rapl_w": "peak",
+            },
+            before_repetitions=3,
+            during_repetitions=1,
+            sample_interval_s=0.25,
+            gpu_index=resolved_gpu_index or 0,
+            verbose=verbose,
         )
 
         with tf.device(f"/CPU:{cpu_index}"):
@@ -243,38 +293,28 @@ def get_memory_and_time(
             for _ in range(warmup_runs - 1):
                 _ = infer(*dummy_inputs)
 
-        progress_description = "Profiling inference latency on CPU:0"
-        progress_iter = (
-            iter(
-                white_track(
-                    range(test_runs),
-                    description=progress_description,
-                    total=test_runs,
-                )
-            )
-            if verbose
-            else iter(range(test_runs))
-        )
-
         times: List[float] = []
 
-        def run_cpu_inference() -> float:
-            next(progress_iter, None)
-            with tf.device(f"/CPU:{cpu_index}"):
-                t0 = time.perf_counter()
-                out = infer(*dummy_inputs)
-                tf.nest.map_structure(lambda t: t.numpy(), out)
-            elapsed = time.perf_counter() - t0
-            times.append(elapsed)
-            return elapsed
+        def _workload() -> None:
+            iterator = (
+                white_track(
+                    range(test_runs),
+                    description="Profiling inference latency on CPU:0",
+                    total=test_runs,
+                )
+                if verbose
+                else range(test_runs)
+            )
+            for _ in iterator:
+                with tf.device(f"/CPU:{cpu_index}"):
+                    t0 = time.perf_counter()
+                    out = infer(*dummy_inputs)
+                    tf.nest.map_structure(lambda t: t.numpy(), out)
+                times.append(time.perf_counter() - t0)
 
-        resource_metrics, _ = resource_monitor.measure_callable(
-            run_cpu_inference,
-            repeat=test_runs,
-        )
-
+        results = monitor.run_and_measure(_workload)
         avg_time = sum(times) / len(times) if times else 0.0
-        return resource_metrics, avg_time
+        return _summarize_monitor(monitor, results), avg_time
 
     def _safe_measure(
         label: str,
@@ -776,7 +816,7 @@ def write_model_stats_to_file(
     default_inference_text = not_measured
     default_usage_text = not_measured
 
-    ram_metrics = {"system_ram", "gpu_ram"}
+    ram_metrics = {"ram_used_bytes", "gpu_mem_used_bytes"}
 
     def _build_resource_views(metrics_value: Any) -> Tuple[Any, Any]:
         if isinstance(metrics_value, str):
@@ -799,12 +839,23 @@ def write_model_stats_to_file(
                     display_payload[metric_name] = error_text
                 continue
 
+            aggregation_kind = (
+                metric_value.get("aggregation")
+                if isinstance(metric_value, dict)
+                else "delta"
+            )
             delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
-            delta_max = None
-            if isinstance(delta_stats, dict):
-                delta_max = delta_stats.get("max")
+            delta_max = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
+            before_stats = metric_value.get("before") if isinstance(metric_value, dict) else None
+            during_stats = metric_value.get("during") if isinstance(metric_value, dict) else None
+            during_max = None if not isinstance(during_stats, dict) else during_stats.get("max")
+
+            if aggregation_kind == "peak":
+                diff_value = during_max
+            else:
+                diff_value = delta_max
             diff_payload[metric_name] = (
-                delta_max if delta_max is not None else not_measured
+                diff_value if diff_value is not None else not_measured
             )
 
             if metric_name in ram_metrics:
@@ -1116,31 +1167,80 @@ def write_model_stats_to_file(
             device_name = {"gpu": "GPU", "cpu": "CPU"}.get(device_label, device_label.upper())
             file.write(f"{device_name} Inference:\n")
 
-            system_line = _metric_line(device_label, "system_ram", "System Memory", is_ram=True)
+            system_line = _metric_line(device_label, "ram_used_bytes", "System Memory", is_ram=True)
             if system_line:
                 file.write(f"    - {system_line}\n")
 
             if device_label == "gpu":
-                gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                gpu_mem_line = _metric_line(device_label, "gpu_mem_used_bytes", "GPU Memory", is_ram=True)
                 if gpu_mem_line:
                     file.write(f"    - {gpu_mem_line}\n")
-                gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                gpu_usage_line = _metric_line(device_label, "gpu_util_percent", "GPU Usage")
                 if gpu_usage_line:
                     file.write(f"    - {gpu_usage_line}\n")
+                gpu_diff_entry = (
+                    diff_entry if isinstance(diff_entry, dict) else {}
+                )
+                gpu_power_line = _scalar_line(
+                    device_label,
+                    "GPU Power",
+                    gpu_diff_entry.get("gpu_power_w", diff_entry)
+                    if isinstance(diff_entry, dict)
+                    else diff_entry,
+                    unit="W",
+                )
+                if gpu_power_line:
+                    file.write(f"    - {gpu_power_line}\n")
             elif device_label == "cpu":
-                cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                 if cpu_usage_line:
                     file.write(f"    - {cpu_usage_line}\n")
+                cpu_diff_entry = (
+                    diff_entry if isinstance(diff_entry, dict) else {}
+                )
+                cpu_power_line = _scalar_line(
+                    device_label,
+                    "CPU Power",
+                    cpu_diff_entry.get("cpu_power_rapl_w", diff_entry)
+                    if isinstance(diff_entry, dict)
+                    else diff_entry,
+                    unit="W",
+                )
+                if cpu_power_line:
+                    file.write(f"    - {cpu_power_line}\n")
             else:
-                gpu_mem_line = _metric_line(device_label, "gpu_ram", "GPU Memory", is_ram=True)
+                gpu_mem_line = _metric_line(device_label, "gpu_mem_used_bytes", "GPU Memory", is_ram=True)
                 if gpu_mem_line:
                     file.write(f"    - {gpu_mem_line}\n")
-                gpu_usage_line = _metric_line(device_label, "gpu_usage", "GPU Usage")
+                gpu_usage_line = _metric_line(device_label, "gpu_util_percent", "GPU Usage")
                 if gpu_usage_line:
                     file.write(f"    - {gpu_usage_line}\n")
-                cpu_usage_line = _metric_line(device_label, "cpu_usage", "CPU Usage")
+                cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                 if cpu_usage_line:
                     file.write(f"    - {cpu_usage_line}\n")
+                both_diff_entry = (
+                    diff_entry if isinstance(diff_entry, dict) else {}
+                )
+                gpu_power_line = _scalar_line(
+                    device_label,
+                    "GPU Power",
+                    both_diff_entry.get("gpu_power_w", diff_entry)
+                    if isinstance(diff_entry, dict)
+                    else diff_entry,
+                    unit="W",
+                )
+                if gpu_power_line:
+                    file.write(f"    - {gpu_power_line}\n")
+                cpu_power_line = _scalar_line(
+                    device_label,
+                    "CPU Power",
+                    both_diff_entry.get("cpu_power_rapl_w", diff_entry)
+                    if isinstance(diff_entry, dict)
+                    else diff_entry,
+                    unit="W",
+                )
+                if cpu_power_line:
+                    file.write(f"    - {cpu_power_line}\n")
 
             inference_line = _scalar_line(
                 device_label,

@@ -1035,7 +1035,7 @@ def set_user_attr_model_stats(
         }
         return normalized
 
-    ram_metrics = {"system_ram", "gpu_ram"}
+    ram_metrics = {"ram_used_bytes", "gpu_mem_used_bytes"}
 
     def _format_ram_display(value: float) -> str:
         raw_int = int(round(value))
@@ -1062,12 +1062,27 @@ def set_user_attr_model_stats(
                     display_payload[metric_name] = error_text
                 continue
 
+            aggregation_kind = (
+                metric_value.get("aggregation")
+                if isinstance(metric_value, dict)
+                else "delta"
+            )
             delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
             delta_max = None
             if isinstance(delta_stats, dict):
                 delta_max = delta_stats.get("max")
+            before_stats = metric_value.get("before") if isinstance(metric_value, dict) else None
+            during_stats = metric_value.get("during") if isinstance(metric_value, dict) else None
+            during_max = None if not isinstance(during_stats, dict) else during_stats.get("max")
+
+            diff_value: Optional[Union[int, float]]
+            if aggregation_kind == "peak":
+                diff_value = during_max
+            else:
+                diff_value = delta_max
+
             diff_payload[metric_name] = (
-                delta_max if delta_max is not None else not_measured
+                diff_value if diff_value is not None else not_measured
             )
 
             if metric_name in ram_metrics:
@@ -1266,7 +1281,14 @@ def set_user_attr_model_stats(
         suffix = "" if not multi_device else ("" if device_label == "gpu" else f"_{device_label}")
         diff_entry = resource_usage_diff_map.get(device_label, default_resource_text)
         display_entry = resource_usage_display_map.get(device_label)
-        for metric_name in ("system_ram", "gpu_ram", "gpu_usage", "cpu_usage"):
+        for metric_name in (
+            "ram_used_bytes",
+            "gpu_mem_used_bytes",
+            "gpu_util_percent",
+            "cpu_util_percent",
+            "gpu_power_w",
+            "cpu_power_rapl_w",
+        ):
             before_value = _metric_component_for_device(metrics_value, metric_name, "before")
             current_value = _metric_component_for_device(metrics_value, metric_name, "during")
             if isinstance(diff_entry, dict):
