@@ -1,11 +1,18 @@
-from araras.core import *
+from typing import Literal, Sequence, Union
+
 
 import tempfile
 import zipfile
+import traceback
+
 from pathlib import Path
 from araras.ml.model.stats import get_flops
 
 import tensorflow as tf
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def convert_to_saved_model(input_keras_path: str, output_zip_path: str) -> None:
@@ -98,9 +105,9 @@ def save_model_plot(
             show_trainable=True,
         )
     except Exception as exc:
-        logger_error.error(f"{RED} Failed to save model plot: {exc}{RESET}")
-        logger.warning(f"{YELLOW} Ensure 'graphviz' is installed and updated.{RESET}")
-        logger.warning(f"{YELLOW} If using conda, try: {ORANGE}conda install graphviz python-graphviz{RESET}")
+        vp.printf(f"\nFailed to save model plot: {exc}", tag="[ARARAS ERROR] ", color="red")
+        vp.printf(f"Ensure 'graphviz' is installed and updated.", tag="[ARARAS WARNING] ", color="yellow")
+        vp.printf(f"If using conda, try: conda install graphviz python-graphviz", tag="[ARARAS WARNING] ", color="yellow")
 
         traceback.print_exc()
 

@@ -1,7 +1,4 @@
-from araras.core import *
-
-
-from tensorflow.keras.utils import register_keras_serializable  # tf.keras
+from tensorflow.keras.utils import register_keras_serializable 
 import tensorflow as tf
 
 

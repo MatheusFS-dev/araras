@@ -1,10 +1,12 @@
-
-from araras.core import *
+from typing import Any, Dict, List, Optional, Tuple
 
 import optuna
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 # ———————————————————————————————————————————————————————————————————————————— #
@@ -211,14 +213,14 @@ def analyze_study(
     else:
         invalid_plots = [p for p in plots if p not in valid_plots]
         if invalid_plots:
-            logger.warning(f"{YELLOW}Invalid plot types ignored: {invalid_plots}{RESET}")
+            vp.printf(f"Invalid plot types ignored: {invalid_plots}", tag="[ARARAS WARNING] ", color="yellow")
         plots_to_generate = [p for p in plots if p in valid_plots]
 
     dirs = create_directories(table_dir, create_standalone, save_data, create_plotly)
 
     df = prepare_dataframe(study)
     if df.empty:
-        logger_error.error(f"{RED}No completed trials found in the study.{RESET}")
+        vp.printf(f"Error: No completed trials found in the study.", tag="[ARARAS ERROR] ", color="red")
         return
 
     numeric_cols, categorical_cols = classify_columns(df)
@@ -242,7 +244,7 @@ def analyze_study(
         param_name_mapping=param_name_mapping,
     )
 
-    print(f"\n{BLUE}{BOLD}Analyzing study...{RESET}")
+    vp.printf(f"\nAnalyzing study...", tag="", color="blue")
     print("     Generating summary tables...")
     save_summary_tables(df, best, worst, numeric_cols, categorical_cols, dirs)
 

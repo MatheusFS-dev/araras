@@ -1,10 +1,4 @@
-"""
-Utility functions for :mod:`araras.ml.optuna` analysis tools.
-"""
-
-from __future__ import annotations
-
-from araras.core import *
+import traceback
 
 import os
 import re
@@ -20,6 +14,9 @@ from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
 
 from .analyzer import PLOT_CFG
 
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 # Regex used across plots to clean parameter names for titles and labels
 PARAM_NAME_CLEAN_RE = re.compile(r"^params_")
@@ -144,7 +141,7 @@ def _safe_plot(plot_name: str, func: Callable, *args: Any, **kwargs: Any) -> Non
     try:
         func(*args, **kwargs)
     except Exception as e:  # pragma: no cover - user feedback only
-        logger_error.error(f"{RED}Error generating {plot_name} plot: {e}{RESET}")
+        vp.printf(f"Error generating {plot_name} plot: {e}", tag="[ARARAS ERROR] ", color="red")
         traceback.print_exc()
 
 
@@ -301,7 +298,7 @@ def save_plotly_html(fig: Any, filepath: str) -> None:
 
         pio.write_html(fig, filepath, include_plotlyjs="cdn")
     except Exception as e:  # pragma: no cover - runtime warning only
-        logger_error.error(f"{RED}Error saving plotly figure {filepath}: {e}{RESET}")
+        vp.printf(f"Error saving plotly figure {filepath}: {e}", tag="[ARARAS ERROR] ", color="red")
 
 
 def save_plot(
@@ -427,9 +424,9 @@ def print_study_columns(
             print("}")
             print("-" * 50)
         else:
-            print(f"{ORANGE}No columns to display after applying exclusions.{RESET}")
+            vp.printf("\nNo columns to display after applying exclusions.", tag="[ARARAS WARNING] ", color="orange")
     except Exception as e:
-        logger_error.error(f"{RED}Error extracting study information: {str(e)}{RESET}")
+        vp.printf(f"Error extracting study information: {str(e)}", tag="[ARARAS ERROR] ", color="red")
 
 
 def analyze_improvement_variance(

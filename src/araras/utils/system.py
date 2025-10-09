@@ -1,29 +1,19 @@
-import math
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
+
 import os
 import time
-import statistics
+
 import psutil
 import subprocess
 from datetime import datetime
 from threading import Thread
-from typing import (
-    Any,
-    Callable,
-    Dict,
-    Iterable,
-    List,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-)
 
 import tensorflow as tf
 
-from araras.core import *
 from araras.utils.misc import format_bytes, format_number_commas
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 MetricSnapshot = Dict[str, Optional[float]]
 MetricExtractors = Dict[str, Callable[[List[Dict[str, Any]]], Optional[float]]]
@@ -35,6 +25,7 @@ TCallableReturn = TypeVar("TCallableReturn")
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                     Utils                                    #
 # ———————————————————————————————————————————————————————————————————————————— #
+
 
 def format_metric_summary_line(
     label: str,
@@ -129,63 +120,6 @@ def format_metric_summary_line(
     return f"{label}: {' '.join(fragments)}"
 
 
-def get_user_gpu_choice():
-    """
-    Prompts the user to select a GPU index and validates the input.
-
-    Returns:
-        str: Valid GPU index as string
-    """
-    available_gpus = tf.config.list_physical_devices("GPU")
-    num_gpus = len(available_gpus)
-
-    if num_gpus == 0:
-        print(f"{RED}No GPUs available. Using CPU.{RESET}")
-        return ""
-    elif num_gpus == 1:
-        # Get GPU data for single GPU
-        gpu_data = _get_nvidia_smi_data()
-        if gpu_data and len(gpu_data) > 0:
-            gpu = gpu_data[0]
-            free_gb = gpu["free_mb"] / 1024
-            total_gb = gpu["total_mb"] / 1024
-            print(
-                f"Only one GPU available: {gpu['name']} ({GREEN}{free_gb:.1f}GB/{RED}{total_gb:.1f}GB free){RESET}"
-            )
-        else:
-            print(f"Only one GPU available: {GREEN}{available_gpus[0].name}{RESET}")
-        return "0"
-
-    # Get GPU data for multiple GPUs
-    gpu_data = _get_nvidia_smi_data()
-    gpu_info_map = {gpu["index"]: gpu for gpu in gpu_data} if gpu_data else {}
-
-    print(f"{BOLD}{BLUE}Available GPUs: {GREEN}{num_gpus}{RESET}")
-    for i, gpu in enumerate(available_gpus):
-        if i in gpu_info_map:
-            gpu_info = gpu_info_map[i]
-            free_gb = gpu_info["free_mb"] / 1024
-            total_gb = gpu_info["total_mb"] / 1024
-            print(f"  {CYAN}GPU {i}{RESET}: {gpu_info['name']} ({free_gb:.1f}GB/{total_gb:.1f}GB free)")
-        else:
-            print(f"  {CYAN}GPU {i}{RESET}: {gpu.name}")
-
-    while True:
-        try:
-            user_input = input(f"\nEnter GPU index to use {YELLOW}(0-{num_gpus-1}): {RESET}").strip()
-            gpu_index = int(user_input)
-
-            if 0 <= gpu_index < num_gpus:
-                logger.info(f"Selected GPU {gpu_index}")
-                return str(gpu_index)
-            else:
-                print(f"{RED}Invalid index. Please enter a number between 0 and {num_gpus-1}.{RESET}")
-        except ValueError:
-            logger_error.error(f"{RED}Invalid input. Please enter a valid number.{RESET}")
-        except KeyboardInterrupt:
-            logger_error.warning(f"\n{RED}Operation cancelled. Using GPU 0 as default.{RESET}")
-
-
 def _get_nvidia_smi_data():
     """
     Retrieves GPU information using nvidia-smi command.
@@ -232,35 +166,36 @@ def _get_nvidia_smi_data():
 
 def _print_tensorflow_info():
     """Print TensorFlow configuration information."""
-    print(f"{BOLD}TensorFlow Configuration{RESET}")
+    
+    print(f"TensorFlow Configuration")
     print("=" * 80)
     print(f"Version        : {tf.__version__}")
 
     if tf.test.is_built_with_cuda():
-        print(f"CUDA Support   : {GREEN}Yes{RESET}")
+        print("CUDA Support: " + vp.color("Yes", "green"))
         build_info = tf.sysconfig.get_build_info()
         print(f"CUDA Version   : {build_info.get('cuda_version', 'Unknown')}")
         print(f"cuDNN Version  : {build_info.get('cudnn_version', 'Unknown')}")
     else:
-        print(f"CUDA Support   : {RED}No (CPU only){RESET}")
+        print("CUDA Support: " + vp.color("No", "red"))
 
     gpus = tf.config.list_physical_devices("GPU")
     if gpus:
-       tf.test.gpu_device_name()
+        tf.test.gpu_device_name()
 
 
 def _print_gpu_table(gpu_data):
     """Print GPU information in nvidia-smi style table format."""
     if not gpu_data:
-        print(f"{RED}No GPU data available{RESET}")
+        print(vp.color("No GPU data available", "red"))
         return
 
-    print(f"\n{BOLD}GPU Information{RESET}")
+    print(f"\nGPU Information")
     print("=" * 80)
 
     # Header
     header = f"{'GPU':<3} {'Name':<25} {'Memory Usage':<20} {'Temp':<6} {'Util':<6}"
-    print(f"{BOLD}{header}{RESET}")
+    print(f"{header}")
     print("-" * 80)
 
     # GPU rows
@@ -268,16 +203,9 @@ def _print_gpu_table(gpu_data):
         # Memory calculations
         total_gb = gpu["total_mb"] / 1024
         used_gb = gpu["used_mb"] / 1024
-        utilization_pct = (used_gb / total_gb) * 100 if total_gb > 0 else 0
 
         # Format memory usage with color coding
         memory_str = f"{used_gb:6.1f}GB / {total_gb:6.1f}GB"
-        if utilization_pct > 80:
-            memory_color = RED
-        elif utilization_pct > 50:
-            memory_color = YELLOW
-        else:
-            memory_color = GREEN
 
         # Format temperature
         temp_str = f"{gpu['temperature']}C" if gpu["temperature"] != "N/A" else "N/A"
@@ -289,7 +217,7 @@ def _print_gpu_table(gpu_data):
         row = (
             f"{gpu['index']:<3} "
             f"{gpu['name'][:24]:<25} "
-            f"{memory_color}{memory_str:<20}{RESET} "
+            f"{memory_str:<20} "
             f"{temp_str:<6} "
             f"{util_str:<6}"
         )
@@ -312,8 +240,8 @@ def get_gpu_info() -> None:
     """
     # Header with timestamp
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"\n{BOLD}{BLUE}TensorFlow GPU Monitor - {timestamp}{RESET}")
-    print(f"{BLUE}{'=' * 80}{RESET}")
+    print(vp.color(f"TensorFlow GPU Monitor - {timestamp}", "blue"))
+    print(vp.color(f"{'=' * 80}", "blue"))
 
     # TensorFlow configuration
     _print_tensorflow_info()
@@ -327,7 +255,7 @@ def get_gpu_info() -> None:
     # Print memory summary
     # _print_memory_summary(gpu_data)
 
-    print(f"\n{BLUE}{'=' * 80}{RESET}")
+    print(vp.color(f"\n{'=' * 80}", "blue"))
 
 
 def gpu_summary() -> None:
@@ -372,9 +300,11 @@ def gpu_summary() -> None:
     print("|  No running processes found                                                 |")
     print("+" + "-" * 88 + "+")
 
+
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                Resources Utils                               #
 # ———————————————————————————————————————————————————————————————————————————— #
+
 
 def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **kwargs) -> None:
     """Periodically record selected system metrics to CSV files.
@@ -416,18 +346,14 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
         proc = psutil.Process(pid or os.getpid())
         proc.cpu_percent()
         with open(log_path, "w") as f:
-            f.write(
-                "Timestamp,System_CPU_Usage(%),Process_CPU_Usage(%),Per-Core_Usage(%)\n"
-            )
+            f.write("Timestamp,System_CPU_Usage(%),Process_CPU_Usage(%),Per-Core_Usage(%)\n")
             while True:
                 try:
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
                     system_cpu = psutil.cpu_percent()
                     process_cpu = proc.cpu_percent()
                     per_core_usage = psutil.cpu_percent(percpu=True)
-                    f.write(
-                        f"{timestamp},{system_cpu},{process_cpu},{','.join(map(str, per_core_usage))}\n"
-                    )
+                    f.write(f"{timestamp},{system_cpu},{process_cpu},{','.join(map(str, per_core_usage))}\n")
                     f.flush()
                     time.sleep(interval)
                 except Exception as e:
@@ -473,9 +399,7 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
         """
         log_path = os.path.join(log_dir, "gpu_usage_log.csv")
         with open(log_path, "w") as f:
-            f.write(
-                "Timestamp,GPU_ID,Memory_Used(MB),Memory_Total(MB),GPU_Utilization(%),Temperature(C)\n"
-            )
+            f.write("Timestamp,GPU_ID,Memory_Used(MB),Memory_Total(MB),GPU_Utilization(%),Temperature(C)\n")
             while True:
                 try:
                     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -493,9 +417,7 @@ def log_resources(log_dir: str, interval: int = 5, pid: Optional[int] = None, **
                     # Parse and write each GPU's data
                     for line in gpu_stats.split("\n"):
                         gpu_id, mem_used, mem_total, util, temp = map(int, line.split(","))
-                        f.write(
-                            f"{timestamp},{gpu_id},{mem_used},{mem_total},{util},{temp}\n"
-                        )
+                        f.write(f"{timestamp},{gpu_id},{mem_used},{mem_total},{util},{temp}\n")
                     f.flush()
                     time.sleep(interval)
                 except Exception as e:
@@ -685,8 +607,7 @@ def measure_current_system_resources(metrics: str = "cpu,ram,disk,gpu_ram") -> L
         try:
             results.append(collector())
         except Exception as exc:  # pragma: no cover - defensive safeguard
-            logger_error.error(f"Failed to collect {metric_name}: {exc}")
+            vp.printf(f"Failed to collect {metric_name}: {exc}", tag="[ARARAS ERROR] ", color="red")
             results.append({"metric": metric_name, "error": str(exc)})
 
     return results
-

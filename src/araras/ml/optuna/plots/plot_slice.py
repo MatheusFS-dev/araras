@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import matplotlib.pyplot as plt
 import optuna

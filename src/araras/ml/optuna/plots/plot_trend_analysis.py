@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd
@@ -13,6 +13,10 @@ from araras.ml.optuna.analysis_utils import (
     draw_warning_box,
     save_plot,
 )
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def plot_trend_analysis(
@@ -106,9 +110,7 @@ def plot_trend_analysis(
 
         # Check if we have enough valid data points
         if len(x_clean) < 2:
-            logger.warning(
-                f"{YELLOW}Not enough valid data points for parameter '{col}'. Skipping trend analysis.{RESET}"
-            )
+            vp.printf(f"Not enough valid data points for parameter '{col}'. Skipping trend analysis.", tag="[ARARAS WARNING] ", color="yellow")
             ax.text(
                 0.5,
                 0.5,
@@ -132,9 +134,7 @@ def plot_trend_analysis(
 
         # Check for constant values (no variance)
         if np.var(x_clean) == 0 or np.var(y_clean) == 0:
-            logger.warning(
-                f"{YELLOW}Parameter '{col}' or loss has no variance. Skipping trend analysis.{RESET}"
-            )
+            vp.printf(f"Parameter '{col}' or loss has no variance. Skipping trend analysis.", tag="[ARARAS WARNING] ", color="yellow")
             ax.text(
                 0.5,
                 0.5,
@@ -168,7 +168,7 @@ def plot_trend_analysis(
             fit_status = "Success"
 
         except (np.linalg.LinAlgError, ValueError) as e:
-            logger_error.error(f"{RED}Error fitting trend line for parameter '{col}': {e}{RESET}")
+            vp.printf(f"Error fitting trend line for parameter '{col}': {e}. Using default values.", tag="[ARARAS ERROR] ", color="red")
             # Set default values
             slope = 0.0
             intercept = np.mean(y_clean) if len(y_clean) > 0 else 0.0

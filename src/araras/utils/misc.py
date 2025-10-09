@@ -1,11 +1,15 @@
-from araras.core import *
+from typing import List, Optional
 
 import os
 import math
 import time
+import warnings
 from pathlib import Path
-from typing import List, Optional
 from IPython.display import clear_output
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def clear():
@@ -28,7 +32,7 @@ def clear():
         else:  # macOS and Linux
             os.system("clear")
     except Exception as e:
-        logger_error.error(f"{RED}Error clearing terminal: {e}{RESET}")
+        vp.printf(f"Error clearing terminal: {e}", tag="[ARARAS ERROR] ", color="red")
 
 
 def format_number(number, precision=2):
@@ -84,7 +88,7 @@ def format_number(number, precision=2):
 
         return f"-{formatted}" if is_negative else formatted
     except Exception as e:
-        logger_error.error(f"{RED}Error formatting number: {e}{RESET}")
+        vp.printf(f"Error formatting number: {e}", tag="[ARARAS ERROR] ", color="red")
         return f"Invalid input: {original_value}"
 
 
@@ -135,7 +139,7 @@ def format_bytes(bytes_value, precision=2):
 
         return f"-{formatted}" if is_negative else formatted
     except Exception as e:
-        logger_error.error(f"{RED}Error formatting bytes: {e}{RESET}")
+        vp.printf(f"Error formatting bytes: {e}", tag="[ARARAS ERROR] ", color="red")
         return f"Invalid input: {original_value}"
 
 
@@ -187,7 +191,7 @@ def format_scientific(number, max_precision=2):
             return mantissa_str
         return f"{mantissa_str}×10^{exponent}"
     except Exception as e:
-        logger_error.error(f"{RED}Error formatting scientific number: {e}{RESET}")
+        vp.printf(f"Error formatting scientific number: {e}", tag="[ARARAS ERROR] ", color="red")
         return f"Invalid input: {original_value}"
 
 
@@ -220,8 +224,34 @@ def format_number_commas(number, precision=2):
 
         raise TypeError(f"Invalid input type: {type(number)}. Must be int or float.")
     except Exception as e:
-        logger_error.error(f"{RED}Error formatting number with commas: {e}{RESET}")
+        vp.printf(f"Error formatting number with commas: {e}", tag="[ARARAS ERROR] ", color="red")
         return f"Invalid input: {original_value}"
+
+# —————————————————————————————————— Others —————————————————————————————————— #
+def supress_optuna_warnings() -> None:
+    """Suppress Optuna experimental warnings.
+
+    This helper inspects the Optuna package for the ``ExperimentalWarning``
+    class in its possible locations and silences warnings triggered by
+    experimental features.
+
+    Notes:
+        The :mod:`optuna` import occurs within this function to avoid pulling in
+        optional dependencies at module import time.
+    """
+
+    import optuna
+
+    warning_classes = []
+    for module_name in ("_experimental", "exceptions"):
+        module = getattr(optuna, module_name, None)
+        if module is not None:
+            warning_cls = getattr(module, "ExperimentalWarning", None)
+            if warning_cls is not None:
+                warning_classes.append(warning_cls)
+
+    for cls in warning_classes:
+        warnings.filterwarnings("ignore", category=cls)
 
 
 # ——————————————————————————— Notebook Converter ———————————————————————————— #

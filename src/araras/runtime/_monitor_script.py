@@ -7,21 +7,24 @@ Command line usage:
     For Anaconda environments, use:
     /home/matheus/anaconda3/envs/tf-optuna/bin/python _auto_run.py nas_cnn1d_flat_v9.ipynb --title "ML Training"
 """
-from araras.core import *
+from typing import List, Optional
 
 import sys
 import argparse
 from araras.runtime.monitoring import run_auto_restart
 
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
+
 # ———————————————————— Warnings and Executable Information ——————————————————— #
-print(f"{YELLOW}=" * 80 + f"{RESET}")
-print(f"{YELLOW}{'MONITOR SCRIPT'.center(80)}{RESET}\n")
-print(f"{YELLOW}Run this script with {RED}{BOLD}sudo{RESET} {YELLOW}if the other process requires it!{RESET}")
-print(
-    f"{YELLOW}If using a Conda Venv, ensure you are using the correct python interpreter.{RESET}"
-)
-print(f"{ORANGE}>>> {sys.executable} is running this script{RESET}")
-print(f"{YELLOW}=" * 80 + f"\n\n{RESET}")
+vp.printf(vp.color("=" * 80, "yellow"))
+vp.printf(vp.color("MONITOR SCRIPT".center(80), "yellow"))
+vp.printf(vp.color("=" * 80, "yellow"))
+vp.printf(vp.color("Run this script with ", "yellow") + vp.color("sudo", "red") + vp.color(" if the other process requires it!", "yellow"))
+vp.printf(vp.color("If using a Conda Venv, ensure you are using the correct python interpreter.", "yellow"))
+vp.printf(vp.color(f">>> {sys.executable} is running this script", "orange"))
+vp.printf(vp.color("=" * 80, "yellow"))
 # ———————————————————————————————————————————————————————————————————————————— #
 
 

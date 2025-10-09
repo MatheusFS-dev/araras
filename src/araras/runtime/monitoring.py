@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import Any, Dict, Optional, Tuple
 
 import os
 import sys
@@ -14,6 +14,10 @@ from threading import Event, Thread
 # Local imports
 from araras.runtime.terminal import SimpleTerminalLauncher
 from .file_handler import FileTypeHandler
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 # Path where resource usage logs will be written. If ``None`` no logging occurs
 RESOURCE_USAGE_LOG_FILE: Optional[str] = None
@@ -156,14 +160,14 @@ def print_monitoring_config_summary(
     print(f"Target File: {file_path}")
     print(f"Success Flag Location: {success_flag_file}")
     # print(f"File Type: {file_type}")
-    print(f"Process Title: {ORANGE}{title}{RESET}")
+    print("Process Title: " + vp.color(f"{title}", "orange"))
     if email_enabled:
-        print(f"Email Alerts: {GREEN}Enabled{RESET}")
+        print("Email Alerts: " + vp.color("Enabled", "green"))
     else:
-        print(f"Email Alerts: {RED}Disabled{RESET}")
-    print(f"Max Restarts: {max_restarts}")
+        print("Email Alerts: " + vp.color("Disabled", "red"))
+    print("Max Restarts: " + vp.color(f"{max_restarts}", "yellow"))
     if restart_after_delay is not None:
-        print(f"Run will force restart after: {restart_after_delay} seconds")
+        print("Run will force restart after: " + vp.color(f"{restart_after_delay} seconds", "yellow"))
     print("=" * 70)
     print()
 
@@ -187,9 +191,9 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
 def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
     """Print final completion summary."""
     # print("\n" + "=" * 50)
-    print(f"\n{GREEN}Process Completed{RESET}")
+    print("\n" + vp.color("Process Completed", "green"))
     # print("=" * 50)
-    print(f"Total Restarts: {ORANGE}{restart_count}{RESET}")
+    print("Total Restarts: " + vp.color(f"{restart_count}", "orange"))
     # if total_runtime is not None:
     #     print(f"Total Runtime:  {total_runtime:.1f}s")
     # print("=" * 50)
@@ -197,23 +201,23 @@ def print_completion_summary(restart_count: int, total_runtime: Optional[float] 
 
 def print_error_message(error_type: str, message: str) -> None:
     """Print error messages with consistent formatting."""
-    logger_error.error(f"{RED}ERROR [{error_type}]: {message}{RESET}")
+    vp.printf(f"ERROR [{error_type}]: {message}", color="red")
 
 
 def print_warning_message(message: str) -> None:
     """Print warning messages with consistent formatting."""
-    logger_time.warning(f"{YELLOW}Warning: {message}{RESET}")
+    vp.printf(f"WARNING: {message}", color="yellow")
 
 
 def print_success_message(message: str) -> None:
     """Print success messages with consistent formatting."""
-    logger_time.info(f"SUCCESS: {message}")
+    vp.printf(f"SUCCESS: {message}", color="green")
 
 
 def print_cleanup_info(terminated: int, killed: int) -> None:
     """Print child process cleanup information."""
     if terminated > 0 or killed > 0:
-        logger_time.info(f"Child cleanup: {terminated} terminated, {killed} killed")
+        vp.printf(f"Child cleanup: {terminated} terminated, {killed} killed", color="yellow")
 
 
 # —————————————————————————————————— Utility ————————————————————————————————— #
@@ -543,14 +547,14 @@ def run_auto_restart(
                     stop_event.set()
                     print("\n")
                     print_process_status(
-                        f"Restart loop interrupted by user, cleaning up. {ORANGE}Please wait...{RESET}"
+                        "Restart loop interrupted by user, cleaning up." + vp.color(" Please wait...", "orange")
                     )
                     manager.force_stop()
                     manager._cleanup_converted_file()
                     manager._cleanup_monitored_file()
                 # Ensure the worker thread has completely finished before returning
                 thread.join()
-                print(f"\n{GREEN}Process done!{RESET}")
+                print("\n" + vp.color("Process done!", "green"))
 
             restart_loop()
 

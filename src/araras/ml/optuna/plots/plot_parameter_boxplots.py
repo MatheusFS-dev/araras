@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd

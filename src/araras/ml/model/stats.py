@@ -1,12 +1,8 @@
-from araras.core import *
-
 from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 import time
 import warnings
-from threading import Event, Lock, Thread
 
-import psutil
 import tensorflow as tf
 import pynvml
 
@@ -23,6 +19,11 @@ from araras.utils.misc import (
 )
 from araras.utils.resource_monitor import ResourceMonitor
 from araras.utils.system import format_metric_summary_line
+from araras.utils.loading_bar import gen_loading_bar
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
+
 
 MetricStatistic = Dict[str, Union[List[Union[int, float]], Union[int, float], None]]
 ResourceMetricPayload = Dict[str, Union[str, MetricStatistic]]
@@ -251,10 +252,11 @@ def get_memory_and_time(
 
         def _workload() -> None:
             iterator = (
-                white_track(
+                gen_loading_bar(
                     range(test_runs),
-                    description=f"Calculating latency on GPU:{gpu_index}",
+                    description=vp.color(f"Calculating latency on GPU:{gpu_index}", "blue"),
                     total=test_runs,
+                    bar_color="blue",
                 )
                 if verbose
                 else range(test_runs)
@@ -297,10 +299,11 @@ def get_memory_and_time(
 
         def _workload() -> None:
             iterator = (
-                white_track(
+                gen_loading_bar(
                     range(test_runs),
-                    description="Profiling inference latency on CPU:0",
+                    description=vp.color("Profiling inference latency on CPU:0", "blue"),
                     total=test_runs,
+                    bar_color="blue",
                 )
                 if verbose
                 else range(test_runs)
@@ -324,8 +327,8 @@ def get_memory_and_time(
             return fn()
         except Exception as exc:  # pragma: no cover - defensive safeguard
             error_text = f"Error ({exc.__class__.__name__}): {exc}"
-            if verbose:
-                logger_error.error(f"Failed to measure {label.upper()} inference: {exc}")
+            # if verbose:
+            #     logger_error.error(f"Failed to measure {label.upper()} inference: {exc}")
             return error_text, error_text
 
     if device_kind == "gpu":
@@ -350,7 +353,7 @@ def get_model_usage_stats(
     n_trials: int = 10000,
     device: str = "both/0",
     rapl_path: str = "/sys/class/powercap/intel-rapl/intel-rapl:0/energy_uj",
-    verbose: bool = True,
+    verbose: int = 1,
 ) -> Union[
     Tuple[Union[float, str], Union[float, str], Union[float, str]],
     Dict[str, Dict[str, Union[float, str]]],
@@ -383,7 +386,7 @@ def get_model_usage_stats(
             to measure CPU usage alongside GPU ``<index>``. Defaults to
             ``"both/0"``.
         rapl_path (str): Path to the RAPL energy counter file for CPU measurements.
-        verbose (bool): If ``True``, displays a progress bar during the trials.
+        verbose (int): Verbosity level. 0 = silent, 1 = progress bar.
 
     Raises:
         RuntimeError: If GPU NVML initialization fails when ``device`` refers to a GPU index.
@@ -494,20 +497,17 @@ def get_model_usage_stats(
             except Exception as exc:
                 if nvml_initialized:
                     pynvml.nvmlShutdown()
-                raise RuntimeError(
-                    "Unable to initialize NVML for GPU power monitoring: " + str(exc)
-                ) from exc
+                raise RuntimeError("Unable to initialize NVML for GPU power monitoring: " + str(exc)) from exc
 
             try:
                 progress_iter = range(n_trials)
-                if verbose:
-                    device_label = (
-                        f"GPU:{device_index}" if device_index >= 0 else "CPU:0"
-                    )
-                    progress_iter = white_track(
+                if verbose > 0:
+                    device_label = f"GPU:{device_index}" if device_index >= 0 else "CPU:0"
+                    progress_iter = gen_loading_bar(
                         progress_iter,
-                        description=f"Collecting stats on {device_label}",
+                        description=vp.color(f"Collecting stats on {device_label}", "blue"),
                         total=n_trials,
+                        bar_color="blue",
                     )
 
                 for _ in progress_iter:
@@ -547,22 +547,29 @@ def get_model_usage_stats(
 
             per_run_time = sum(times) / len(times) if times else 0.0
             avg_power = sum(powers) / len(powers) if powers else 0.0
-            avg_energy = (
-                sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0.0
-            )
+            avg_energy = sum(p * t for p, t in zip(powers, times)) / len(powers) if powers else 0.0
 
             if avg_power >= 0:
                 return per_run_time, avg_power, avg_energy
 
             attempt += 1
             if attempt > MAX_RETRIES:
-                logger_error.error(
-                    f"{RED}Average power measurement failed after {MAX_RETRIES} attempts, returning 0.{RESET}"
+                vp.logf(
+                    vp.color(
+                        f"Average power measurement failed after {MAX_RETRIES} attempts, returning 0.", "red"
+                    ),
+                    log_level="error",
+                    tag=vp.gen_tag("ARARAS", "fileline"),
                 )
                 return per_run_time, 0.0, 0.0
 
-            logger.warning(
-                f"{YELLOW}Negative average power measured, retrying measurement...{RESET}"
+            vp.logf(
+                vp.color(
+                    f"Negative average power measured, retrying measurement... (attempt {attempt}/{MAX_RETRIES})",
+                    "yellow",
+                ),
+                log_level="warning",
+                tag=vp.gen_tag("ARARAS"),
             )
 
     def _safe_measure(
@@ -573,8 +580,6 @@ def get_model_usage_stats(
             return fn()
         except Exception as exc:  # pragma: no cover - defensive safeguard
             error_text = f"Error ({exc.__class__.__name__}): {exc}"
-            if verbose:
-                logger_error.error(f"Failed to measure {label.upper()} usage: {exc}")
             return error_text, error_text, error_text
 
     if device_kind == "gpu":
@@ -588,9 +593,7 @@ def get_model_usage_stats(
     if resolved_gpu_index is None:
         raise RuntimeError("GPU device index could not be resolved")
 
-    gpu_time, gpu_power, gpu_energy = _safe_measure(
-        "gpu", lambda: _measure_for_device(resolved_gpu_index)
-    )
+    gpu_time, gpu_power, gpu_energy = _safe_measure("gpu", lambda: _measure_for_device(resolved_gpu_index))
     cpu_time, cpu_power, cpu_energy = _safe_measure("cpu", lambda: _measure_for_device(-1))
 
     return {
@@ -605,7 +608,6 @@ def get_model_usage_stats(
             "avg_energy": cpu_energy,
         },
     }
-
 
 
 def write_model_stats_to_file(
@@ -699,8 +701,7 @@ def write_model_stats_to_file(
     if invalid_entries:
         valid_options = ", ".join(supported_stats)
         raise ValueError(
-            "Unsupported statistics requested: "
-            f"{invalid_entries}. Valid options are: {valid_options}."
+            "Unsupported statistics requested: " f"{invalid_entries}. Valid options are: {valid_options}."
         )
 
     measure_parameters = "parameters" in selected_stats
@@ -839,11 +840,7 @@ def write_model_stats_to_file(
                     display_payload[metric_name] = error_text
                 continue
 
-            aggregation_kind = (
-                metric_value.get("aggregation")
-                if isinstance(metric_value, dict)
-                else "delta"
-            )
+            aggregation_kind = metric_value.get("aggregation") if isinstance(metric_value, dict) else "delta"
             delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
             delta_max = None if not isinstance(delta_stats, dict) else delta_stats.get("max")
             before_stats = metric_value.get("before") if isinstance(metric_value, dict) else None
@@ -854,17 +851,13 @@ def write_model_stats_to_file(
                 diff_value = during_max
             else:
                 diff_value = delta_max
-            diff_payload[metric_name] = (
-                diff_value if diff_value is not None else not_measured
-            )
+            diff_payload[metric_name] = diff_value if diff_value is not None else not_measured
 
             if metric_name in ram_metrics:
                 component_display: Dict[str, str] = {}
                 for component_name in ("before", "during", "delta"):
                     component_stats = (
-                        metric_value.get(component_name)
-                        if isinstance(metric_value, dict)
-                        else None
+                        metric_value.get(component_name) if isinstance(metric_value, dict) else None
                     )
                     if not isinstance(component_stats, dict):
                         component_display[component_name] = not_measured
@@ -927,12 +920,8 @@ def write_model_stats_to_file(
         resource_usage_cpu = _value_for(per_device_resource_usage, "cpu", not_measured)
         resource_usage_diff_gpu = _value_for(resource_usage_diff_map, "gpu", not_measured)
         resource_usage_diff_cpu = _value_for(resource_usage_diff_map, "cpu", not_measured)
-        resource_usage_display_gpu = _value_for(
-            resource_usage_display_map, "gpu", not_measured
-        )
-        resource_usage_display_cpu = _value_for(
-            resource_usage_display_map, "cpu", not_measured
-        )
+        resource_usage_display_gpu = _value_for(resource_usage_display_map, "gpu", not_measured)
+        resource_usage_display_cpu = _value_for(resource_usage_display_map, "cpu", not_measured)
     else:
         resource_usage_primary = skipped_text
         resource_usage_diff_primary = skipped_text
@@ -950,9 +939,7 @@ def write_model_stats_to_file(
         default_inference_text = skipped_text
 
     if measure_usage_stats:
-        usage_stats_raw = get_model_usage_stats(
-            model, device=device, n_trials=n_trials, verbose=verbose
-        )
+        usage_stats_raw = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
         per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
         for device_label, stats_payload in per_device_usage_stats.items():
             avg_power_map[device_label] = stats_payload.get("avg_power", not_measured)
@@ -1083,10 +1070,6 @@ def write_model_stats_to_file(
                 text = "Error: Measurement unavailable"
             elif not lowered.startswith("error"):
                 text = f"Error: {text}"
-            if text.lower().startswith("error"):
-                logger_error.error(
-                    f"{label} measurement failed for {device_label.upper()}: {text}"
-                )
             return f"{label}: {text}"
 
         def _metric_line(
@@ -1101,9 +1084,7 @@ def write_model_stats_to_file(
                 lowered = metrics_value.strip().lower()
                 if lowered.startswith("not measured (skipped"):
                     return f"{label}: {metrics_value}"
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metrics_value)
             if not isinstance(metrics_value, dict):
@@ -1116,9 +1097,7 @@ def write_model_stats_to_file(
                 lowered = metric_payload.strip().lower()
                 if lowered.startswith("not measured (skipped"):
                     return f"{label}: {metric_payload}"
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metric_payload)
 
@@ -1148,9 +1127,7 @@ def write_model_stats_to_file(
                 lowered = value.strip().lower()
                 if lowered.startswith("not measured (skipped"):
                     return f"{label}: {value}"
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, value)
             if value is None:
@@ -1178,15 +1155,15 @@ def write_model_stats_to_file(
                 gpu_usage_line = _metric_line(device_label, "gpu_util_percent", "GPU Usage")
                 if gpu_usage_line:
                     file.write(f"    - {gpu_usage_line}\n")
-                gpu_diff_entry = (
-                    diff_entry if isinstance(diff_entry, dict) else {}
-                )
+                gpu_diff_entry = diff_entry if isinstance(diff_entry, dict) else {}
                 gpu_power_line = _scalar_line(
                     device_label,
                     "GPU Power",
-                    gpu_diff_entry.get("gpu_power_w", diff_entry)
-                    if isinstance(diff_entry, dict)
-                    else diff_entry,
+                    (
+                        gpu_diff_entry.get("gpu_power_w", diff_entry)
+                        if isinstance(diff_entry, dict)
+                        else diff_entry
+                    ),
                     unit="W",
                 )
                 if gpu_power_line:
@@ -1195,15 +1172,15 @@ def write_model_stats_to_file(
                 cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                 if cpu_usage_line:
                     file.write(f"    - {cpu_usage_line}\n")
-                cpu_diff_entry = (
-                    diff_entry if isinstance(diff_entry, dict) else {}
-                )
+                cpu_diff_entry = diff_entry if isinstance(diff_entry, dict) else {}
                 cpu_power_line = _scalar_line(
                     device_label,
                     "CPU Power",
-                    cpu_diff_entry.get("cpu_power_rapl_w", diff_entry)
-                    if isinstance(diff_entry, dict)
-                    else diff_entry,
+                    (
+                        cpu_diff_entry.get("cpu_power_rapl_w", diff_entry)
+                        if isinstance(diff_entry, dict)
+                        else diff_entry
+                    ),
                     unit="W",
                 )
                 if cpu_power_line:
@@ -1218,15 +1195,15 @@ def write_model_stats_to_file(
                 cpu_usage_line = _metric_line(device_label, "cpu_util_percent", "CPU Usage")
                 if cpu_usage_line:
                     file.write(f"    - {cpu_usage_line}\n")
-                both_diff_entry = (
-                    diff_entry if isinstance(diff_entry, dict) else {}
-                )
+                both_diff_entry = diff_entry if isinstance(diff_entry, dict) else {}
                 gpu_power_line = _scalar_line(
                     device_label,
                     "GPU Power",
-                    both_diff_entry.get("gpu_power_w", diff_entry)
-                    if isinstance(diff_entry, dict)
-                    else diff_entry,
+                    (
+                        both_diff_entry.get("gpu_power_w", diff_entry)
+                        if isinstance(diff_entry, dict)
+                        else diff_entry
+                    ),
                     unit="W",
                 )
                 if gpu_power_line:
@@ -1234,9 +1211,11 @@ def write_model_stats_to_file(
                 cpu_power_line = _scalar_line(
                     device_label,
                     "CPU Power",
-                    both_diff_entry.get("cpu_power_rapl_w", diff_entry)
-                    if isinstance(diff_entry, dict)
-                    else diff_entry,
+                    (
+                        both_diff_entry.get("cpu_power_rapl_w", diff_entry)
+                        if isinstance(diff_entry, dict)
+                        else diff_entry
+                    ),
                     unit="W",
                 )
                 if cpu_power_line:

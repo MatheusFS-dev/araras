@@ -1,10 +1,14 @@
-from araras.core import *
+from typing import Any, Dict, Optional
 
 import time
 from pathlib import Path
 
 from araras.notifications.email import send_email
 from . import monitoring as _mon
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 class ConsolidatedEmailManager:
@@ -67,8 +71,13 @@ class ConsolidatedEmailManager:
         credentials_exists = Path(self.credentials_file).exists()
 
         if not (recipients_exists and credentials_exists):
-            logger.warning(
-                f"{YELLOW}Email config files not found: {self.recipients_file}, {self.credentials_file}, email alerts disabled{RESET}"
+            vp.logf(
+                vp.color(
+                    f"Email config files not found: {self.recipients_file}, {self.credentials_file}, email alerts disabled",
+                    "yellow",
+                ),
+                log_level="WARNING",
+                tag=vp.gen_tag(),
             )
             return False
 

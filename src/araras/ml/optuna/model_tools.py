@@ -1,7 +1,4 @@
-from araras.core import *
-
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
-from collections import Counter
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union, Callable
 
 import optuna
 import matplotlib.pyplot as plt
@@ -12,7 +9,6 @@ import pandas as pd
 import numpy as np
 import traceback
 import os
-import math
 
 from araras.ml.model.stats import (
     get_flops,
@@ -22,10 +18,13 @@ from araras.ml.model.stats import (
 )
 from araras.ml.model.utils import capture_model_summary, parse_device_spec
 from araras.utils.misc import format_number, format_bytes
-
 from araras.visualization.configs import config_plt
-
 from araras.ml.model.tools import save_model_plot
+from araras.utils.verbose_printer import VerbosePrinter
+from araras.utils.loading_bar import gen_loading_bar
+
+vp = VerbosePrinter()
+
 
 # ———————————————————————————————————————————————————————————————————————————— #
 #                                   Utilities                                  #
@@ -187,9 +186,7 @@ def _resolve_policy_dtypes(model: keras.Model) -> Tuple[int, int, int]:
         default=variable_dtype_bytes,
     )
     gradient_candidates = [compute_dtype_bytes, variable_dtype_bytes]
-    gradient_candidates.append(
-        _dtype_size(tf.keras.backend.floatx(), default=compute_dtype_bytes)
-    )
+    gradient_candidates.append(_dtype_size(tf.keras.backend.floatx(), default=compute_dtype_bytes))
     if policy is not None:
         gradient_candidates.append(
             _dtype_size(getattr(policy, "compute_dtype", None), default=compute_dtype_bytes)
@@ -218,8 +215,10 @@ def _get_optimizer_slot_multiplier(model: keras.Model) -> int:
     """
 
     if not hasattr(model, "optimizer") or model.optimizer is None:
-        logger.warning(
-            "Model has no compiled optimizer; assuming zero optimizer slot tensors."
+        vp.printf(
+            f"Model has no compiled optimizer; assuming zero optimizer slot tensors.",
+            tag="[ARARAS WARNING] ",
+            color="yellow",
         )
         return 0
 
@@ -295,8 +294,6 @@ def _calculate_activation_memory(
     compute_dtype_bytes: int,
     gradient_dtype_bytes: int,
     trainable_params: int,
-    *,
-    verbose: bool = False,
 ) -> int:
     """Estimate activation memory using layer output shapes from the model summary.
 
@@ -307,8 +304,6 @@ def _calculate_activation_memory(
         gradient_dtype_bytes (int): Number of bytes used for gradient tensors.
         trainable_params (int): Count of trainable parameters, used for fallback
             heuristics.
-        verbose (bool): Whether to emit detailed logging for intermediate
-            results.
 
     Returns:
         int: Estimated activation memory in bytes for one training step.
@@ -322,7 +317,6 @@ def _calculate_activation_memory(
         Layers without a static ``output_shape`` trigger a parameter-based
         fallback which may under-estimate the true memory requirements.
     """
-
     per_sample_bytes = 0
     missing_layers: list[str] = []
 
@@ -349,20 +343,7 @@ def _calculate_activation_memory(
         per_sample_bytes += elements * layer_dtype_bytes
 
     if per_sample_bytes == 0:
-        if verbose:
-            if missing_layers:
-                logger.warning(
-                    "Falling back to parameter-based activation estimate; missing output shapes for layers: %s",
-                    ", ".join(sorted(set(missing_layers))),
-                )
-            else:
-                logger.warning(
-                    "Falling back to parameter-based activation estimate; no activation sizes available."
-                )
         return int(trainable_params * gradient_dtype_bytes * 1.5 * batch_size)
-
-    if verbose:
-        logger.info("Activation memory per sample: %s", format_bytes(per_sample_bytes))
 
     return int(per_sample_bytes * batch_size * 2)
 
@@ -385,7 +366,7 @@ def _get_framework_overhead() -> int:
 # ———————————————————————————————————————————————————————————————————————————— #
 
 
-def estimate_training_memory(model: keras.Model, batch_size: int = 32, verbose: int = 0) -> int:
+def estimate_training_memory(model: keras.Model, batch_size: int = 32) -> int:
     """Estimate the training memory footprint for a compiled Keras model.
 
     The estimator inspects the model summary to derive parameter counts, per-layer
@@ -397,15 +378,10 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32, verbose: 
     Args:
         model (keras.Model): The compiled Keras model to analyse.
         batch_size (int): Mini-batch size used for the training step simulation.
-        verbose (int): Controls logging verbosity. ``1`` enables detailed logging
-            through :data:`araras.core.logger`, while ``0`` silences it. Only
-            ``0`` and ``1`` are supported.
 
     Returns:
         int: Estimated peak memory usage in bytes required to train ``model``.
 
-    Raises:
-        ValueError: If ``verbose`` is not ``0`` or ``1``.
 
     Notes:
         The returned value includes model weights, gradient tensors, optimizer
@@ -420,29 +396,7 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32, verbose: 
         information can trigger fallback heuristics that may under-estimate the
         real peak memory usage.
     """
-
-    if verbose not in (0, 1):
-        raise ValueError("verbose must be 0 or 1")
-
-    log_enabled = bool(verbose)
-
-    def _log_info(message: str, *args: Any) -> None:
-        if log_enabled:
-            logger.info(message, *args)
-
-    _log_info(
-        "Estimating training memory for model '%s' with batch size %d.",
-        getattr(model, "name", "<unnamed>"),
-        batch_size,
-    )
-
     variable_dtype_bytes, compute_dtype_bytes, gradient_dtype_bytes = _resolve_policy_dtypes(model)
-    _log_info(
-        "Dtype sizes (variable/compute/gradient): %d / %d / %d bytes",
-        variable_dtype_bytes,
-        compute_dtype_bytes,
-        gradient_dtype_bytes,
-    )
 
     trainable_params, trainable_bytes = _count_params_and_bytes(model.trainable_weights)
     non_trainable_params, non_trainable_bytes = _count_params_and_bytes(model.non_trainable_weights)
@@ -459,29 +413,13 @@ def estimate_training_memory(model: keras.Model, batch_size: int = 32, verbose: 
         compute_dtype_bytes,
         gradient_dtype_bytes,
         trainable_params,
-        verbose=log_enabled,
     )
 
     framework_overhead = _get_framework_overhead()
 
-    total_memory = model_size_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory + framework_overhead
-
-    _log_info(
-        "Trainable params: %s (%s)",
-        format_number(trainable_params),
-        format_bytes(trainable_bytes),
+    total_memory = (
+        model_size_bytes + gradient_bytes + optimizer_slot_bytes + activation_memory + framework_overhead
     )
-    _log_info(
-        "Non-trainable params: %s (%s)",
-        format_number(non_trainable_params),
-        format_bytes(non_trainable_bytes),
-    )
-    _log_info("Model size (weights): %s", format_bytes(model_size_bytes))
-    _log_info("Gradient memory: %s", format_bytes(gradient_bytes))
-    _log_info("Optimizer slots (%d per weight): %s", slot_multiplier, format_bytes(optimizer_slot_bytes))
-    _log_info("Activation memory (batch): %s", format_bytes(activation_memory))
-    _log_info("Framework overhead: %s", format_bytes(framework_overhead))
-    _log_info("Total estimated memory: %s", format_bytes(total_memory))
 
     return int(total_memory)
 
@@ -493,7 +431,7 @@ def prune_model_by_config(
     *,
     bytes_per_param: int = 8,
     batch_size: int = 1,
-    verbose: bool = False,
+    verbose: int = 0,
 ) -> None:
     """Prune the given trial if the model exceeds any configured limits.
 
@@ -514,7 +452,7 @@ def prune_model_by_config(
         thresholds (Dict[str, float]): Mapping of pruning criteria to threshold values.
         bytes_per_param (int): Bytes used to store each parameter when calculating the model size. Defaults to ``8``.
         batch_size (int): Batch size used for memory estimation. Defaults to ``1``.
-        verbose (bool): If True, print stats for the model.
+        verbose (int): If greater than ``0``, print detailed logging through the process.
 
     Raises:
         optuna.TrialPruned: If any threshold is exceeded.
@@ -527,7 +465,8 @@ def prune_model_by_config(
         The memory estimation relies on :func:`estimate_training_memory` and is
         therefore only an approximation.
     """
-    
+    vp.verbose = verbose
+
     # Do nothing if user pass thresholds={}
     if not thresholds:
         return
@@ -535,15 +474,14 @@ def prune_model_by_config(
     metrics = {
         "param": model.count_params(),
         "model_size": model.count_params() * bytes_per_param / (1024 * 1024),
-        "memory_mb": estimate_training_memory(model, batch_size=batch_size)
-        / (1024 * 1024),
+        "memory_mb": estimate_training_memory(model, batch_size=batch_size) / (1024 * 1024),
         "flops": get_flops(model, batch_size=1),
     }
-    
-    if verbose:
-        print(f"\nModel stats for trial {trial.number}:")
+
+    if verbose > 0:
+        vp.printf(f"Model statistics for trial {trial.number}:", tag="[ARARAS INFO] ", color="blue")
         for key, value in metrics.items():
-            print(f"  {key}: {value:.2f}")
+            vp.printf(vp.color(f"  {key}: {value:.2f}", "blue"))
         print()
 
     for key, threshold in thresholds.items():
@@ -551,8 +489,10 @@ def prune_model_by_config(
         if value is None:
             continue
         if value > threshold:
-            logger.warning(
-                f"{YELLOW}Pruning trial {trial.number}: {key} {value:.2f} exceeds {threshold}{RESET}"
+            vp.printf(
+                f"Pruning trial {trial.number}: {key} {value:.2f} exceeds {threshold}",
+                tag="[ARARAS WARNING] ",
+                color="yellow",
             )
             raise optuna.TrialPruned(f"Model exceeded {key} limit")
 
@@ -569,7 +509,7 @@ def plot_model_param_distribution(
     corr_csv_path: Optional[str] = None,
     plot_model_dir: Optional[str] = None,
     show_plot: bool = False,
-    verbose: bool = False,
+    verbose: int = 1,
 ) -> None:
     """Sample random models, plot statistics and optionally save the results.
 
@@ -614,7 +554,7 @@ def plot_model_param_distribution(
             Defaults to ``False``. When ``False`` the figure backend is switched to
             a non-interactive renderer to avoid X11 allocation errors and the plot
             is only saved.
-        verbose (bool): If ``True``, print detailed information during sampling.
+        verbose (int): If greater than ``0``, print detailed information during sampling.
 
     Returns:
         None: This function performs its work for side effects and returns ``None``.
@@ -670,10 +610,11 @@ def plot_model_param_distribution(
 
     progress_iter = range(n_trials)
     if n_trials:
-        progress_iter = white_track(
+        progress_iter = gen_loading_bar(
             progress_iter,
-            description="Sampling trials",
+            description=vp.color("Sampling models", "blue"),
             total=n_trials,
+            bar_color="blue",
         )
 
     # Counters for skipped trials
@@ -699,13 +640,13 @@ def plot_model_param_distribution(
 
             n_params = model.count_params()
             param_counts.append(n_params)
-            
+
             size_mb = (n_params * bytes_per_param) / (1024 * 1024)
             model_sizes_mb.append(size_mb)
 
             for batch in batch_sizes:
-                training_memory_mb = (
-                    estimate_training_memory(model, batch_size=batch, verbose=verbose) / (1024 * 1024)
+                training_memory_mb = estimate_training_memory(model, batch_size=batch, verbose=verbose) / (
+                    1024 * 1024
                 )
                 training_memory_map[batch].append(training_memory_mb)
             collected_params.append(trial.params)
@@ -720,7 +661,9 @@ def plot_model_param_distribution(
                         model_path,
                     )
                 except Exception as e:
-                    logger_error.error(f"{RED} Failed to plot model {trial.number}: {e} {RESET}")
+                    vp.printf(
+                        f"Failed to plot model {trial.number}: {e}", tag="[ARARAS ERROR] ", color="red"
+                    )
                     traceback.print_exc()
 
             study.tell(trial, 0.0)
@@ -798,15 +741,17 @@ def plot_model_param_distribution(
         try:
             plt.show()
         except Exception as exc:
-            print(
+            vp.printf(
                 (
-                    f"{YELLOW}Warning: Unable to display the Optuna search-space plot "
-                    f"due to: {exc}. Common causes include running without an available "
-                    "X11 display, insufficient pixmap memory (e.g., BadAlloc), or using "
-                    "monitor on a headless server. Consider re-running with show_plot="
-                    "False, launching a virtual display (such as Xvfb), or reducing the "
-                    "figure DPI before displaying plots.{RESET}"
-                )
+                    f"Unable to display the Optuna search-space plot due to: {exc}."
+                    " Common causes include running without an available X11 display,"
+                    " insufficient pixmap memory (e.g., BadAlloc), or using monitor on a"
+                    " headless server. Consider re-running with show_plot=False, launching"
+                    " a virtual display (such as Xvfb), or reducing the figure DPI before"
+                    " displaying plots."
+                ),
+                tag="[ARARAS WARNING] ",
+                color="yellow",
             )
             raise
     else:
@@ -847,10 +792,11 @@ def plot_model_param_distribution(
             corr.to_csv(corr_csv_path)
 
     if oom_count:
-        print(f"{RED}Skipped {oom_count} trial(s) due to ResourceExhaustedError.{RESET}")
-        print(f"{RED}Skipped {internal_error_count} trial(s) due to InternalError.{RESET}")
-        print(f"{RED}Skipped {unavailable_count} trial(s) due to UnavailableError.{RESET}")
-        print(f"{RED}Skipped {scratch_error_count} trial(s) due to cuDNN scratch space error.{RESET}")
+        vp.printf(f"Skipped {oom_count} trial(s) due to ResourceExhaustedError.", tag="[ARARAS WARNING] ", color="orange")
+        vp.printf(f"Skipped {internal_error_count} trial(s) due to InternalError.", tag="[ARARAS WARNING] ", color="orange")
+        vp.printf(f"Skipped {unavailable_count} trial(s) due to UnavailableError.", tag="[ARARAS WARNING] ", color="orange")
+        vp.printf(f"Skipped {scratch_error_count} trial(s) due to cuDNN scratch space error.", tag="[ARARAS WARNING] ", color="orange")
+
 
 def set_user_attr_model_stats(
     trial: optuna.Trial,
@@ -951,8 +897,7 @@ def set_user_attr_model_stats(
     if invalid_entries:
         valid_options = ", ".join(supported_stats)
         raise ValueError(
-            "Unsupported statistics requested: "
-            f"{invalid_entries}. Valid options are: {valid_options}."
+            "Unsupported statistics requested: " f"{invalid_entries}. Valid options are: {valid_options}."
         )
 
     measure_parameters = "parameters" in selected_stats
@@ -973,9 +918,7 @@ def set_user_attr_model_stats(
 
     flops: Optional[int] = get_flops(model) if measure_flops else None
     macs: Optional[int] = get_macs(model) if measure_macs else None
-    model_summary = (
-        capture_model_summary(model) if measure_summary else skipped_text
-    )
+    model_summary = capture_model_summary(model) if measure_summary else skipped_text
 
     device_kind, _ = parse_device_spec(device)
     device_mode = device_kind
@@ -1062,11 +1005,7 @@ def set_user_attr_model_stats(
                     display_payload[metric_name] = error_text
                 continue
 
-            aggregation_kind = (
-                metric_value.get("aggregation")
-                if isinstance(metric_value, dict)
-                else "delta"
-            )
+            aggregation_kind = metric_value.get("aggregation") if isinstance(metric_value, dict) else "delta"
             delta_stats = metric_value.get("delta") if isinstance(metric_value, dict) else None
             delta_max = None
             if isinstance(delta_stats, dict):
@@ -1081,17 +1020,13 @@ def set_user_attr_model_stats(
             else:
                 diff_value = delta_max
 
-            diff_payload[metric_name] = (
-                diff_value if diff_value is not None else not_measured
-            )
+            diff_payload[metric_name] = diff_value if diff_value is not None else not_measured
 
             if metric_name in ram_metrics:
                 component_display: Dict[str, str] = {}
                 for component_name in ("before", "during", "delta"):
                     component_stats = (
-                        metric_value.get(component_name)
-                        if isinstance(metric_value, dict)
-                        else None
+                        metric_value.get(component_name) if isinstance(metric_value, dict) else None
                     )
                     if not isinstance(component_stats, dict):
                         component_display[component_name] = not_measured
@@ -1152,9 +1087,7 @@ def set_user_attr_model_stats(
         return not_measured if value is None else value
 
     if measure_usage_stats:
-        usage_stats_raw = get_model_usage_stats(
-            model, device=device, n_trials=n_trials, verbose=verbose
-        )
+        usage_stats_raw = get_model_usage_stats(model, device=device, n_trials=n_trials, verbose=verbose)
         per_device_usage_stats = _normalize_usage_stats(usage_stats_raw)
     else:
         per_device_usage_stats = {}

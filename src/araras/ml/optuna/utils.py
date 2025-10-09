@@ -1,12 +1,16 @@
-from araras.core import *
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, Callable, Sequence
 
 import os, shutil
+import traceback
 import math
 import optuna
 import tensorflow as tf
 from araras.utils.misc import format_number, format_bytes, format_scientific, format_number_commas
 from araras.utils.system import _get_nvidia_smi_data, format_metric_summary_line
 
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 _CONSECUTIVE_OOM_ERRORS = 0
 
@@ -319,7 +323,9 @@ def save_top_k_trials(
         multiple_devices = len(actual_measured) > 1
 
         def _format_failure(device_label: str, label: str, reason: Optional[str]) -> str:
-            if device_label in optional_devices and (reason is None or str(reason).strip().lower() == "not measured"):
+            if device_label in optional_devices and (
+                reason is None or str(reason).strip().lower() == "not measured"
+            ):
                 return f"{label}: Not measured"
 
             text = "Not measured" if reason is None else str(reason)
@@ -328,10 +334,6 @@ def save_top_k_trials(
                 text = "Error: Measurement unavailable"
             elif not lowered.startswith("error"):
                 text = f"Error: {text}"
-            if text.lower().startswith("error"):
-                logger_error.error(
-                    f"{label} measurement failed for {device_label.upper()}: {text}"
-                )
             return f"{label}: {text}"
 
         def _metric_line(
@@ -344,9 +346,7 @@ def save_top_k_trials(
             metrics_value = per_device_resource_usage.get(device_label, "Not measured")
             if isinstance(metrics_value, str):
                 lowered = metrics_value.strip().lower()
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metrics_value)
             if not isinstance(metrics_value, dict):
@@ -357,9 +357,7 @@ def save_top_k_trials(
                 return None
             if isinstance(metric_payload, str):
                 lowered = metric_payload.strip().lower()
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, metric_payload)
 
@@ -367,9 +365,7 @@ def save_top_k_trials(
             during_stats = metric_payload.get("during") if isinstance(metric_payload, dict) else None
             delta_stats = metric_payload.get("delta") if isinstance(metric_payload, dict) else None
             aggregation_kind = (
-                metric_payload.get("aggregation")
-                if isinstance(metric_payload, dict)
-                else "delta"
+                metric_payload.get("aggregation") if isinstance(metric_payload, dict) else "delta"
             )
 
             before_value = None if not isinstance(before_stats, dict) else before_stats.get("max")
@@ -395,9 +391,7 @@ def save_top_k_trials(
         ) -> Optional[str]:
             if isinstance(value, str):
                 lowered = value.strip().lower()
-                if lowered == "not measured" and (
-                    device_label in optional_devices or not multiple_devices
-                ):
+                if lowered == "not measured" and (device_label in optional_devices or not multiple_devices):
                     return f"{label}: Not measured"
                 return _format_failure(device_label, label, value)
             if value is None:
@@ -523,12 +517,9 @@ def save_top_k_trials(
                     return not_measured
                 value = target_stats.get("max")
                 return not_measured if value is None else value
+
             for index, device_label in enumerate(device_order):
                 metrics_value = per_device_resource_usage.get(device_label, "Not measured")
-                if isinstance(metrics_value, str) and metrics_value.lower().startswith("error"):
-                    logger_error.error(
-                        f"Resource usage measurement failed for {device_label.upper()}: {metrics_value}"
-                    )
 
                 device_name = {"gpu": "GPU", "cpu": "CPU"}.get(device_label, device_label.upper())
                 file.write(f"{device_name} Inference:\n")
@@ -775,26 +766,31 @@ def log_trial_error(
         log_file.write(traceback.format_exc())
 
     global _CONSECUTIVE_OOM_ERRORS
-    if isinstance(exc, (tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError)):
+    if isinstance(
+        exc, (tf.errors.ResourceExhaustedError, tf.errors.InternalError, tf.errors.UnavailableError)
+    ):
         _CONSECUTIVE_OOM_ERRORS += 1
     else:
         _CONSECUTIVE_OOM_ERRORS = 0
 
-    if (
-        force_crash_oom is not None
-        and _CONSECUTIVE_OOM_ERRORS >= force_crash_oom
-    ):
-        logger.error(
-            f"{RED}Reached {_CONSECUTIVE_OOM_ERRORS} consecutive OOM errors. Aborting.{RESET}"
+    if force_crash_oom is not None and _CONSECUTIVE_OOM_ERRORS >= force_crash_oom:
+        vp.printf(
+            f"Reached {_CONSECUTIVE_OOM_ERRORS} consecutive OOM errors. Aborting.",
+            tag="[ARARAR ERROR] ",
+            color="red",
         )
-        os.abort() # Crash the process
+        os.abort()  # Crash the process
 
     # Check each prune rule
     for exc_type, msg_substr in prune_on.items():
         if isinstance(exc, exc_type) and (msg_substr is None or msg_substr in str(exc)):
-            logger.warning(
-                f"{YELLOW}Trial {trial.number} failed with {type(exc).__name__}"
-                f"{', message contains '+repr(msg_substr) if msg_substr else ''}. Pruning.{RESET}"
+            vp.printf(
+                (
+                    f"Trial {trial.number} failed with {type(exc).__name__}"
+                    f"{', message contains ' + repr(msg_substr) if msg_substr else ''}. Pruning."
+                ),
+                tag="[ARARAS WARNING] ",
+                color="yellow",
             )
             raise optuna.TrialPruned() from exc
 
@@ -911,9 +907,7 @@ def run_study(
 
         callbacks_list: list[Callable[[optuna.Study, optuna.Trial], None]] = []
         if variance_threshold is not None:
-            callbacks_list.append(
-                ImprovementStagnation(variance_threshold=variance_threshold)
-            )
+            callbacks_list.append(ImprovementStagnation(variance_threshold=variance_threshold))
         if prune_threshold is not None:
             callbacks_list.append(StopIfKeepBeingPruned(threshold=prune_threshold))
         if patience is not None:

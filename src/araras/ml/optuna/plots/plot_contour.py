@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import matplotlib.pyplot as plt
 import optuna
@@ -14,6 +14,10 @@ from araras.ml.optuna.analysis_utils import (
     draw_warning_box,
     save_plot,
 )
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def plot_contour(
@@ -118,7 +122,11 @@ def plot_contour(
                 )
                 fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
             except Exception as e:
-                logger.warning(f"{YELLOW}Error generating contour for {p1} vs {p2}: {e}{RESET}")
+                vp.printf(
+                    f"Error generating contour for {p1} vs {p2}: {e}",
+                    tag="[ARARAS WARNING] ",
+                    color="yellow",
+                )
                 draw_warning_box(ax, f"{e}")
 
         ax.set_xlabel(get_param_display_name(p1), fontsize=PLOT_CFG.label_fs)
@@ -178,8 +186,10 @@ def plot_contour(
                     )
                     fig.colorbar(cf, ax=ax, label=PLOT_CFG.study_value_label)
                 except Exception as e:
-                    logger.warning(
-                        f"{YELLOW}Error generating standalone contour for {p1} vs {p2}: {e}{RESET}"
+                    vp.printf(
+                        f"Error generating standalone contour for {p1} vs {p2}: {e}",
+                        tag="[ARARAS WARNING] ",
+                        color="yellow",
                     )
                     draw_warning_box(ax, f"{e}")
 

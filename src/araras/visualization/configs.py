@@ -1,5 +1,3 @@
-from araras.core import *
-
 import matplotlib.pyplot as plt
 from cycler import cycler
 

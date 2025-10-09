@@ -1,17 +1,24 @@
-from araras.core import *
+from typing import Any, Callable, Optional, Tuple, Union
 
 import numpy as np
+import pandas as pd
+from IPython.display import display
+
+import scipy.sparse as sp
+from sklearn.neighbors import NearestNeighbors
+
+from spektral.utils import convolution
+from spektral.layers import GCNConv, GATConv, ChebConv
+
 import tensorflow as tf
 from tensorflow.keras import layers, initializers
+
 from araras.ml.model.hyperparams import KParams
-from spektral.layers import GCNConv, GATConv, ChebConv
-import scipy.sparse as sp
-from spektral.utils import convolution
-from sklearn.neighbors import NearestNeighbors
-from IPython.display import display
-import pandas as pd
+from araras.utils.verbose_printer import VerbosePrinter
 
 PRINT_ONCE_JIT = True
+
+vp = VerbosePrinter()
 
 
 def print_warning_jit():
@@ -20,7 +27,8 @@ def print_warning_jit():
     if PRINT_ONCE_JIT:
         # warning messages in yellow
         warnings = [
-            "==============================================================",
+            "\n==============================================================",
+            "                   [ARARAS] Build GNN warning                  ",
             "Spektral's GCNConv uses a sparse-dense matmul under the hood.",
             "XLA's GPU JIT compiler does not support that op.",
             "This may cause issues with the GNN layers.",
@@ -28,7 +36,7 @@ def print_warning_jit():
             "Call:",
         ]
         for msg in warnings:
-            print(f"{YELLOW}{msg}{RESET}")
+            print(vp.color(message=msg, color="yellow"))
 
         # commands in orange
         commands = [
@@ -37,8 +45,10 @@ def print_warning_jit():
             "'jit_compile=False'  # pass into model.compile()",
         ]
         for cmd in commands:
-            print(f"{ORANGE}{cmd}{RESET}")
-        print(f"{YELLOW}=============================================================={RESET}")
+            print(vp.color(message=cmd, color="orange"))
+        print(
+            vp.color(message="==============================================================", color="yellow")
+        )
         PRINT_ONCE_JIT = False
 
 
@@ -67,7 +77,13 @@ def discard_tensor_mask(x: tf.Tensor) -> tf.Tensor:
     if hasattr(x, "_keras_mask"):
         try:
             x._keras_mask = None
+            vp.logf("Removed mask from tensor {id(x)}", tag=vp.gen_tag(name="ARARAS", type="simple"))
         except AttributeError:
+            vp.logf(
+                f"Failed to remove mask from tensor {id(x)}",
+                log_level="ERROR",
+                tag=vp.gen_tag(name="ARARAS", type="fileline"),
+            )
             pass
     return x
 
@@ -270,11 +286,17 @@ def _apply_layer_with_retry(
     try:
         return layer(inputs)
     except tf.errors.InvalidArgumentError as exc:
-        logger_error.fatal(
-            f"{RED} Graph conv {name_prefix} hit GPU sparse-dense limit: {exc}{RESET}"
+
+        vp.logf(
+            vp.color(message=f"Graph conv {name_prefix} hit GPU sparse-dense limit: {exc}", color="red"),
+            log_level="ERROR",
+            tag=VerbosePrinter.TAG_ARARAS_FILELINE,
         )
         if retry_on_cpu:
-            logger.info(f"{YELLOW}Retrying {name_prefix} on CPU...{RESET}")
+            vp.logf(
+                vp.color(message=f"Retrying {name_prefix} on CPU...", color="yellow"),
+                tag=VerbosePrinter.TAG_ARARAS_SIMPLE,
+            )
             with tf.device("/CPU:0"):
                 return layer(inputs)
         raise
@@ -369,7 +391,6 @@ def build_gcn(
         name_prefix,
         retry_on_cpu=retry_on_cpu,
     )
-
 
     if use_batch_norm:
         x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)

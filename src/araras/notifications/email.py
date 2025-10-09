@@ -1,9 +1,11 @@
-from araras.core import *
-
 import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def get_credentials(file_path: str) -> tuple[str, str]:
@@ -108,7 +110,7 @@ def send_email(
         message["Subject"] = subject
         message.attach(MIMEText(body, text_type))
     except Exception as e:
-        logger_error.error(f"{RED}[ERROR] {e}{RESET}")
+        vp.logf(vp.color(f"{e}", "red"), log_level="ERROR", tag=vp.gen_tag("fileline"))
         return
 
     try:
@@ -117,6 +119,6 @@ def send_email(
             server.starttls()  # Start TLS encryption
             server.login(sender_email, sender_password)  # Login using credentials
             server.sendmail(sender_email, recipient_emails, message.as_string())  # Send email
-        logger.info("Email sent successfully.")
+        vp.logf(vp.color("Email sent successfully.", "green"), log_level="INFO", tag=vp.gen_tag())
     except Exception as e:
-        logger_error.error(f"{RED}[ERROR] Failed to send email: {e}{RESET}")
+        vp.logf(vp.color(f"Failed to send email: {e}", "red"), log_level="ERROR", tag=vp.gen_tag("fileline"))

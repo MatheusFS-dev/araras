@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import Dict, List, Tuple
 
 import sys
 from pathlib import Path

@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,9 @@ from araras.ml.optuna.analysis_utils import (
 )
 
 from araras.utils.misc import format_scientific
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def plot_optimal_ranges_analysis(
@@ -454,7 +457,7 @@ def plot_optimal_ranges_analysis(
                     plt.close(standalone_fig)
 
             except Exception as e:
-                logger_error.error(f"{RED}Error plotting parameter '{col}': {e}{RESET}")
+                vp.printf(f"Error plotting parameter '{col}': {e}", tag="[ARARAS ERROR] ", color="red")
                 # Create an error plot but still show the parameter
                 ax.text(
                     0.5,

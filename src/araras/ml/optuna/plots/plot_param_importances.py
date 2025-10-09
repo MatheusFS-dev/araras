@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import Dict
 
 import pandas as pd
 import matplotlib.pyplot as plt

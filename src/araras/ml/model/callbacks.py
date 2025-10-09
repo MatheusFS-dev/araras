@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List
 
 import os
 
@@ -13,6 +13,7 @@ def get_callbacks_model(
     early_stopping_patience: int | None = 10,
     reduce_lr_patience: int | None = 5,
     restore_best_weights: bool = True,
+    verbose: int = 1,
 ) -> List[tf.keras.callbacks.Callback]:
     """Return commonly used training callbacks.
 
@@ -45,6 +46,7 @@ def get_callbacks_model(
             ``early_stopping_patience`` is ``None``, ``checkpoint_dir`` **must**
             be provided so the best weights can be reloaded at the end of
             training. Defaults to ``True``.
+        verbose (int): Verbosity mode for keras callbacks.
 
     Returns:
         List[tf.keras.callbacks.Callback]: A list of callbacks to pass into ``model.fit``.
@@ -68,7 +70,7 @@ def get_callbacks_model(
             monitor=monitor,
             patience=early_stopping_patience,
             restore_best_weights=restore_best_weights,
-            verbose=1,
+            verbose=verbose,
         )
         callbacks_list.append(early_stopping)
     elif restore_best_weights:
@@ -84,7 +86,7 @@ def get_callbacks_model(
             patience=reduce_lr_patience,
             factor=0.2,
             min_lr=1e-8,
-            verbose=1,
+            verbose=verbose,
         )
         callbacks_list.append(reduce_lr)
 

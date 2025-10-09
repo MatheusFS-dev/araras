@@ -1,6 +1,7 @@
-from araras.core import *
+from typing import Any, Callable, Optional, Union
 
 from tensorflow.keras import layers, initializers
+
 from araras.ml.model.hyperparams import KParams
 
 

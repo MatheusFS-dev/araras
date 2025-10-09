@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, NamedTuple, Optional, Dict
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -17,7 +17,7 @@ from optuna.terminator.improvement.evaluator import (
 )
 
 from araras.ml.optuna.analyzer import PLOT_CFG
-from araras.ml.optuna.analysis_utils import draw_warning_box, save_plot, save_plotly_html
+from araras.ml.optuna.analysis_utils import draw_warning_box, save_plot
 
 
 PADDING_RATIO_Y = 0.05

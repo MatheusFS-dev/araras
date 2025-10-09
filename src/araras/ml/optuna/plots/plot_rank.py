@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Tuple, Dict
 
 import matplotlib.pyplot as plt
 import matplotlib as mpl

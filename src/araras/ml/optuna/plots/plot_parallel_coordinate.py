@@ -1,14 +1,4 @@
-"""Parallel coordinate visualisations for Optuna studies.
-
-This module exposes :func:`plot_parallel_coordinate`, a convenience wrapper for
-rendering static Matplotlib figures (and optional Plotly dashboards) that show
-parameter interactions across completed trials.
-
-Examples:
-    >>> from araras.ml.optuna.plots.plot_parallel_coordinate import plot_parallel_coordinate
-    >>> plot_parallel_coordinate(study, ["params_learning_rate"], dirs={"figs": "."})
-"""
-from araras.core import *
+from typing import Any, Dict, List, Tuple
 
 import matplotlib.pyplot as plt
 import optuna

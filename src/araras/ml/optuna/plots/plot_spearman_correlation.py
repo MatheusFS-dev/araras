@@ -1,7 +1,6 @@
-from araras.core import *
+from typing import List, Dict
 
 import pandas as pd
-import numpy as np
 import matplotlib.pyplot as plt
 
 from araras.ml.optuna.analyzer import PLOT_CFG
@@ -10,6 +9,10 @@ from araras.ml.optuna.analysis_utils import (
     draw_warning_box,
     save_plot,
 )
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def plot_spearman_correlation(
@@ -118,9 +121,7 @@ def plot_spearman_correlation(
     # Warn about NaN correlations (e.g., caused by constant parameters)
     nan_params = param_loss_corr[param_loss_corr.isna()].index.tolist()
     if nan_params:
-        logger.warning(
-            f"{YELLOW}NaN correlations detected for {nan_params}; skipping them.{RESET}"
-        )
+        vp.printf(f"NaN correlations detected for {nan_params}; skipping them.", tag="[ARARAS WARNING] ", color="yellow")
 
     # Drop NaN correlations so plotting works correctly
     param_loss_corr = param_loss_corr.dropna().sort_values(key=abs, ascending=False)

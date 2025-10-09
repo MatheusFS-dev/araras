@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Optional
 
 import os
 import numpy as np
@@ -8,6 +8,10 @@ import tensorflow as tf
 from optuna.integration import KerasPruningCallback
 from optuna.terminator import BaseImprovementEvaluator, RegretBoundEvaluator
 from optuna.terminator.improvement.evaluator import DEFAULT_MIN_N_TRIALS
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 class ImprovementStagnation:
@@ -36,7 +40,7 @@ class ImprovementStagnation:
         window_size: int = 10,
         variance_threshold: float = 1e-10,
         improvement_evaluator: Optional[BaseImprovementEvaluator] = None,
-        verbose: bool = False,
+        verbose: int = 1,
     ) -> None:
         """Create a new callback instance.
 
@@ -50,7 +54,7 @@ class ImprovementStagnation:
             improvement_evaluator (Optional[BaseImprovementEvaluator]): Custom evaluator used to compute expected
                 improvement. Defaults to :class:`RegretBoundEvaluator` when
                 ``None``.
-            verbose (bool): Whether to log debugging information at each check.
+            verbose (int): Whether to log debugging information at each check.
         """
         if improvement_evaluator is None:
             improvement_evaluator = RegretBoundEvaluator()
@@ -61,6 +65,8 @@ class ImprovementStagnation:
         self._completed_trials: List[optuna.trial.FrozenTrial] = []
         self._improvements: List[float] = []
         self.verbose = verbose
+
+        vp.verbose = self.verbose
 
     @property
     def variance_threshold(self) -> float:
@@ -97,25 +103,29 @@ class ImprovementStagnation:
         self._improvements.append(improvement)
 
         if len(self._completed_trials) < max(self.min_n_trials, self.window_size):
-            if self.verbose:
-                logger.warning(
-                    "[Improvement Stagnation Callback] Not enough trials completed yet to check for stagnation."
-                )
+            vp.printf(
+                f"Not enough trials completed yet to check for stagnation.",
+                tag="[Improvement Stagnation Callback] ",
+                color="yellow",
+            )
             return
 
         recent_improvements = self._improvements[-self.window_size :]
         variance = float(np.var(recent_improvements))
-
-        if self.verbose:
-            logger.warning(
-                f"[Improvement Stagnation Callback] Study {study.study_name} – "
-                f"Variance of recent improvements: {variance:.3e}"
-            )
+        
+        vp.printf(
+            f"Study {study.study_name} – "
+            f"Variance of recent improvements: {variance:.3e}",
+            tag="[Improvement Stagnation Callback] ",
+            color="yellow",
+        )
 
         if variance <= self.variance_threshold:
-            logger.warning(
-                f"\033[33m\n[Improvement Stagnation Callback] Stopping study {study.study_name} due to stagnation "
-                f"(variance={variance:.2e} < threshold={self.variance_threshold:.2e})\033[0m\n"
+            vp.printf(
+                f"\nStopping study {study.study_name} due to stagnation "   
+                f"(variance={variance:.2e} < threshold={self.variance_threshold:.2e})",
+                tag="[Improvement Stagnation Callback] ",
+                color="yellow",
             )
 
             study.stop()
@@ -181,14 +191,14 @@ class StopWhenNoValueImprovement:
             best value.
         min_delta (Any): Minimum absolute improvement required to reset the patience
             counter. Defaults to ``0.0``.
-        verbose (Any): If ``True``, log a warning when the study is stopped.
+        verbose (int): Whether to log a message when stopping the study.
 
     Raises:
         ValueError: If ``patience`` is not positive or ``min_delta`` is negative.
     """
 
     def __init__(
-        self, patience: int, min_delta: float = 0.0, verbose: bool = False
+        self, patience: int, min_delta: float = 0.0, verbose: int = 0
     ) -> None:
         if patience <= 0:
             raise ValueError("patience must be positive")
@@ -228,11 +238,12 @@ class StopWhenNoValueImprovement:
             self._counter += 1
 
         if self._counter >= self.patience:
-            if self.verbose:
-                logger.warning(
-                    f"[No Value Improvement Callback] Stopping study {study.study_name} after "
-                    f"{self.patience} trials without improvement"
-                )
+            vp.printf(
+                f"Stopping study {study.study_name} after "
+                f"{self.patience} trials without improvement",
+                tag="[No Value Improvement Callback] ",
+                color="yellow",
+            )
             study.stop()
 
 
@@ -283,6 +294,7 @@ def get_callbacks_study(
     early_stopping_patience: int | None = 5,
     reduce_lr_patience: int | None = 3,
     pruning_interval: int | None = 5,
+    verbose: int = 0,
 ) -> List[tf.keras.callbacks.Callback]:
     """Return Optuna-specific training callbacks.
 
@@ -313,6 +325,7 @@ def get_callbacks_study(
         pruning_interval (int | None): Frequency (in epochs) at which the
             ``KerasPruningCallback`` checks the monitored metric. Set to ``None``
             to disable pruning. Defaults to ``3``.
+        verbose (int): Verbosity level for logging within callbacks.
 
     Returns:
         List[tf.keras.callbacks.Callback]: A list of callbacks to pass into ``model.fit``.
@@ -328,7 +341,7 @@ def get_callbacks_study(
             monitor=monitor,
             patience=early_stopping_patience,
             restore_best_weights=True,
-            verbose=0,
+            verbose=verbose,
         )
         callbacks_list.append(early_stopping)
 
@@ -338,7 +351,7 @@ def get_callbacks_study(
             patience=reduce_lr_patience,
             factor=0.2,
             min_lr=1e-10,
-            verbose=0,
+            verbose=verbose,
         )
         callbacks_list.append(reduce_lr)
 

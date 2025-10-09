@@ -1,43 +1,16 @@
-"""Resource monitoring utilities.
-
-This module provides a lightweight :class:`ResourceMonitor` that samples CPU,
-memory, and GPU metrics before and during the execution of an arbitrary
-callable.  Metrics are configured with aggregation policies describing whether
-to return peak utilisation values or peak deltas relative to the baseline.
-
-The monitor is intentionally synchronous: callers instantiate
-``ResourceMonitor`` with the desired metrics and then invoke
-``run_and_measure`` with the workload to execute.  Internally, the monitor
-collects baseline samples, launches a background sampler thread while the
-workload runs, performs a final sampling pass, and returns aggregated
-statistics for each metric.
-
-Notes:
-    * CPU metrics rely on :mod:`psutil`.
-    * GPU metrics use :mod:`pynvml` when available and gracefully fall back to
-      ``nvidia-smi``.
-    * CPU power measurements require Intel RAPL support and, in most
-      environments, elevated privileges.
-
-Warnings:
-    This module assumes Linux-style filesystem interfaces for RAPL and NVIDIA
-    drivers.  Non-Linux or non-NVIDIA systems may return ``None`` for the
-    corresponding metrics.
-"""
-
-from __future__ import annotations
+from typing import Any, Callable, Dict, Literal, Optional
 
 import subprocess
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Optional
 
 import psutil
 import pynvml
 
-from araras.core import logger as _logger
-from araras.core import logger_error as _error_logger
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 Aggregation = Literal["delta", "peak"]
 
@@ -45,19 +18,19 @@ Aggregation = Literal["delta", "peak"]
 def logger_info(message: str) -> None:
     """Emit an informational log message using the global logger."""
 
-    _logger.info(message)
+    vp.printf(message, tag="[ARARAS INFO] ", color="blue")
 
 
 def logger_warning(message: str) -> None:
     """Emit a warning log message using the global logger."""
 
-    _logger.warning(message)
+    vp.printf(message, tag="[ARARAS WARNING] ", color="yellow")
 
 
 def logger_error(message: str) -> None:
     """Emit an error log message using the global error logger."""
 
-    _error_logger.error(message)
+    vp.printf(message, tag="[ARARAS ERROR] ", color="red")
 
 
 _UNAVAILABLE_WARNINGS: set[str] = set()

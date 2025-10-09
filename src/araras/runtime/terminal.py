@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List
 
 import platform
 import subprocess

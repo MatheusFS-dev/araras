@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Optional, Set, Tuple
 
 import os
 import psutil
@@ -53,8 +53,6 @@ class ChildProcessCleanup:
 
             if not targets:
                 return 0, 0
-
-            logger.info(f"Cleaning up {len(targets)} child processes")
 
             # Phase 1: Graceful termination with parallel execution
             terminated_count = self._terminate_processes(targets)

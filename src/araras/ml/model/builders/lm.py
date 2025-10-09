@@ -1,8 +1,7 @@
-"""Transformer language-model building block."""
-
-from araras.core import *
+from typing import Any, Callable, Optional, Union
 
 import optuna
+
 import tensorflow as tf
 from tensorflow.keras import layers, initializers
 

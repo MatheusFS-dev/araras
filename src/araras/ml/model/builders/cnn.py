@@ -1,13 +1,18 @@
-from araras.core import * 
+from typing import Any, Callable, Optional, Sequence, Union, Tuple
+
+import os
+import csv
+import pandas as pd
+from itertools import product
+import matplotlib.pyplot as plt
 
 from tensorflow.keras import layers, initializers
+
 from araras.ml.model.hyperparams import KParams
-import math
-import csv
-from itertools import product
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
+from araras.utils.loading_bar import gen_loading_bar
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def build_cnn1d(
@@ -229,7 +234,7 @@ def generate_conv1d_pool_table(
     conv_dilation: int = 1,
     pool_stride: Optional[int] = None,
     csv_path: Optional[str] = None,
-    verbose: bool = True,
+    verbosity: int = 1,
     plot: bool = False,
     plot_dir: Optional[str] = None,
 ) -> pd.DataFrame:
@@ -264,7 +269,7 @@ def generate_conv1d_pool_table(
             ``pool_size``.
         csv_path (Optional[str]): Optional path to stream the table to CSV. When ``None`` the
             table is returned as a :class:`pandas.DataFrame`.
-        verbose (bool): Display a progress bar while generating combinations.
+        verbosity (int): Verbosity level. 0 disables output, 1 or higher enables it.
         plot (bool): Whether to generate histograms for each layer's final length.
         plot_dir (Optional[str]): Directory in which to save the histogram PNG files. If ``None``
             the plots are saved in the current working directory with default
@@ -297,13 +302,16 @@ def generate_conv1d_pool_table(
 
     total = (len(kernel_sizes) * len(pool_sizes) * len(filters)) ** n_layers
     combo_iter = product(kernel_sizes, pool_sizes, filters, repeat=n_layers)
+
+    print() # Break line before loading bar
     iterator = (
-        white_track(
+        gen_loading_bar(
             combo_iter,
-            description="Enumerating CNN combos",
+            description=vp.color("Generating CNN combos", "blue"),
             total=total,
+            bar_color="blue",
         )
-        if verbose
+        if verbosity > 0
         else combo_iter
     )
 

@@ -1,5 +1,3 @@
-from araras.core import *
-
 from typing import Literal, Optional, Tuple
 
 

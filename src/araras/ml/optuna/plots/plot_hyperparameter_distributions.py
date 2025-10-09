@@ -1,4 +1,4 @@
-from araras.core import *
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,10 @@ from araras.ml.optuna.analysis_utils import (
     draw_warning_box,
     save_plot,
 )
+
+from araras.utils.verbose_printer import VerbosePrinter
+
+vp = VerbosePrinter()
 
 
 def plot_hyperparameter_distributions(
@@ -130,11 +134,10 @@ def plot_hyperparameter_distributions(
                 else:
                     raise ValueError("insufficient unique values")
             except ValueError:
-                logger.warning(
-                    f"{YELLOW}Insufficient unique values for KDE estimation in {col}{RESET}"
-                )
+                vp.printf(f"Insufficient unique values for KDE estimation in {col}", tag="[ARARAS WARNING] ", color="yellow")
+
             except Exception as e:
-                logger.warning(f"{YELLOW}Error generating KDE for {col}: {e}{RESET}")
+                vp.printf(f"Error generating KDE for {col}: {e}", tag="[ARARAS WARNING] ", color="yellow")
 
             # Main histogram
             n, bins, patches = ax.hist(
