@@ -11,17 +11,18 @@ class VerbosePrinter:
         verbose (int): Global verbosity. 0 disables all output, 1 or higher enables it.
     """
 
+    # Stable xterm-256 colors (avoid theme remaps of 0–15)
     _COLORS = {
-        "black": "\x1b[30m",
-        "red": "\x1b[31m",
-        "green": "\x1b[32m",
-        "yellow": "\x1b[33m",
-        "blue": "\x1b[34m",
-        "magenta": "\x1b[35m",
-        "cyan": "\x1b[36m",
-        "white": "\x1b[37m",
-        "orange": "\x1b[38;5;208m",  # 256-color extension
-        "reset": "\x1b[0m",
+        "black":   "\x1b[38;5;16m",
+        "red":     "\x1b[38;5;196m",
+        "green":   "\x1b[38;5;46m",
+        "yellow":  "\x1b[38;5;226m",
+        "blue":    "\x1b[38;5;27m",   # vivid blue
+        "magenta": "\x1b[38;5;201m",
+        "cyan":    "\x1b[38;5;51m",
+        "white":   "\x1b[38;5;231m",
+        "orange":  "\x1b[38;5;208m",
+        "reset":   "\x1b[0m",
     }
 
     _STYLES = {
