@@ -1,0 +1,737 @@
+
+from collections.abc import Callable, Sequence
+import itertools
+
+import optuna
+
+import tensorflow as tf
+from tensorflow.keras import layers
+
+
+def base_name(t: tf.Tensor) -> str:
+    """Return the base name of a tensor without TensorFlow suffixes.
+
+    The ``name`` attribute of a :class:`tf.Tensor` includes information about
+    the operation that produced it and an output suffix (e.g., ``":0"``). This
+    helper strips everything after the first slash to recover the original
+    layer name.
+
+    Args:
+        t (tf.Tensor): Tensor whose name is to be simplified.
+
+    Returns:
+        str: The portion of ``t.name`` before the first ``"/"``.
+
+    Raises:
+        ValueError: If ``t`` does not have a valid ``name`` attribute.
+    """
+
+    # 1) If it’s a Keras tensor, grab its originating layer
+    history = getattr(t, "_keras_history", None)
+    if history is not None:
+        layer = history[0]  # (layer, node_index, tensor_index)
+        return layer.name
+
+    # 2) Fallback: strip any TF op suffixes
+    name = t.name  # e.g. "foo_layer/BiasAdd:0"
+    if "/" in name:
+        name = name.split("/", 1)[0]  # -> "foo_layer"
+    if ":" in name:
+        name = name.split(":", 1)[0]  # -> strip ":0"
+    return name
+
+
+def _unique_name(base: str) -> str:
+    """Create a globally unique Keras layer name.
+
+    Notes:
+        Utilizes :func:`tf.keras.backend.get_uid` to append an index that
+        guarantees uniqueness, even when the same ``base`` is provided across
+        multiple calls or models.
+
+    Args:
+        base (str): Suggested base string for the layer name.
+
+    Returns:
+        str: A unique layer name derived from ``base``.
+
+    Raises:
+        ValueError: If ``base`` is empty.
+    """
+
+    if not base:
+        raise ValueError("base must be a non-empty string.")
+    return f"{base}_{tf.keras.backend.get_uid(base)}"
+
+
+def _resize_1d(x: tf.Tensor, length: int, name: str) -> tf.Tensor:
+    """Resize a 1D tensor to a specific length using nearest interpolation.
+
+    This helper expands the tensor along a spatial axis, applies
+    nearest-neighbor resizing, and then removes the added axis.
+
+    Notes:
+        A :class:`~keras.layers.Lambda` layer with an explicit ``output_shape``
+        is used to avoid deserialization issues.
+
+    Warnings:
+        Setting ``length`` to excessively large values may lead to
+        considerable memory consumption.
+
+    Args:
+        x (tf.Tensor): Input tensor of shape ``(batch, length, channels)``.
+        length (int): Target temporal length.
+        name (str): Base name for the generated :class:`~keras.layers.Lambda` layer.
+
+    Returns:
+        tf.Tensor: Tensor resized along the temporal axis with shape
+        ``(batch, length, channels)``.
+
+    Raises:
+        ValueError: If ``length`` is not a positive integer.
+    """
+
+    if length <= 0:
+        raise ValueError("length must be a positive integer.")
+
+    def _func(t: tf.Tensor) -> tf.Tensor:
+        t = tf.expand_dims(t, axis=2)
+        t = tf.image.resize(t, (length, 1), method="nearest")
+        return tf.squeeze(t, axis=2)
+
+    return layers.Lambda(
+        _func,
+        #! Lambda has deserialization issues, so providing the output shape is necessary
+        output_shape=(length, x.shape[-1]),
+        name=name,
+    )(x)
+
+
+def _resize_2d(x: tf.Tensor, size: tuple[int, int], name: str) -> tf.Tensor:
+    """Resize a 2D tensor to a specific spatial size using nearest interpolation.
+
+    The tensor is resized using nearest-neighbor interpolation.
+
+    Notes:
+        Employs a :class:`~keras.layers.Lambda` layer with an explicit
+        ``output_shape`` to prevent deserialization problems.
+
+    Warnings:
+        Very large ``size`` values can cause high memory usage.
+
+    Args:
+        x (tf.Tensor): Input tensor of shape ``(batch, height, width, channels)``.
+        size (tuple[int, int]): Tuple ``(height, width)`` indicating the target spatial dimensions.
+        name (str): Base name for the generated :class:`~keras.layers.Lambda` layer.
+
+    Returns:
+        tf.Tensor: Tensor resized along the spatial axes with shape
+        ``(batch, height, width, channels)``.
+
+    Raises:
+        ValueError: If any dimension in ``size`` is not a positive integer.
+    """
+
+    if any(d <= 0 for d in size):
+        raise ValueError("size dimensions must be positive integers.")
+
+    def _func(t: tf.Tensor) -> tf.Tensor:
+        return tf.image.resize(t, size, method="nearest")
+
+    return layers.Lambda(
+        _func,
+        #! Lambda has deserialization issues, so providing the output shape is necessary
+        output_shape=(size[0], size[1], x.shape[-1]),
+        name=name,
+    )(x)
+
+
+def _needs_projection(
+    source: tf.Tensor,
+    target: tf.Tensor,
+    merge_mode: str,
+    axis_to_concat: int,
+) -> bool:
+    """Determine whether a source tensor must be projected to match a target.
+
+    The decision depends on the merge strategy. For ``"add"`` the entire shape
+    must match. For ``"concat"`` only the dimensions other than
+    ``axis_to_concat`` are compared.
+
+    Notes:
+        The function accepts both tensors and raw shape tuples. Shapes may contain
+        ``None`` for unknown dimensions and are normalized via
+        :class:`tf.TensorShape` for safe comparison.
+
+    Args:
+        source (tf.Tensor): Tensor or shape tuple proposed as the skip source.
+        target (tf.Tensor): Tensor or shape tuple receiving the skip connection.
+        merge_mode (str): Either ``"add"`` or ``"concat"``.
+        axis_to_concat (int): Axis along which concatenation occurs when
+            ``merge_mode`` is ``"concat"``.
+
+    Returns:
+        bool: ``True`` if projection is required, ``False`` otherwise.
+
+    Raises:
+        ValueError: If ``merge_mode`` is neither ``"add"`` nor ``"concat"``.
+    """
+
+    if merge_mode not in {"concat", "add"}:
+        raise ValueError("merge_mode must be 'add' or 'concat'.")
+
+    src_shape = tf.TensorShape(getattr(source, "shape", source)).as_list()
+    tgt_shape = tf.TensorShape(getattr(target, "shape", target)).as_list()
+
+    if merge_mode == "concat":
+        if len(src_shape) != len(tgt_shape):
+            return True
+        axis = axis_to_concat % len(tgt_shape)
+        for idx, (s_dim, t_dim) in enumerate(zip(src_shape, tgt_shape)):
+            if idx == axis:
+                continue
+            if s_dim != t_dim:
+                return True
+        return False
+
+    return src_shape != tgt_shape
+
+
+def _project_conv1d(
+    source: tf.Tensor,
+    target: tf.Tensor,
+    use_batch_norm: bool,
+    name: str,
+) -> tf.Tensor:
+    """Project a source 1-D tensor so it matches a target tensor.
+
+    The function applies a ``Conv1D`` with kernel size ``1`` to adjust the
+    channel dimension and optionally downsamples the temporal axis. When the
+    output length still differs from ``target`` a resize operation is applied.
+
+    Args:
+        source (tf.Tensor): Tensor with shape ``(batch, length, channels)``.
+        target (tf.Tensor): Tensor whose shape provides the desired length and channels.
+        use_batch_norm (bool): Whether to include a batch-normalization layer after the
+            convolution.
+        name (str): Base name used for created layers.
+
+    Returns:
+        tf.Tensor: The projected tensor that has the same shape as ``target``.
+    """
+
+    len_tgt = target.shape[1]
+    channels_tgt = target.shape[2]
+    stride = 1
+    len_src = source.shape[1]
+    if len_src is not None and len_tgt is not None and len_src >= len_tgt and len_src % len_tgt == 0:
+        stride = len_src // len_tgt
+
+    x = layers.Conv1D(
+        channels_tgt,
+        kernel_size=1,
+        strides=stride,
+        padding="same",
+        name=f"{name}_proj_conv",
+    )(source)
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name}_bn")(x)
+
+    if len_tgt is not None and x.shape[1] is not None and x.shape[1] != len_tgt:
+        x = _resize_1d(x, len_tgt, name=f"{name}_resize")
+
+    return x
+
+
+def _project_conv2d(
+    source: tf.Tensor,
+    target: tf.Tensor,
+    use_batch_norm: bool,
+    name: str,
+) -> tf.Tensor:
+    """Project a source 2-D tensor so it matches a target tensor.
+
+    The function applies a ``Conv2D`` with kernel size ``1`` to adjust the
+    channel dimension and optionally downsamples spatial axes. When the output
+    size still differs from ``target``, a resize operation is applied.
+
+    Args:
+        source (tf.Tensor): Tensor with shape ``(batch, height, width, channels)``.
+        target (tf.Tensor): Tensor providing the desired spatial dimensions and channels.
+        use_batch_norm (bool): Whether to include batch normalization after the
+            convolution.
+        name (str): Base name used for created layers.
+
+    Returns:
+        tf.Tensor: The projected tensor that has the same shape as ``target``.
+    """
+
+    h_tgt, w_tgt = target.shape[1], target.shape[2]
+    channels_tgt = target.shape[3]
+    stride_h = stride_w = 1
+    h_src, w_src = source.shape[1], source.shape[2]
+    if h_src is not None and h_tgt is not None and h_src >= h_tgt and h_src % h_tgt == 0:
+        stride_h = h_src // h_tgt
+    if w_src is not None and w_tgt is not None and w_src >= w_tgt and w_src % w_tgt == 0:
+        stride_w = w_src // w_tgt
+
+    x = layers.Conv2D(
+        channels_tgt,
+        kernel_size=1,
+        strides=(stride_h, stride_w),
+        padding="same",
+        name=f"{name}_proj_conv",
+    )(source)
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name}_bn")(x)
+
+    if (h_tgt is not None and x.shape[1] is not None and x.shape[1] != h_tgt) or (
+        w_tgt is not None and x.shape[2] is not None and x.shape[2] != w_tgt
+    ):
+        x = _resize_2d(x, (h_tgt, w_tgt), name=f"{name}_resize")
+
+    return x
+
+
+def _project_dense(
+    source: tf.Tensor,
+    target: tf.Tensor,
+    use_batch_norm: bool,
+    name: str,
+) -> tf.Tensor:
+    """Project a tensor along its last axis to match a target's features.
+
+    Notes:
+        This function is compatible with tensors of rank ≥2. It applies a
+        :class:`~keras.layers.Dense` layer to adjust the feature dimension while
+        keeping all other dimensions intact. When ``use_batch_norm`` is ``True``
+        a :class:`~keras.layers.BatchNormalization` layer is appended.
+
+    Args:
+        source (tf.Tensor): Input tensor whose last dimension will be projected.
+        target (tf.Tensor): Tensor providing the desired feature dimension.
+        use_batch_norm (bool): Apply batch normalization after the dense layer when
+            set to ``True``.
+        name (str): Base name used for created layers.
+
+    Returns:
+        tf.Tensor: Tensor with its last dimension matching that of ``target``.
+    """
+
+    units = target.shape[-1]
+    x = layers.Dense(units, name=f"{name}_proj_dense")(source)
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name}_bn")(x)
+
+    return x
+
+
+def _validate_tensor_ranks(
+    layers_list: Sequence[tf.Tensor], expected_rank: int, func_name: str
+) -> None:
+    """Ensure every tensor has the expected rank.
+
+    Args:
+        layers_list (Sequence[tf.Tensor]): Sequence of tensors to validate.
+        expected_rank (int): Required tensor rank.
+        func_name (str): Name of the caller function for error messages.
+
+    Raises:
+        ValueError: If any tensor does not have ``expected_rank`` dimensions.
+    """
+
+    for idx, tensor in enumerate(layers_list):
+        rank = len(tensor.shape)
+        if rank != expected_rank:
+            layer_name = getattr(tensor, "name", f"layers_list[{idx}]")
+            raise ValueError(
+                f"{func_name} supports only {expected_rank}-D tensors; "
+                f"tensor at index {idx} ({layer_name}) has rank {rank} and shape {tensor.shape}. "
+                f"Check preceding layers to ensure they output {expected_rank}-D tensors."
+            )
+
+
+def _trial_skip_connections_projected(
+    trial: optuna.trial.Trial,
+    layers_list: Sequence[tf.Tensor],
+    project: Callable[[tf.Tensor, tf.Tensor, str], tf.Tensor],
+    *,
+    axis_to_concat: int = -1,
+    verbose: int = 1,
+    strategy: str = "any",
+    merge_mode: str = "add",
+    name_prefix: str = "skip",
+    nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
+) -> tf.Tensor:
+    """Generic skip connections that project mismatched tensors.
+
+    Each :class:`~keras.layers.Add` or :class:`~keras.layers.Concatenate` layer
+    receives the name ``"skip_from_{source}_to_{target}"`` to clearly indicate
+    the connected pair. Auxiliary layers created by ``project`` maintain unique
+    names derived from ``name_prefix``. Projection, controlled by
+    ``projection_mode``, is only applied to source tensors and only when their
+    shapes differ from the target (respecting ``axis_to_concat`` in
+    concatenation mode).
+
+    Args:
+        trial (optuna.trial.Trial): Optuna trial for selecting which skips are active.
+        layers_list (Sequence[tf.Tensor]): Sequence of tensors to connect.
+        project (Callable[[tf.Tensor, tf.Tensor, str], tf.Tensor]): Callable used to adapt a source tensor to a target tensor.
+        axis_to_concat (int): Axis for concatenation when ``merge_mode`` is ``"concat"``.
+        verbose (int): Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
+        strategy (str): ``"final"`` to only skip to the final layer or ``"any"`` for all
+            forward pairs. Defaults to ``"any"``.
+        merge_mode (str): ``"add"`` or ``"concat"``.
+        name_prefix (str): Prefix for layers created by ``project``.
+        nickname (Sequence[str] | None): Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and will be used in naming skip
+            connections instead of inferring names from tensors.
+        projection_mode (str): How to align source and target tensors. ``"conv"``
+            applies ``project`` to adjust channel/feature dimensions.
+            ``"resize"`` skips the projection callable and only resizes spatial
+            or temporal dimensions. Incompatible with ``merge_mode='add'``.
+
+    Returns:
+        tf.Tensor: Tensor after applying the selected skip connections.
+
+    Raises:
+        ValueError: If ``verbose`` not in ``{0, 1, 2}``, if ``strategy`` or
+            ``merge_mode`` are invalid, if ``projection_mode`` is unsupported,
+            if ``merge_mode='add'`` with ``projection_mode='resize'`` is used,
+            or if ``nickname`` is provided with a length different from
+            ``layers_list``.
+    """
+
+    if verbose not in {0, 1, 2}:
+        raise ValueError("verbose must be 0, 1, or 2.")
+
+    if merge_mode == "add" and projection_mode == "resize":
+        raise ValueError(
+            "merge_mode='add' requires channel projection; 'resize' mode is incompatible"
+        )
+
+    if projection_mode not in {"conv", "resize"}:
+        raise ValueError("projection_mode must be 'conv' or 'resize'.")
+
+    N = len(layers_list)
+    if N < 2:
+        return layers_list[-1]
+
+    last_idx = N - 1
+
+    if nickname is not None:
+        if len(nickname) != N:
+            raise ValueError("nickname must have the same length as layers_list.")
+        names = list(nickname)
+    else:
+        names = [base_name(t) for t in layers_list]
+
+    if strategy == "any":
+        pairs = [(i, j) for i in range(N) for j in range(i + 1, N)]
+    elif strategy == "final":
+        pairs = [(i, last_idx) for i in range(last_idx)]
+    else:
+        raise ValueError(f"Unknown strategy '{strategy}'. Use 'final' or 'any'.")
+
+    num_skips = len(pairs)
+    if verbose > 0:
+        print("=" * 50)
+        print(f"Total skip possibilities: {2**num_skips}")
+        if verbose > 1:
+            for combo in itertools.product([False, True], repeat=num_skips):
+                settings = {
+                    f"skip_from_{names[i]}_to_{names[j]}": val
+                    for (i, j), val in zip(pairs, combo)
+                }
+                print(settings)
+        print("=" * 50)
+
+    if merge_mode not in ("concat", "add"):
+        raise ValueError(f"Unknown merge_mode '{merge_mode}'. Use 'concat' or 'add'.")
+
+    if projection_mode == "conv":
+        project_fn = project
+    else:
+        def project_fn(src: tf.Tensor, tgt: tf.Tensor, name: str) -> tf.Tensor:
+            rank = len(src.shape)
+            if rank == 3 and len(tgt.shape) == 3:
+                length = tgt.shape[1]
+                if length is None:
+                    raise ValueError(
+                        "Target temporal dimension must be known for resize projection."
+                    )
+                return _resize_1d(src, length, name=f"{name}_resize")
+            if rank == 4 and len(tgt.shape) == 4:
+                h, w = tgt.shape[1], tgt.shape[2]
+                if h is None or w is None:
+                    raise ValueError(
+                        "Target spatial dimensions must be known for resize projection."
+                    )
+                size = (h, w)
+                return _resize_2d(src, size, name=f"{name}_resize")
+            raise ValueError(
+                "projection_mode='resize' supports only 3-D or 4-D tensors."
+            )
+
+    if strategy == "final":
+        target = layers_list[-1]
+        for i in range(last_idx):
+            include = trial.suggest_categorical(
+                f"skip_from_{names[i]}_to_{names[last_idx]}", [False, True]
+            )
+            if include:
+                skip_name = f"skip_from_{names[i]}_to_{names[last_idx]}"
+                proj_name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[last_idx]}"
+                )
+                src = layers_list[i]
+                if _needs_projection(src, target, merge_mode, axis_to_concat):
+                    src = project_fn(src, target, proj_name)
+                if merge_mode == "concat":
+                    target = layers.Concatenate(axis=axis_to_concat, name=skip_name)([src, target])
+                else:
+                    target = layers.Add(name=skip_name)([src, target])
+        return target
+
+    updated = list(layers_list)
+    for j in range(1, N):
+        target = updated[j]
+        for i in range(j):
+            include = trial.suggest_categorical(
+                f"skip_from_{names[i]}_to_{names[j]}", [False, True]
+            )
+            if include:
+                skip_name = f"skip_from_{names[i]}_to_{names[j]}"
+                proj_name = _unique_name(
+                    f"{name_prefix}_from_{names[i]}_to_{names[j]}"
+                )
+                src = updated[i]
+                if _needs_projection(src, target, merge_mode, axis_to_concat):
+                    src = project_fn(src, target, proj_name)
+                if merge_mode == "concat":
+                    if verbose > 1:
+                        print(
+                            f"Concatenating sources for {skip_name}: {[s.shape for s in [src, target]]}"
+                        )
+                    target = layers.Concatenate(
+                        axis=axis_to_concat, name=skip_name
+                    )([src, target])
+                else:
+                    target = layers.Add(name=skip_name)([src, target])
+        updated[j] = target
+
+    return updated[-1]
+
+
+def trial_skip_3d_tensors(
+    trial: optuna.trial.Trial,
+    layers_list: Sequence[tf.Tensor],
+    axis_to_concat: int = -1,
+    use_batch_norm: bool = False,
+    verbose: int = 1,
+    strategy: str = "any",
+    merge_mode: str = "add",
+    name_prefix: str = "skip",
+    nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
+) -> tf.Tensor:
+    """Apply projected skips for 3D tensors.
+
+    Notes:
+        Only tensors with shape ``(batch, features, channels)`` are supported.
+        Although only a subset of layers is provided via ``layers_list``,
+        upstream layers with incompatible ranks may propagate invalid tensors
+        that trigger an early ``ValueError``. The projection branch uses
+        ``Conv1D(1)`` layers when ``projection_mode='conv'`` to adjust channels
+        and, when possible, the temporal dimension. With
+        ``projection_mode='resize'`` only the temporal dimension is resized and
+        channel counts remain untouched.
+
+    Args:
+        trial (optuna.trial.Trial): Optuna trial for selecting which skips to include.
+        layers_list (Sequence[tf.Tensor]): Sequence of tensors from 1-D convolutional layers.
+        axis_to_concat (int): Axis used for concatenation when ``merge_mode`` is
+            ``"concat"``.
+        use_batch_norm (bool): Apply batch normalization in the projection branch.
+        verbose (int): Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
+        strategy (str): ``"final"`` or ``"any"`` to select candidate skip pairs.
+        merge_mode (str): ``"add"`` or ``"concat"``.
+        name_prefix (str): Prefix for projection layer names. Defaults to
+            ``"skip"``.
+        nickname (Sequence[str] | None): Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and overrides automatic name
+            inference.
+        projection_mode (str): ``"conv"`` uses ``Conv1D(1)`` to match channel
+            counts. ``"resize"`` only resizes the temporal dimension and keeps
+            channels unchanged. ``merge_mode='add'`` requires ``"conv"``.
+
+    Returns:
+        tf.Tensor: The merged output tensor after applying the selected skip connections.
+
+    Raises:
+        ValueError: If any tensor in ``layers_list`` is not 3-D, if ``verbose``
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
+            invalid, if ``projection_mode`` is unsupported, or if ``nickname``
+            is provided with a length mismatch.
+    """
+
+    _validate_tensor_ranks(layers_list, 3, "trial_skip_3d_tensors")
+
+    return _trial_skip_connections_projected(
+        trial=trial,
+        layers_list=layers_list,
+        project=lambda s, t, name: _project_conv1d(s, t, use_batch_norm, name),
+        axis_to_concat=axis_to_concat,
+        verbose=verbose,
+        strategy=strategy,
+        merge_mode=merge_mode,
+        name_prefix=name_prefix,
+        nickname=nickname,
+        projection_mode=projection_mode,
+    )
+
+
+def trial_skip_2d_tensors(
+    trial: optuna.trial.Trial,
+    layers_list: Sequence[tf.Tensor],
+    axis_to_concat: int = -1,
+    use_batch_norm: bool = False,
+    verbose: int = 1,
+    strategy: str = "any",
+    merge_mode: str = "add",
+    name_prefix: str = "skip",
+    nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
+) -> tf.Tensor:
+    """Skip connections for 2D tensors with feature projection.
+
+    Notes:
+        Only tensors with shape ``(batch, features)`` are supported. Although
+        only a subset of layers is passed through ``layers_list``, preceding
+        layers emitting tensors of other ranks may lead to an early
+        ``ValueError``. A :class:`~keras.layers.Dense` layer projects the
+        source tensor's features when ``projection_mode='conv'``. With
+        ``projection_mode='resize'`` no feature projection occurs and tensors
+        must already share the same feature dimension.
+
+    Args:
+        trial (optuna.trial.Trial): Optuna trial controlling which connections are active.
+        layers_list (Sequence[tf.Tensor]): Sequence of dense tensors of shape ``(batch, features)``.
+        axis_to_concat (int): Axis used when concatenating outputs.
+        use_batch_norm (bool): Apply batch normalization in projection branches.
+        verbose (int): Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
+        strategy (str): ``"final"`` or ``"any"`` to define the skip topology.
+        merge_mode (str): ``"add"`` or ``"concat"``.
+        name_prefix (str): Prefix for projection layers, defaults to ``"skip"``.
+        nickname (Sequence[str] | None): Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and replaces automatic name
+            inference.
+        projection_mode (str): ``"conv"`` applies a dense layer to match feature
+            counts. ``"resize"`` skips this projection and only concatenates
+            or adds tensors when features already align. ``merge_mode='add'``
+            requires ``"conv"``.
+
+    Returns:
+        tf.Tensor: Output tensor after applying skip connections.
+
+    Raises:
+        ValueError: If any tensor in ``layers_list`` is not 2-D, if ``verbose``
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` are
+            invalid, if ``projection_mode`` is unsupported, or if ``nickname``
+            is provided with a length mismatch.
+    """
+
+    _validate_tensor_ranks(layers_list, 2, "trial_skip_2d_tensors")
+
+    return _trial_skip_connections_projected(
+        trial=trial,
+        layers_list=layers_list,
+        project=lambda s, t, name: _project_dense(s, t, use_batch_norm, name),
+        axis_to_concat=axis_to_concat,
+        verbose=verbose,
+        strategy=strategy,
+        merge_mode=merge_mode,
+        name_prefix=name_prefix,
+        nickname=nickname,
+        projection_mode=projection_mode,
+    )
+
+
+def trial_skip_4d_tensors(
+    trial: optuna.trial.Trial,
+    layers_list: Sequence[tf.Tensor],
+    axis_to_concat: int = -1,
+    use_batch_norm: bool = False,
+    verbose: int = 1,
+    strategy: str = "any",
+    merge_mode: str = "add",
+    name_prefix: str = "skip",
+    nickname: Sequence[str] | None = None,
+    projection_mode: str = "conv",
+) -> tf.Tensor:
+    """Apply projected skip connections for 4D tensors.
+
+    Notes:
+        Only tensors with shape ``(batch, height, width, channels)`` are
+        supported. Because ``layers_list`` may include only some of the model's
+        layers, mismatched ranks from preceding layers can still propagate and
+        trigger an early ``ValueError``. A :class:`~keras.layers.Conv2D` layer
+        with kernel size ``1`` projects channels when ``projection_mode='conv'``.
+        With ``projection_mode='resize'`` only the spatial dimensions are resized
+        and channels remain unaltered.
+
+    Args:
+        trial (optuna.trial.Trial): Optuna trial for selecting which skips to include.
+        layers_list (Sequence[tf.Tensor]): Sequence of tensors produced by 2-D convolution layers with
+            shape ``(batch, height, width, channels)``.
+        axis_to_concat (int): Concatenation axis if ``merge_mode`` is ``"concat"``.
+        use_batch_norm (bool): Whether to apply batch normalization in the projection
+            branch.
+        verbose (int): Verbosity level for skip combinations. ``0`` prints nothing,
+            ``1`` prints only the number of combinations and ``2`` prints the
+            number plus every combination. Defaults to ``1``.
+        strategy (str): ``"final"`` or ``"any"``.
+        merge_mode (str): ``"add"`` or ``"concat"``.
+        name_prefix (str): Prefix for projection layer names, defaults to
+            ``"skip"``.
+        nickname (Sequence[str] | None): Optional sequence of layer nicknames. When provided, must
+            match ``layers_list`` in length and overrides automatic name
+            inference.
+        projection_mode (str): ``"conv"`` uses ``Conv2D(1)`` to match channel counts.
+            ``"resize"`` only resizes spatial dimensions and leaves channels
+            untouched. ``merge_mode='add'`` requires ``"conv"``.
+
+    Returns:
+        tf.Tensor: The merged output tensor after applying the selected skip connections.
+
+    Raises:
+        ValueError: If any tensor in ``layers_list`` is not 4-D, if ``verbose``
+            not in ``{0, 1, 2}``, if ``strategy`` or ``merge_mode`` contain
+            invalid values, if ``projection_mode`` is unsupported, or if
+            ``nickname`` is provided with a length mismatch.
+    """
+
+    _validate_tensor_ranks(layers_list, 4, "trial_skip_4d_tensors")
+
+    return _trial_skip_connections_projected(
+        trial=trial,
+        layers_list=layers_list,
+        project=lambda s, t, name: _project_conv2d(s, t, use_batch_norm, name),
+        axis_to_concat=axis_to_concat,
+        verbose=verbose,
+        strategy=strategy,
+        merge_mode=merge_mode,
+        name_prefix=name_prefix,
+        nickname=nickname,
+        projection_mode=projection_mode,
+    )

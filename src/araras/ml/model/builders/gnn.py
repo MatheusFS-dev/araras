@@ -1,0 +1,644 @@
+from typing import Any, Callable, Optional, Tuple, Union
+
+import numpy as np
+import pandas as pd
+from IPython.display import display
+
+import scipy.sparse as sp
+from sklearn.neighbors import NearestNeighbors
+
+from spektral.utils import convolution
+from spektral.layers import GCNConv, GATConv, ChebConv
+
+import tensorflow as tf
+from tensorflow.keras import layers, initializers
+
+from araras.ml.model.hyperparams import KParams
+from araras.utils.verbose_printer import VerbosePrinter
+
+PRINT_ONCE_JIT = True
+
+vp = VerbosePrinter()
+
+
+def print_warning_jit():
+    """Print a warning about JIT compilation."""
+    global PRINT_ONCE_JIT
+    if PRINT_ONCE_JIT:
+        # warning messages in yellow
+        warnings = [
+            "\n==============================================================",
+            "                   [ARARAS] Build GNN warning                  ",
+            "Spektral's GCNConv uses a sparse-dense matmul under the hood.",
+            "XLA's GPU JIT compiler does not support that op.",
+            "This may cause issues with the GNN layers.",
+            "Disable all auto-JIT clustering and auto-JIT compilation.",
+            "Call:",
+        ]
+        for msg in warnings:
+            print(vp.color(message=msg, color="yellow"))
+
+        # commands in orange
+        commands = [
+            "os.environ['TF_XLA_FLAGS'] = '--tf_xla_auto_jit=-1'",
+            "tf.config.optimizer.set_jit(False)",
+            "'jit_compile=False'  # pass into model.compile()",
+        ]
+        for cmd in commands:
+            print(vp.color(message=cmd, color="orange"))
+        print(
+            vp.color(message="==============================================================", color="yellow")
+        )
+        PRINT_ONCE_JIT = False
+
+
+def discard_tensor_mask(x: tf.Tensor) -> tf.Tensor:
+    """Remove any Keras mask attached to a tensor.
+
+    Some layers propagate a mask via the ``_keras_mask`` attribute. This
+    helper deletes that attribute to prevent downstream layers from seeing the
+    mask information.
+
+    Warning:
+        The mask is permanently removed and cannot be recovered.
+
+    Args:
+        x (tf.Tensor): Tensor potentially carrying a mask. Must not be ``None``.
+
+    Returns:
+        tf.Tensor: The same tensor without a mask.
+
+    Raises:
+        ValueError: If ``x`` is ``None``.
+    """
+
+    if x is None:
+        raise ValueError("Input tensor cannot be None")
+    if hasattr(x, "_keras_mask"):
+        try:
+            x._keras_mask = None
+            vp.logf("Removed mask from tensor {id(x)}", tag=vp.gen_tag(name="ARARAS", type="simple"))
+        except AttributeError:
+            vp.logf(
+                f"Failed to remove mask from tensor {id(x)}",
+                log_level="ERROR",
+                tag=vp.gen_tag(name="ARARAS", type="fileline"),
+            )
+            pass
+    return x
+
+
+def check_gpu_limit(knn_list, K_list, units_list, n=20 * 200, save_path=None):
+    """Evaluate TensorFlow's GPU sparse--dense multiplication limit.
+
+    For each combination of ``knn_k`` (number of neighbours), Chebyshev order
+    ``K`` and output ``units`` this helper estimates whether the operation
+    ``output_channels * nnz(support)`` exceeds the GPU threshold ``2^31 - 1``.
+    Results are collected in a :class:`pandas.DataFrame` and optionally written
+    to ``save_path``.
+
+    Examples:
+        .. code-block:: python
+
+            knn_values = [4, 8, 12, 16]
+            K_values = list(range(2, 11))
+            units_values = [128 * i for i in range(1, 9)]
+
+            check_gpu_limit(
+                knn_list=knn_values,
+                K_list=K_values,
+                units_list=units_values,
+                n=20 * 200,
+                save_path="results.csv",
+            )
+
+    Args:
+        knn_list (Any): List of ``k`` values used when building the kNN graph.
+        K_list (Any): List of Chebyshev orders to test.
+        units_list (Any): Candidate numbers of output channels.
+        n (Any): Number of nodes in the graph.
+        save_path (Any): Optional path where the resulting table is saved as CSV.
+
+    Returns:
+        pandas.DataFrame: Table with ``knn_k``, ``K``, ``threshold_units`` and
+        lists of ``safe_units``/``error_units``.
+
+    Raises:
+        OSError: If writing the CSV file fails.
+    """
+
+    def threshold_units(knn_k, K, n):
+        # Estimate nnz(A_norm) = 2*n*knn_k + n (including self-loops)
+        nnz_A = 2 * n * knn_k
+        nnz_A_norm = nnz_A + n
+        if K == 0:
+            nnz_support = n
+        elif K == 1:
+            nnz_support = nnz_A_norm
+        else:
+            # Approximate nnz of Chebyshev T_K as (nnz_A_norm^K) / (n^(K-1))
+            nnz_support = (nnz_A_norm**K) // (n ** (K - 1))
+        return (2**31 - 1) // nnz_support if nnz_support > 0 else 0
+
+    rows = []
+    for k in knn_list:
+        for K in K_list:
+            thr = threshold_units(k, K, n)
+            safe = [u for u in units_list if u <= thr] or ["none"]
+            error = [u for u in units_list if u > thr] or ["none"]
+            rows.append(
+                {
+                    "knn_k": k,
+                    "K": K,
+                    "threshold_units": thr,
+                    "safe_units": safe,
+                    "error_units": error,
+                }
+            )
+    df = pd.DataFrame(rows)
+    display(df)
+    if save_path is not None:
+        df.to_csv(save_path, index=False)
+    return df
+
+
+def build_grid_adjacency(rows: int, cols: int) -> tf.sparse.SparseTensor:
+    """Build a grid adjacency matrix with GCN normalization.
+
+    Each node is connected to its four direct neighbours (up, down, left and
+    right).  The resulting adjacency matrix is returned as a TensorFlow sparse
+    tensor ready to be fed to Spektral layers.
+
+    Args:
+        rows (int): Number of grid rows.
+        cols (int): Number of grid columns.
+
+    Returns:
+        tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
+    """
+    n = rows * cols
+    a = sp.lil_matrix((n, n), dtype=np.float32)
+
+    for r in range(rows):
+        for c in range(cols):
+            idx = r * cols + c
+            for dr, dc in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
+                rr, cc = r + dr, c + dc
+                if 0 <= rr < rows and 0 <= cc < cols:
+                    jdx = rr * cols + cc
+                    a[idx, jdx] = 1.0
+
+    a = a.tocsr()
+    a = a + a.T
+    a[a > 1] = 1.0
+
+    a_norm = convolution.gcn_filter(a)
+    coo = a_norm.tocoo()
+    indices = np.vstack((coo.row, coo.col)).T
+    return tf.sparse.reorder(tf.sparse.SparseTensor(indices, coo.data, coo.shape))
+
+
+def build_knn_adjacency(rows: int, cols: int, k: int) -> tf.sparse.SparseTensor:
+    """Construct a k-nearest neighbour adjacency matrix on a 2-D grid.
+
+    Nodes correspond to cells of a `rows` × `cols` grid.  Each node is
+    connected to its `k` spatially nearest neighbours.  The adjacency matrix is
+    symmetrised, normalised with the GCN filter and returned as a TensorFlow
+    sparse tensor.
+
+    Args:
+        rows (int): Number of grid rows.
+        cols (int): Number of grid columns.
+        k (int): Number of neighbours for each node.
+
+    Returns:
+        tf.sparse.SparseTensor: Normalized sparse adjacency matrix.
+    """
+
+    n = rows * cols
+    coords = np.array([(i // cols, i % cols) for i in range(n)], np.float32)
+    nbrs = NearestNeighbors(n_neighbors=k + 1, algorithm="ball_tree").fit(coords)
+    _, indices = nbrs.kneighbors(coords)
+    a = sp.lil_matrix((n, n), dtype=np.float32)
+    for i in range(n):
+        for j in indices[i][1:]:
+            a[i, j] = 1.0
+            a[j, i] = 1.0
+    a_norm = convolution.gcn_filter(a.tocsr())
+    coo = a_norm.tocoo()
+    idx = np.vstack((coo.row, coo.col)).T
+    return tf.sparse.reorder(tf.sparse.SparseTensor(idx, coo.data, coo.shape))
+
+
+def _select_range_value(
+    trial: Any,
+    name: str,
+    value_range: Union[int, Tuple[int, int]],
+    step: int,
+) -> int:
+    """Helper to pick an integer from a fixed value or an Optuna range."""
+    if isinstance(value_range, int):
+        return value_range
+    low, high = value_range
+    return trial.suggest_int(name, low, high, step=step)
+
+
+def _select_float_range_value(
+    trial: Any,
+    name: str,
+    value_range: Union[float, Tuple[float, float]],
+    step: float,
+) -> float:
+    """Helper to pick a float from a fixed value or an Optuna range."""
+    if isinstance(value_range, float):
+        return value_range
+    low, high = value_range
+    return trial.suggest_float(name, low, high, step=step)
+
+
+def _apply_layer_with_retry(
+    layer: layers.Layer,
+    inputs: list,
+    name_prefix: str,
+    retry_on_cpu: bool = False,
+) -> tf.Tensor:
+    """Execute a graph layer with optional CPU fallback.
+
+    This helper centralises the handling of ``tf.errors.InvalidArgumentError``
+    that arises when TensorFlow's GPU sparse--dense matrix multiplication
+    exceeds its internal limits.  When ``retry_on_cpu`` is ``True`` the layer is
+    re-executed on the CPU, otherwise the original exception is propagated.
+
+    Args:
+        layer (layers.Layer): The Spektral convolutional layer instance to call.
+        inputs (list): List of inputs ``[x, a_graph]`` for the layer.
+        name_prefix (str): Prefix used when logging error messages.
+        retry_on_cpu (bool): If ``True``, retry the operation on the CPU on failure.
+
+    Returns:
+        tf.Tensor: The output tensor produced by ``layer``.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
+    """
+
+    try:
+        return layer(inputs)
+    except tf.errors.InvalidArgumentError as exc:
+
+        vp.logf(
+            vp.color(message=f"Graph conv {name_prefix} hit GPU sparse-dense limit: {exc}", color="red"),
+            log_level="ERROR",
+            tag=VerbosePrinter.TAG_ARARAS_FILELINE,
+        )
+        if retry_on_cpu:
+            vp.logf(
+                vp.color(message=f"Retrying {name_prefix} on CPU...", color="yellow"),
+                tag=VerbosePrinter.TAG_ARARAS_SIMPLE,
+            )
+            with tf.device("/CPU:0"):
+                return layer(inputs)
+        raise
+
+
+def build_gcn(
+    trial: Any,
+    kparams: KParams,
+    x: layers.Layer,
+    a_graph: tf.sparse.SparseTensor,
+    units_range: Union[int, Tuple[int, int]],
+    dropout_rate_range: Union[float, Tuple[float, float]],
+    units_step: int = 10,
+    dropout_rate_step: float = 0.1,
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
+    use_bias: bool = True,
+    use_batch_norm: bool = False,
+    trial_kernel_reg: bool = False,
+    trial_bias_reg: bool = False,
+    trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
+    activation: Optional[Union[str, Callable[..., Any]]] = None,
+    name_prefix: str = "gcn",
+) -> layers.Layer:
+    """Build a single Graph Convolutional Network (GCN) layer.
+
+    Creates a ``GCNConv`` layer and applies it to the input feature matrix and
+    adjacency tensor.  The layer supports Optuna-based hyperparameter tuning for
+    the number of units, dropout rate and regularizers.
+
+    Warning:
+        TensorFlow's GPU sparse--dense matrix multiplication has a hard limit
+        ``output_channels * nnz(support) <= 2^31 - 1``.  When this limit is
+        exceeded the operation fails with ``tf.errors.InvalidArgumentError``. Use
+        ``retry_on_cpu=True`` to automatically rerun the layer on the CPU.
+
+    Args:
+        trial (Any): Optuna trial object used for hyperparameter suggestions.
+        kparams (KParams): Hyperparameter helper for activation functions and regularizers.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Either an integer or ``(low, high)`` tuple for the number of
+            output units.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for the dropout rate.
+        units_step (int): Step size when ``units_range`` is a tuple.
+        dropout_rate_step (float): Step size when ``dropout_rate_range`` is a tuple.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
+        activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
+            ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
+        retry_on_cpu (bool): Retry the layer on the CPU when a GPU ``InvalidArgumentError`` occurs.
+        name_prefix (str): Prefix for naming the created Keras layers.
+
+    Returns:
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
+    """
+    print_warning_jit()
+    units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
+    dropout = _select_float_range_value(
+        trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
+    )
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+
+    gnc_layer = GCNConv(
+        channels=units,
+        activation=None,
+        use_bias=use_bias,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
+        kernel_regularizer=kernel_reg,
+        bias_regularizer=bias_reg,
+        activity_regularizer=act_reg,
+        name=name_prefix,
+    )
+
+    x = _apply_layer_with_retry(
+        gnc_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
+
+    explicit_none = isinstance(activation, str) and activation.lower() == "none"
+    if explicit_none:
+        activation = None
+
+    if activation is None and not explicit_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    if activation is not None:
+        x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
+
+    x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
+    return x
+
+
+def build_gat(
+    trial: Any,
+    kparams: KParams,
+    x: layers.Layer,
+    a_graph: tf.sparse.SparseTensor,
+    units_range: Union[int, Tuple[int, int]],
+    dropout_rate_range: Union[float, Tuple[float, float]],
+    heads_range: Union[int, Tuple[int, int]],
+    units_step: int = 10,
+    dropout_rate_step: float = 0.1,
+    heads_step: int = 1,
+    concat_heads: bool = False,
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
+    use_bias: bool = True,
+    use_batch_norm: bool = False,
+    trial_kernel_reg: bool = False,
+    trial_bias_reg: bool = False,
+    trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
+    activation: Optional[Union[str, Callable[..., Any]]] = None,
+    name_prefix: str = "gat",
+) -> layers.Layer:
+    """Build a single Graph Attention (GAT) layer.
+
+    Applies ``GATConv`` to the input features with optional multi-head
+    attention. Hyperparameters such as units, number of heads and dropout rate
+    can be tuned via Optuna trials.
+
+    Warning:
+        As with ``build_gcn``, the GPU kernel may fail when
+        ``output_channels * nnz(support)`` exceeds ``2^31 - 1``. Enable
+        ``retry_on_cpu`` to fall back to a CPU implementation in this case.
+
+    Args:
+        trial (Any): Optuna trial object for hyperparameter sampling.
+        kparams (KParams): Helper providing activations and regularizers.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple specifying output units.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for dropout.
+        heads_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for the number of heads.
+        units_step (int): Step size when sampling ``units_range``.
+        dropout_rate_step (float): Step size when sampling ``dropout_rate_range``.
+        heads_step (int): Step size when sampling ``heads_range``.
+        concat_heads (bool): Concatenate the outputs of the attention heads if ``True``.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
+        activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
+            ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
+        retry_on_cpu (bool): Retry the operation on the CPU if a GPU
+            ``InvalidArgumentError`` is raised.
+        name_prefix (str): Prefix for naming the created Keras layers.
+
+    Returns:
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
+    """
+    print_warning_jit()
+    units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
+    heads = _select_range_value(trial, f"{name_prefix}_heads", heads_range, heads_step)
+    dropout = _select_float_range_value(
+        trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
+    )
+
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+
+    gat_layer = GATConv(
+        channels=units,
+        activation=None,
+        attn_heads=heads,
+        concat=concat_heads,
+        use_bias=use_bias,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
+        kernel_regularizer=kernel_reg,
+        bias_regularizer=bias_reg,
+        activity_regularizer=act_reg,
+        name=name_prefix,
+    )
+
+    x = _apply_layer_with_retry(
+        gat_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
+
+    explicit_none = isinstance(activation, str) and activation.lower() == "none"
+    if explicit_none:
+        activation = None
+
+    if activation is None and not explicit_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    if activation is not None:
+        x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
+
+    x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
+    return x
+
+
+def build_cheb(
+    trial: Any,
+    kparams: KParams,
+    x: layers.Layer,
+    a_graph: tf.sparse.SparseTensor,
+    units_range: Union[int, Tuple[int, int]],
+    dropout_rate_range: Union[float, Tuple[float, float]],
+    K_range: Union[int, Tuple[int, int]],
+    units_step: int = 10,
+    dropout_rate_step: float = 0.1,
+    K_step: int = 1,
+    kernel_initializer: initializers.Initializer = initializers.GlorotUniform(),
+    bias_initializer: initializers.Initializer = initializers.Zeros(),
+    use_bias: bool = True,
+    use_batch_norm: bool = False,
+    trial_kernel_reg: bool = False,
+    trial_bias_reg: bool = False,
+    trial_activity_reg: bool = False,
+    retry_on_cpu: bool = False,
+    activation: Optional[Union[str, Callable[..., Any]]] = None,
+    name_prefix: str = "cheb",
+) -> layers.Layer:
+    """Build a single Chebyshev graph convolution layer.
+
+    Applies ``ChebConv`` using a Chebyshev polynomial approximation of the graph
+    Laplacian. The polynomial order ``K`` along with the number of units and
+    dropout rate can be tuned via Optuna.
+
+    Warning:
+        The GPU sparse--dense kernel has the same ``2^31 - 1`` limitation as in
+        ``build_gcn`` and ``build_gat``. Use ``retry_on_cpu`` to execute the
+        layer on the CPU when this error occurs.
+
+    Args:
+        trial (Any): Optuna trial used for suggesting hyperparameters.
+        kparams (KParams): Hyperparameter helper instance.
+        x (layers.Layer): Input feature tensor.
+        a_graph (tf.sparse.SparseTensor): Normalized adjacency matrix as a sparse tensor.
+        units_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for output units.
+        dropout_rate_range (Union[float, Tuple[float, float]]): Float or ``(low, high)`` tuple for dropout rate.
+        K_range (Union[int, Tuple[int, int]]): Integer or ``(low, high)`` tuple for the Chebyshev order ``K``.
+        units_step (int): Step size when sampling ``units_range``.
+        dropout_rate_step (float): Step size when sampling ``dropout_rate_range``.
+        K_step (int): Step size when sampling ``K_range``.
+        kernel_initializer (initializers.Initializer): Initializer for kernel weights.
+        bias_initializer (initializers.Initializer): Initializer for bias weights.
+        use_bias (bool): Whether to include a bias term.
+        use_batch_norm (bool): If ``True``, apply batch normalization after the layer.
+        trial_kernel_reg (bool): If ``True``, search for a kernel regularizer.
+        trial_bias_reg (bool): If ``True``, search for a bias regularizer.
+        trial_activity_reg (bool): If ``True``, search for an activity regularizer.
+        activation (Optional[Union[str, Callable[..., Any]]]): Activation function to use or
+            ``"None"``/``"none"`` to apply no activation. When a callable or string is provided,
+            ``kparams`` may be ``None`` and no activation is sampled.
+        retry_on_cpu (bool): Retry the operation on the CPU if a GPU
+            ``InvalidArgumentError`` is raised.
+        name_prefix (str): Prefix for naming the created Keras layers.
+
+    Returns:
+        layers.Layer: The output tensor after convolution, normalization, activation and dropout.
+
+    Raises:
+        tf.errors.InvalidArgumentError: If the GPU operation fails and
+            ``retry_on_cpu`` is ``False``.
+    """
+    print_warning_jit()
+    units = _select_range_value(trial, f"{name_prefix}_units", units_range, units_step)
+    K = _select_range_value(trial, f"{name_prefix}_K", K_range, K_step)
+    dropout = _select_float_range_value(
+        trial, f"{name_prefix}_dropout", dropout_rate_range, dropout_rate_step
+    )
+
+    kernel_reg = kparams.get_regularizer(trial, f"{name_prefix}_kernel_reg") if trial_kernel_reg else None
+    bias_reg = kparams.get_regularizer(trial, f"{name_prefix}_bias_reg") if trial_bias_reg else None
+    act_reg = kparams.get_regularizer(trial, f"{name_prefix}_act_reg") if trial_activity_reg else None
+
+    cheb_layer = ChebConv(
+        channels=units,
+        K=K,
+        activation=None,
+        use_bias=use_bias,
+        kernel_initializer=kernel_initializer,
+        bias_initializer=bias_initializer,
+        kernel_regularizer=kernel_reg,
+        bias_regularizer=bias_reg,
+        activity_regularizer=act_reg,
+        name=name_prefix,
+    )
+
+    x = _apply_layer_with_retry(
+        cheb_layer,
+        [x, a_graph],
+        name_prefix,
+        retry_on_cpu=retry_on_cpu,
+    )
+
+    if use_batch_norm:
+        x = layers.BatchNormalization(name=f"{name_prefix}_bn")(x)
+
+    explicit_none = isinstance(activation, str) and activation.lower() == "none"
+    if explicit_none:
+        activation = None
+
+    if activation is None and not explicit_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when activation is None")
+        activation = kparams.get_activation(trial, f"{name_prefix}_act")
+
+    if activation is not None:
+        x = layers.Activation(activation, name=f"{name_prefix}_act")(x)
+
+    x = layers.Dropout(dropout, name=f"{name_prefix}_dropout")(x)
+    return x

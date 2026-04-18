@@ -1,0 +1,24 @@
+# Python caches and compiled files
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.pyd
+
+# Pip and package management
+*.pypirc
+
+# Virtual environment directories
+.Python
+.venv/
+
+# IDE directories
+.vscode/
+
+# Build and distribution directories
+dist/*
+build/*
+*.egg-info/
+
+# Others
+runs/

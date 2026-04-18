@@ -1,0 +1,154 @@
+from typing import Any, Callable, List, Optional, Union
+
+import optuna
+
+import tensorflow as tf
+from tensorflow.keras import layers
+
+from araras.ml.model.hyperparams import KParams
+
+
+def build_squeeze_excite_1d(
+    x: tf.keras.layers.Layer,
+    trial: optuna.Trial,
+    kparams: Optional[KParams],
+    ratio_choices: List[int],
+    act_reduce: Optional[Union[str, Callable[..., Any]]] = None,
+    act_expand: Optional[Union[str, Callable[..., Any]]] = None,
+    name_prefix: str = "se_block",
+) -> tf.keras.layers.Layer:
+    """Apply a Squeeze-and-Excitation (SE) block 1D with Optuna-tuned hyperparameters.
+    Based on the paper: https://arxiv.org/pdf/1709.01507
+
+    Args:
+        x (tf.keras.layers.Layer): Input 3D tensor (batch, length, channels).
+        trial (optuna.Trial): Optuna Trial object for suggesting hyperparameters.
+        kparams (Optional[KParams]): KParams object containing hyperparameter choices. Can be ``None`` if
+            both ``act_reduce`` and ``act_expand`` are provided.
+        ratio_choices (List[int]): List of integers representing reduction ratios for the SE block.
+        act_reduce (Optional[Union[str, Callable[..., Any]]]): Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        act_expand (Optional[Union[str, Callable[..., Any]]]): Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        name_prefix (str): Prefix for naming layers and trial parameters.
+
+    Returns:
+        tf.keras.layers.Layer: A tensor the same shape as `x`, re-scaled by the SE attention weights.
+
+    Raises:
+        ValueError: If `x.shape[-1]` is None (undefined channel dimension).
+    """
+    # 1. Channel dimension
+    channels = x.shape[-1]
+    if channels is None:
+        raise ValueError(f"Cannot infer channels for SE block with prefix {name_prefix}")
+
+    # 2. Optuna suggestions using ratio_choices and KParams
+    ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
+    explicit_reduce_none = isinstance(act_reduce, str) and act_reduce.lower() == "none"
+    if explicit_reduce_none:
+        act_reduce = None
+    if act_reduce is None and not explicit_reduce_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_reduce is None")
+        act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+
+    explicit_expand_none = isinstance(act_expand, str) and act_expand.lower() == "none"
+    if explicit_expand_none:
+        act_expand = None
+    if act_expand is None and not explicit_expand_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_expand is None")
+        act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+
+    # 3. Squeeze
+    se = layers.GlobalAveragePooling1D(name=f"{name_prefix}_se_squeeze")(x)
+    # 4. Excitation: reduce → expand
+    se = layers.Dense(
+        units=channels // ratio,
+        activation=act_reduce,
+        name=f"{name_prefix}_se_reduce",
+    )(se)
+    se = layers.Dense(
+        units=channels,
+        activation=act_expand,
+        name=f"{name_prefix}_se_expand",
+    )(se)
+    # 5. Reshape and scale
+    se = layers.Reshape((1, channels), name=f"{name_prefix}_se_reshape")(se)
+    return layers.Multiply(name=f"{name_prefix}_se_scale")([x, se])
+
+
+def build_squeeze_excite_2d(
+    x: tf.keras.layers.Layer,
+    trial: optuna.Trial,
+    kparams: Optional[KParams],
+    ratio_choices: List[int],
+    act_reduce: Optional[Union[str, Callable[..., Any]]] = None,
+    act_expand: Optional[Union[str, Callable[..., Any]]] = None,
+    name_prefix: str = "se_block_2d",
+) -> tf.keras.layers.Layer:
+    """
+    Apply a 2D Squeeze-and-Excitation block.
+
+    Args:
+        x (tf.keras.layers.Layer): Input tensor of shape (batch, height, width, channels).
+        trial (optuna.Trial): Optuna Trial for hyperparameter suggestions.
+        hparams (Any): HParams object for activation choices. Can be ``None`` if both
+            ``act_reduce`` and ``act_expand`` are provided.
+        ratio_choices (List[int]): List of reduction ratios to try.
+        act_reduce (Optional[Union[str, Callable[..., Any]]]): Optional activation for the reduction Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        act_expand (Optional[Union[str, Callable[..., Any]]]): Optional activation for the expansion Dense layer. Pass ``"None"``/``"none"``
+            to apply no activation and skip sampling from ``kparams``.
+        name_prefix (str): Prefix for layer names.
+
+    Returns:
+        tf.keras.layers.Layer: Tensor of same shape as `x`, re-weighted by channel attention.
+
+    Raises:
+        ValueError: if channel dimension is undefined.
+    """
+    # 1. Infer channels
+    channels = x.shape[-1]
+    if channels is None:
+        raise ValueError(f"Cannot infer channels for SE block with prefix {name_prefix}")
+
+    # 2. Hyperparameter suggestions
+    ratio = trial.suggest_categorical(f"{name_prefix}_se_ratio", ratio_choices)
+    explicit_reduce_none = isinstance(act_reduce, str) and act_reduce.lower() == "none"
+    if explicit_reduce_none:
+        act_reduce = None
+    if act_reduce is None and not explicit_reduce_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_reduce is None")
+        act_reduce = kparams.get_activation(trial, f"{name_prefix}_se_act_reduce")
+
+    explicit_expand_none = isinstance(act_expand, str) and act_expand.lower() == "none"
+    if explicit_expand_none:
+        act_expand = None
+    if act_expand is None and not explicit_expand_none:
+        if kparams is None:
+            raise ValueError("kparams must be provided when act_expand is None")
+        act_expand = kparams.get_activation(trial, f"{name_prefix}_se_act_expand")
+
+    # 3. Squeeze: global average over spatial dims
+    se = layers.GlobalAveragePooling2D(name=f"{name_prefix}_se_squeeze")(x)
+
+    # 4. Excitation: bottleneck dense layers
+    se = layers.Dense(
+        units=channels // ratio,
+        activation=act_reduce,
+        name=f"{name_prefix}_se_reduce",
+    )(se)
+    se = layers.Dense(
+        units=channels,
+        activation=act_expand,
+        name=f"{name_prefix}_se_expand",
+    )(se)
+
+    # 5. Reshape for channel scaling
+    se = layers.Reshape((1, 1, channels), name=f"{name_prefix}_se_reshape")(se)
+
+    # 6. Scale input by SE weights
+    return layers.Multiply(name=f"{name_prefix}_se_scale")([x, se])
