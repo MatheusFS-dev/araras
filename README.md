@@ -8,7 +8,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/MatheusFS-dev/araras"><img src="https://img.shields.io/github/license/MatheusFS-dev/araras?style=flat-square" alt="License"/></a>
+  <a href="https://github.com/MatheusFS-dev/araras/blob/main/LICENSE.txt">
+    <img src="https://img.shields.io/github/license/MatheusFS-dev/araras?style=flat-square&label=license" alt="License"/>
+  </a>
   <a href="https://github.com/MatheusFS-dev/araras/stargazers"><img src="https://img.shields.io/github/stars/MatheusFS-dev/araras?style=flat-square" alt="Stars"/></a>
   <a href="https://github.com/MatheusFS-dev/araras/network/members"><img src="https://img.shields.io/github/forks/MatheusFS-dev/araras?style=flat-square" alt="Forks"/></a>
   <a href="https://visitor-badge.laobi.icu/badge?page_id=MatheusFS-dev.araras"><img src="https://visitor-badge.laobi.icu/badge?page_id=MatheusFS-dev.araras" alt="Visitors"/></a>
