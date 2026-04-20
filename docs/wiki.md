@@ -2123,6 +2123,11 @@ monitoring resources are created and raises ``FileNotFoundError`` if not.
 > [!CAUTION]
 > The target script is executed repeatedly until a success flag is detected or the maximum number of restarts is reached.
 
+> [!NOTE]
+> The low-level Python API still accepts explicit ``recipients_file`` and
+> ``credentials_file`` paths. The `monitor` console script now resolves those
+> paths interactively before calling this function.
+
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
@@ -2154,28 +2159,37 @@ point `monitor = "araras.runtime._monitor_script:main"`. After installing the
 package you can execute:
 
 ```bash
-monitor path/to/job.py [another_job.ipynb ...] [options]
+monitor path/to/job.py [another_job.ipynb ...]
 ```
 
 > [!TIP]
 > You can use `CUDA_VISIBLE_DEVICES=0,1 monitor ...` to limit the GPUs
 
-| Flag | Type | Description |
+The current CLI is prompt-driven. It keeps positional target file paths and
+asks for the shared launch configuration once per invocation:
+
+| Prompt | Default | Description |
 |------|------|-------------|
-| `-t, --title` | `str` | Custom title for monitoring and email alerts. |
-| `-m, --max-restarts` | `int` | Maximum number of restart attempts. Defaults to `1000`. |
-| `-d, --restart-delay` | `float` | Delay between restarts in seconds. Defaults to `3.0`. |
-| `-r, --recipients-file` | `str` | Path to a JSON file listing email recipients. |
-| `-c, --credentials-file` | `str` | Path to a JSON file with email credentials. |
-| `-f, --force-restart` | `float` | Restart the job after this many seconds even if it has not crashed. |
-| `-a, --retry-attempts` | `int` | Number of retry attempts before a failure email is sent. |
-| `-w, --supress-tf-warnings` | `bool` | Filter TensorFlow `ptxas` register spill warnings. |
-| `--no-restart-email` | `bool` | Disable email warnings for process restarts. |
-| `-u, --resource-usage-log-file` | `str` | File to log process resource usage statistics. |
-| `-s, --success-flag-file` | `str` | Path where the monitored script writes a completion flag. Defaults to a unique file inside the system temporary directory. |
+| `Monitor title` | file stem | Blank input keeps the previous behavior where each target uses its own stem as the displayed process title. |
+| `Choose JSON folder` | `1` | Selects the email configuration directory. Option `1` uses `$HOME/.araras/json`, option `2` uses `./json` relative to where `monitor` was launched, and option `3` accepts a custom directory. |
+| `Max restarts` | `10` | Blank input keeps the default restart limit. |
+
+When option `1` is selected and `$HOME/.araras/json` does not exist, the
+launcher creates that directory and writes template `recipients.json` and
+`credentials.json` files automatically. Email alerts remain disabled until the
+placeholder values in those templates are replaced with real settings.
 
 > [!NOTE]
-> The monitor still honors custom success flag locations. If you omit ``-s`` the tool now generates a unique flag file under ``/tmp`` (or the platform-specific temporary directory) to prevent interference between concurrent monitors.
+> The `monitor` CLI no longer exposes the old optional flags such as
+> `--title`, `--max-restarts`, `--recipients-file`, or
+> `--credentials-file`. Those values are now collected through prompts in the
+> console script before `run_auto_restart()` is called.
+
+> [!NOTE]
+> On Linux, monitored target jobs still open in a terminal window when a GUI
+> terminal is available. In SSH or other headless sessions, the target job runs
+> inline in the current shell instead. The helper crash-monitor process now
+> runs invisibly in the background and does not open a second terminal.
 
 > [!CAUTION]
 > Run the `monitor` command from the **same directory** as the file being monitored so that relative paths resolve correctly.
@@ -2758,38 +2772,47 @@ Manages process restarts based on flag files. Monitors a success flag file and a
 
 ```python
 start_monitor(
-    file_path,
-    success_flag_file,
+    pid,
+    title,
+    supress_tf_warnings=False,
 )
 ```
-Start monitoring a file for crashes and restarts.
+Start the lightweight crash-monitor helper for an already running target PID.
+This helper writes temporary control files, watches the target process for
+death or zombie/stopped states, and signals the restart manager through a
+restart file when a crash is detected. The helper itself runs invisibly in the
+background and does not open an extra terminal window.
 
 **Parameters**
 | Name | Type | Description |
 |------|------|-------------|
-| file_path | `str` | Path to the script to monitor. |
-| success_flag_file | `str` | Path to the success flag file. |
+| pid | `int` | Process ID of the launched target process to watch. |
+| title | `str` | Human-readable process title used in crash metadata. |
+| supress_tf_warnings | `bool` | Kept for call-chain compatibility. The helper process does not run TensorFlow code, so this flag does not change helper-monitor behavior. |
 
 **Returns**
-`None`
+` Dict[str, Any]: Monitor control information containing the helper process handle and the temporary script/control file paths.`
 
 **Raises**
-- None
+- `ValueError` – If the PID does not exist when monitoring starts.
+- `OSError` – If the helper monitor process fails to start.
 
 ### stop_monitor
 
 ```python
 stop_monitor(
-
+    monitor_info,
 )
 ```
 Stop the current monitoring process.
 
 **Parameters**
-- This function takes no parameters.
+| Name | Type | Description |
+|------|------|-------------|
+| monitor_info | `Dict[str, Any]` | Control information returned by `start_monitor()`, including the helper process handle and temporary control file paths. |
 
 **Returns**
-`None`
+` None`
 
 **Raises**
 - None
@@ -2798,16 +2821,18 @@ Stop the current monitoring process.
 
 ```python
 check_crash_signal(
-
+    monitor_info,
 )
 ```
 Check if a crash signal has been received.
 
 **Parameters**
-- This function takes no parameters.
+| Name | Type | Description |
+|------|------|-------------|
+| monitor_info | `Dict[str, Any]` | Control information returned by `start_monitor()`. The function inspects its `restart_file` path to determine whether the helper monitor has reported a crash. |
 
 **Returns**
-`bool`: True if a crash signal was detected, False otherwise.
+` Dict[str, Any]: Crash metadata if a crash signal was detected, or an empty dictionary otherwise.`
 
 **Raises**
 - None
