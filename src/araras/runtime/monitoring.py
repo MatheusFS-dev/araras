@@ -158,9 +158,9 @@ def print_monitoring_config_summary(
     ONCE_PRINT = True
 
     print()
-    print("=" * 70)
+    print("=" * 80)
     print("MONITORING CONFIGURATION SUMMARY")
-    print("=" * 70)
+    print("=" * 80)
     print(f"Target File: {file_path}")
     print(f"Success Flag Location: {success_flag_file}")
     # print(f"File Type: {file_type}")
@@ -172,7 +172,7 @@ def print_monitoring_config_summary(
     print("Max Restarts: " + vp.color(f"{max_restarts}", "yellow"))
     if restart_after_delay is not None:
         print("Run will force restart after: " + vp.color(f"{restart_after_delay} seconds", "yellow"))
-    print("=" * 70)
+    print("=" * 80)
     print()
 
 

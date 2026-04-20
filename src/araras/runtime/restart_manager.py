@@ -347,14 +347,15 @@ class FlagBasedRestartManager:
         success_flag_file: str,
         supress_tf_warnings: bool = False,
     ) -> int:
-        """Launch the monitored process in a new terminal.
+        """Launch the monitored process in a terminal or inline shell session.
 
         Args:
             file_path (Path): Validated path to the Python file.
             working_dir (str): Directory where the command should be executed.
             success_flag_file (str): Path to the success flag written by the process.
             supress_tf_warnings (bool): When ``True``, filter out TensorFlow warnings
-                printed to the terminal.
+                printed to the terminal. If ``False``, the launched process keeps
+                its original stderr output.
 
         Returns:
             int: The PID of the launched process.
@@ -369,9 +370,16 @@ class FlagBasedRestartManager:
         launcher = SimpleTerminalLauncher(supress_tf_warnings=supress_tf_warnings)
         self.current_terminal_process = launcher.launch(command, working_dir)
 
-        # Efficient PID discovery with timeout
-        pid_file = self.current_terminal_process.pid_file
-        target_pid = self._discover_target_pid(pid_file, timeout=5.0)
+        pid_file = getattr(self.current_terminal_process, "pid_file", None)
+
+        # GUI launches still need the temporary PID file because the terminal
+        # process is different from the Python child. Inline launches use
+        # ``bash -lc 'exec ...'`` so the returned process PID is already the
+        # monitored target PID.
+        if pid_file:
+            target_pid = self._discover_target_pid(pid_file, timeout=5.0)
+        else:
+            target_pid = self.current_terminal_process.pid if self.current_terminal_process.poll() is None else None
 
         if not target_pid:
             self._cleanup_terminal()
