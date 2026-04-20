@@ -3,6 +3,7 @@ from typing import Any, Dict, Optional, Tuple
 import glob
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import time
@@ -14,7 +15,6 @@ import psutil
 from threading import Event, Thread
 
 # Local imports
-from araras.runtime.terminal import SimpleTerminalLauncher
 from .file_handler import FileTypeHandler
 
 from araras.utils.verbose_printer import VerbosePrinter
@@ -297,16 +297,28 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
     """Start simplified crash monitor without email capabilities.
 
     Args:
-        pid (int): Process ID to monitor
-        title (str): Process title for alerts
-        supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
+        pid (int): Process ID to monitor.
+        title (str): Process title for alerts.
+        supress_tf_warnings (bool): When ``True``, the caller is asking to
+            suppress TensorFlow warnings for the monitored target process. This
+            helper monitor does not execute TensorFlow code, so the value does
+            not change helper-monitor behavior. When ``False``, the helper
+            still launches identically. The parameter remains in the signature
+            to preserve the public runtime call chain.
 
     Returns:
-        Dict[str, Any]: Monitor control info dictionary
+        Dict[str, Any]: Monitor control info dictionary containing the helper
+        process handle and the temporary control file paths used to coordinate
+        crash detection and shutdown.
 
     Raises:
-        ValueError: If PID doesn't exist
-        OSError: If monitor startup fails
+        ValueError: If ``pid`` does not exist when monitoring begins.
+        OSError: If the helper monitor process fails to start.
+
+    Examples:
+        >>> info = start_monitor(12345, "Training Job")
+        >>> sorted(info.keys())  # doctest: +ELLIPSIS
+        ['pid_file', 'process', 'restart_file', 'script_path', 'stop_file']
     """
     _cleanup_stale_monitor_files()
     time.sleep(0.1)  # Allow time for process to stabilize
@@ -340,10 +352,18 @@ def start_monitor(pid: int, title: str, supress_tf_warnings: bool = False) -> Di
     if os.name != "nt":
         os.chmod(script_path, 0o755)
 
-    # Launch monitor in terminal
-    launcher = SimpleTerminalLauncher()
-    launcher.set_supress_tf_warnings(supress_tf_warnings)
-    process = launcher.launch([sys.executable, script_path], os.getcwd())
+    # The helper monitor should stay invisible. Only the target process needs a
+    # user-facing terminal window, while this watchdog should run quietly in the
+    # background and surface errors only if startup fails.
+    process = subprocess.Popen(
+        [sys.executable, script_path],
+        cwd=os.getcwd(),
+        start_new_session=False,
+        stdin=None,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        close_fds=False,
+    )
 
     time.sleep(0.1)
     if process.poll() is not None:  # Check if it died
