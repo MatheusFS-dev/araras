@@ -56,7 +56,7 @@ def send_crash_signal(pid, title, restart_count=0):
 
 try:
     proc = psutil.Process({pid})
-    print(f"Monitoring PID {{pid}} for crashes")
+    print("Monitoring PID {pid} for crashes")
 except psutil.NoSuchProcess:
     send_crash_signal({pid}, {title})
 
