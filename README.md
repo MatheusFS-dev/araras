@@ -29,6 +29,7 @@ This is a python module that provides a set of tools for working with machine le
 - [Table of Contents](#table-of-contents)
 - [📚 API Documentation](#-api-documentation)
 - [⚙️ Installation Instructions](#️-installation-instructions)
+- [🐧 Linux GPU Venv Setup (TensorFlow + Torch)](#-linux-gpu-venv-setup-tensorflow--torch)
 - [🚀 Release Flow](#-release-flow)
 - [🔖 Versioning Policy](#-versioning-policy)
 - [🤝 Contributing](#-contributing)
@@ -59,6 +60,31 @@ Notes:
 - TensorFlow support is enabled via the tensorflow extra.
 - PyTorch support is enabled via the torch extra.
 - Visualization and notebook extras are optional and independent.
+
+## 🐧 Linux GPU Venv Setup (TensorFlow + Torch)
+
+For Linux users with an NVIDIA GPU, this repository includes an installer script at `venvs/tf-gpu.sh` that creates and configures a virtual environment with:
+
+- TensorFlow (`tensorflow[and-cuda]`)
+- PyTorch (`torch`, `torchinfo`, `torchviz`)
+- Optuna and common ML/data-science utilities
+- `araras[all]`
+
+The script also verifies CPU and GPU TensorFlow availability at the end.
+
+Run it from the repository root:
+
+```bash
+chmod +x venvs/tf-gpu.sh
+./venvs/tf-gpu.sh
+```
+
+Important notes:
+
+- Linux only (script uses `apt` and `nvidia-smi`).
+- You will be prompted for the virtual environment name and location.
+- A supported NVIDIA driver is required (the script checks this automatically).
+- The script uses `python3.12` by default.
 
 ## 🚀 Release Flow
 
