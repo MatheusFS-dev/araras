@@ -57,6 +57,7 @@ VENV_NAME=""
 VENV_ROOT=""
 VENV_PATH=""
 ACTIVATE_ALIAS_NAME=""
+ACTIVATE_ALIAS_RC_FILES=()
 
 print_header() {
   echo
@@ -170,11 +171,50 @@ prompt_activate_alias() {
     Y|y)
       read -r -p "Alias name [${VENV_NAME}]: " alias_name
       ACTIVATE_ALIAS_NAME="${alias_name:-$VENV_NAME}"
+      persist_activate_alias_in_shell_rc_files
       ;;
     *)
       ACTIVATE_ALIAS_NAME=""
+      ACTIVATE_ALIAS_RC_FILES=()
       ;;
   esac
+}
+
+persist_activate_alias_in_shell_rc_files() {
+  local rc_file=""
+  local managed_block=""
+
+  ACTIVATE_ALIAS_RC_FILES=()
+  managed_block=$(cat <<EOF
+
+# Added by tf-gpu.sh. Activate this virtual environment with:
+#   alias ${ACTIVATE_ALIAS_NAME}
+alias ${ACTIVATE_ALIAS_NAME}='source "${VENV_PATH}/bin/activate"'
+EOF
+)
+
+  for rc_file in "$HOME/.bashrc" "$HOME/.zshrc"; do
+    if [[ ! -f "$rc_file" ]]; then
+      continue
+    fi
+
+    if grep -Fq "alias ${ACTIVATE_ALIAS_NAME}='source \"${VENV_PATH}/bin/activate\"'" "$rc_file"; then
+      ACTIVATE_ALIAS_RC_FILES+=("$rc_file")
+      continue
+    fi
+
+    printf '%s\n' "$managed_block" >>"$rc_file"
+    ACTIVATE_ALIAS_RC_FILES+=("$rc_file")
+  done
+
+  if [[ "${#ACTIVATE_ALIAS_RC_FILES[@]}" -eq 0 ]]; then
+    echo "No bash or zsh rc file found to update."
+  else
+    echo "Persisted alias in:"
+    for rc_file in "${ACTIVATE_ALIAS_RC_FILES[@]}"; do
+      echo "  ${rc_file}"
+    done
+  fi
 }
 
 install_system_prerequisites() {
@@ -466,8 +506,16 @@ print_summary() {
 
   if [[ -n "$ACTIVATE_ALIAS_NAME" ]]; then
     echo
-    echo "Alias to add to your shell:"
+    echo "Alias configured:"
     echo "  alias ${ACTIVATE_ALIAS_NAME}='source \"${VENV_PATH}/bin/activate\"'"
+
+    if [[ "${#ACTIVATE_ALIAS_RC_FILES[@]}" -gt 0 ]]; then
+      echo
+      echo "Updated shell rc files:"
+      for rc_file in "${ACTIVATE_ALIAS_RC_FILES[@]}"; do
+        echo "  ${rc_file}"
+      done
+    fi
   fi
   echo
   echo "Configured extra pip packages:"
