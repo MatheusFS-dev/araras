@@ -56,6 +56,7 @@ TORCH_PIP_PACKAGES=(
 VENV_NAME=""
 VENV_ROOT=""
 VENV_PATH=""
+ACTIVATE_ALIAS_NAME=""
 
 print_header() {
   echo
@@ -156,6 +157,24 @@ prompt_venv_root() {
         ;;
     esac
   done
+}
+
+prompt_activate_alias() {
+  local add_alias=""
+  local alias_name=""
+
+  echo
+  read -r -p "Add a shell alias to activate this venv? [y/N]: " add_alias
+
+  case "${add_alias:-N}" in
+    Y|y)
+      read -r -p "Alias name [${VENV_NAME}]: " alias_name
+      ACTIVATE_ALIAS_NAME="${alias_name:-$VENV_NAME}"
+      ;;
+    *)
+      ACTIVATE_ALIAS_NAME=""
+      ;;
+  esac
 }
 
 install_system_prerequisites() {
@@ -444,6 +463,12 @@ print_summary() {
   echo
   echo "Activate it later with:"
   echo "  source \"${VENV_PATH}/bin/activate\""
+
+  if [[ -n "$ACTIVATE_ALIAS_NAME" ]]; then
+    echo
+    echo "Alias to add to your shell:"
+    echo "  alias ${ACTIVATE_ALIAS_NAME}='source \"${VENV_PATH}/bin/activate\"'"
+  fi
   echo
   echo "Configured extra pip packages:"
   for pkg in "${EXTRA_PIP_PACKAGES[@]}"; do
@@ -455,6 +480,7 @@ main() {
   print_header
   prompt_venv_name
   prompt_venv_root
+  prompt_activate_alias
   install_system_prerequisites
   check_nvidia_requirements
   create_and_activate_venv
