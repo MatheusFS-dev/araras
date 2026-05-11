@@ -65,6 +65,25 @@ class SimpleTerminalLauncher:
             raise TypeError("value must be a bool")
         self.supress_tf_warnings = value
 
+    def _has_zellij_session(self) -> bool:
+        """Return whether the current Linux session can open a zellij pane.
+
+        The monitor should use zellij only when it is already running inside an
+        attached zellij session. Detecting only the executable would be too
+        broad because a regular terminal, including Alacritty without zellij,
+        has no current zellij pane for the command to split.
+
+        Returns:
+            bool: ``True`` when the ``ZELLIJ`` environment variable is present
+            and the ``zellij`` executable is available. ``False`` means the
+            launcher should continue through the existing GUI-terminal and
+            inline fallbacks.
+
+        Raises:
+            RuntimeError: Not raised by this helper.
+        """
+        return bool(os.environ.get("ZELLIJ")) and shutil.which("zellij") is not None
+
     def _has_linux_gui_terminal(self) -> bool:
         """Return whether Linux can open a graphical terminal window.
 
@@ -104,9 +123,10 @@ class SimpleTerminalLauncher:
     def launch(self, command: List[str], working_dir: str) -> subprocess.Popen:
         """Launch a command in a GUI terminal or inline shell session.
 
-        On graphical Linux sessions, the command is launched inside
-        ``gnome-terminal`` and the target PID is written to a temporary file so
-        the restart manager can discover the child Python process. On headless
+        On Linux inside an existing zellij session, the command is launched in
+        a new zellij pane and the target PID is written to a temporary file. On
+        graphical Linux sessions outside zellij, the command is launched inside
+        ``gnome-terminal`` and uses the same PID-file discovery. On headless
         Linux sessions, the command runs inline in the current shell and the
         returned ``Popen`` PID is already the target PID because the shell uses
         ``exec`` to replace itself with the monitored process.
@@ -121,10 +141,11 @@ class SimpleTerminalLauncher:
 
         Returns:
             subprocess.Popen: Process handle representing the launched shell or
-            target process. The object includes ``launch_mode`` set to either
-            ``"gui"`` or ``"inline"``. In GUI mode it also includes a
-            ``pid_file`` attribute pointing to the temporary PID file used for
-            target PID discovery. In inline mode ``pid_file`` is ``None``.
+            target process. The object includes ``launch_mode`` set to
+            ``"zellij"``, ``"gui"``, or ``"inline"``. Zellij and GUI modes
+            also include a ``pid_file`` attribute pointing to the temporary PID
+            file used for target PID discovery. In inline mode ``pid_file`` is
+            ``None``.
 
         Raises:
             OSError: If the current operating system is unsupported or the
@@ -138,6 +159,38 @@ class SimpleTerminalLauncher:
         """
         if self.system == "linux":
             command_text = self._build_posix_command(command)
+
+            # Zellij is preferred when available inside the current session so
+            # the monitored process stays in the same terminal window instead
+            # of opening a separate GUI terminal.
+            if self._has_zellij_session():
+                fd, pid_file = tempfile.mkstemp(suffix=".pid")
+                os.close(fd)
+                full_cmd = f"echo $$ > {shlex.quote(pid_file)}; exec {command_text}"
+                terminal_cmd = [
+                    "zellij",
+                    "run",
+                    "--cwd",
+                    working_dir,
+                    "--name",
+                    "araras monitor",
+                    "--",
+                    "bash",
+                    "-lc",
+                    full_cmd,
+                ]
+                process = subprocess.Popen(
+                    terminal_cmd,
+                    cwd=working_dir,
+                    start_new_session=False,
+                    stdin=None,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    close_fds=False,
+                )
+                process.pid_file = pid_file
+                process.launch_mode = "zellij"
+                return process
 
             # ``exec`` is critical in inline mode because it makes the shell
             # PID become the Python process PID, which lets the restart manager
