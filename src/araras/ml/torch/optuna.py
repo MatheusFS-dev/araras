@@ -1114,6 +1114,7 @@ def log_trial_error(
     prune_on: Optional[Dict[type, Optional[str]]] = None,
     propagate: Optional[Dict[type, Optional[str]]] = None,
     force_crash_oom: int | None = 10,
+    raise_after_log: bool = True,
 ) -> None:
     """Log and manage trial errors, optionally aborting after repeated OOMs.
     
@@ -1140,6 +1141,7 @@ def log_trial_error(
             If matched, the exception is re-raised as-is.
         force_crash_oom: Number of consecutive OOMs before aborting the study.
             None to disable. Default 10.
+        raise_after_log: Whether to raise the exception after logging it.
     
     Raises:
         optuna.TrialPruned: If the exception matches the prune_on criteria.
@@ -1214,8 +1216,9 @@ def log_trial_error(
                 color="yellow",
             )
             raise optuna.TrialPruned() from exc
-
-    raise exc
+    
+    if raise_after_log:
+        raise exc
 
 
 __all__ = [
