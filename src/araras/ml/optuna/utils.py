@@ -682,6 +682,7 @@ def log_trial_error(
         optuna.exceptions.TrialPruned: None,
     },
     force_crash_oom: int | None = 10,
+    raise_after_log: bool = True,
 ):
     """Log and manage trial errors, optionally aborting after repeated OOMs.
 
@@ -708,6 +709,7 @@ def log_trial_error(
             ``tf.errors.ResourceExhaustedError``, ``tf.errors.InternalError`` or
             ``tf.errors.UnavailableError`` exceptions before the process is
             aborted. Defaults to ``10``; ``None`` disables this behaviour.
+        raise_after_log (bool): Whether to re-raise the exception after logging
 
     Raises:
         optuna.TrialPruned: If the error matches any pruning rules.
@@ -780,7 +782,8 @@ def log_trial_error(
             )
             raise optuna.TrialPruned() from exc
 
-    raise exc  # Otherwise re-raise
+    if raise_after_log:
+        raise exc  # Otherwise re-raise
 
 
 def run_study(
