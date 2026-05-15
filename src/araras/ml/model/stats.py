@@ -62,8 +62,9 @@ def get_flops(model: tf.keras.Model, batch_size: int = 1) -> int:
         # 2) Define a wrapper whose args exactly match model.inputs
         @tf.function(input_signature=specs)
         def _forward_fn(*args):
-            # args is a tuple of Tensors, one per input.
-            # Pass them to the model as a list:
+            if len(args) == 1:
+                return model(args[0], training=False)
+
             return model(list(args), training=False)
 
         # 3) Grab the concrete graph and profile it
