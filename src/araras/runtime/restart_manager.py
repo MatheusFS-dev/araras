@@ -12,6 +12,7 @@ from .terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
 from .email_manager import ConsolidatedEmailManager
 from .file_handler import FileTypeHandler
+from .reporting import MonitorReportSession
 from . import monitoring as _mon
 from .monitoring import (
     print_completion_summary,
@@ -42,6 +43,14 @@ class FlagBasedRestartManager:
         "last_process_start_time",
         "_last_restart_file",
         "pid_history",
+        "report_logs",
+        "report_session",
+        "last_failure_error",
+        "pending_restart_old_pid",
+        "pending_restart_runtime",
+        "pending_restart_error",
+        "last_completed_pid",
+        "last_completed_runtime",
     )
 
     def __init__(
@@ -52,6 +61,7 @@ class FlagBasedRestartManager:
         credentials_file: Optional[str] = None,
         retry_attempts: int = 2,
         restart_email_warning: bool = True,
+        report_logs: bool = False,
     ):
         """Initialize restart manager with consolidated email notification support.
 
@@ -62,6 +72,10 @@ class FlagBasedRestartManager:
             credentials_file (Optional[str]): Path to credentials JSON file
             retry_attempts (int): Number of retry attempts before sending failure email
             restart_email_warning (bool): Enable restart success and failure email messages
+            report_logs (bool): When ``True``, write monitor report artifacts
+                under ``runs/monitor_logs`` for each monitored source file. If
+                ``False``, the runtime keeps the previous behavior and does not
+                create report files.
         """
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
@@ -69,6 +83,14 @@ class FlagBasedRestartManager:
         self.running = False
         self.start_time = None
         self.last_process_start_time = None
+        self.report_logs = report_logs
+        self.report_session: Optional[MonitorReportSession] = None
+        self.last_failure_error: Optional[str] = None
+        self.pending_restart_old_pid: Optional[int] = None
+        self.pending_restart_runtime: Optional[float] = None
+        self.pending_restart_error: Optional[str] = None
+        self.last_completed_pid: Optional[int] = None
+        self.last_completed_runtime: Optional[float] = None
 
         # Process tracking with minimal state
         self.current_terminal_process: Optional[subprocess.Popen] = None
@@ -136,6 +158,12 @@ class FlagBasedRestartManager:
             ValueError: If ``file_path`` has an unsupported extension.
         """
         self.start_time = time.time()
+        self.last_failure_error = None
+        self.pending_restart_old_pid = None
+        self.pending_restart_runtime = None
+        self.pending_restart_error = None
+        self.last_completed_pid = None
+        self.last_completed_runtime = None
 
         # Validate file with early exit pattern for performance
         validated_path = FileTypeHandler.validate_file(file_path)
@@ -164,6 +192,9 @@ class FlagBasedRestartManager:
 
         display_title = title or original_path.stem
 
+        if self.report_logs:
+            self.report_session = MonitorReportSession(original_path, display_title)
+
         # Print configuration summary
         _mon.print_monitoring_config_summary(
             file_path=str(original_path),
@@ -177,6 +208,7 @@ class FlagBasedRestartManager:
 
         self.running = True
         previous_pid = None
+        final_status = "failed"
 
         try:
             # before launching a new run
@@ -187,7 +219,7 @@ class FlagBasedRestartManager:
             self._cleanup_stale_pids()
 
             # Main restart loop with consolidated email notifications
-            while self.running and self.restart_count < self.max_restarts:
+            while self.running and self._should_start_attempt():
                 # Ensure any leftover processes from previous iteration are gone
                 self._cleanup_stale_pids()
 
@@ -209,18 +241,31 @@ class FlagBasedRestartManager:
                         success_flag_file,
                         supress_tf_warnings=supress_tf_warnings,
                     )
+                    if self.report_session:
+                        self.report_session.start_attempt(target_pid)
                     _mon.print_process_status("\033[92mProcess started\033[0m", target_pid)
 
                     # Send successful restart email (only for actual restarts, not first start)
-                    if self.restart_count > 0:
-                        runtime = time.time() - self.last_process_start_time
+                    if self.restart_count > 0 and self.pending_restart_old_pid is not None:
+                        runtime = 0.0 if self.pending_restart_runtime is None else self.pending_restart_runtime
                         self.email_manager.report_successful_restart(
                             self.process_title,
-                            previous_pid,
+                            self.pending_restart_old_pid,
                             target_pid,
                             self.restart_count,
                             runtime,
                         )
+                        if self.report_session:
+                            self.report_session.record_restart(
+                                old_pid=self.pending_restart_old_pid,
+                                new_pid=target_pid,
+                                restart_count=self.restart_count,
+                                runtime_seconds=self.pending_restart_runtime,
+                                error=self.pending_restart_error,
+                            )
+                        self.pending_restart_old_pid = None
+                        self.pending_restart_runtime = None
+                        self.pending_restart_error = None
 
                     # Start crash monitor with simplified monitoring
                     self.monitor_info = _mon.start_monitor(
@@ -235,6 +280,11 @@ class FlagBasedRestartManager:
                     runtime = time.time() - self.last_process_start_time
 
                     _mon.print_process_status(f"Process finished: {completion_reason}", target_pid, runtime)
+                    if self.report_session:
+                        self.report_session.stop_attempt()
+                        self.report_session.record_attempt_end(completion_reason, target_pid, runtime)
+                    self.last_completed_pid = target_pid
+                    self.last_completed_runtime = runtime
 
                     # Store PID for next restart notification
                     previous_pid = target_pid
@@ -249,45 +299,59 @@ class FlagBasedRestartManager:
                         self.email_manager.report_task_completion(
                             self.process_title, self.restart_count, total_runtime
                         )
+                        final_status = "success"
                         break
                     elif completion_reason == "crashed":
                         _mon.print_process_status("Process crashed, checking restart policy")
+                        self.last_failure_error = "Process crashed"
+                        final_status = "failed"
                         if not self._handle_restart_with_retry():
                             break
                     elif completion_reason == "interrupted":
                         # User pressed CTRL+C, clean up and exit
                         _mon.print_process_status("Process interrupted by user")
+                        final_status = "interrupted"
                         break
                     elif completion_reason == "stopped":
                         # External request to stop without treating as failure
                         _mon.print_process_status("Process stopped by external request")
+                        final_status = "stopped"
                         break
                     else:
                         _mon.print_process_status("Process ended without success flag, treating as failure")
+                        self.last_failure_error = f"Process ended with reason: {completion_reason}"
+                        final_status = "failed"
                         if not self._handle_restart_with_retry():
                             break
 
                 except Exception as e:
                     _mon.print_error_message("LAUNCH", str(e))
                     traceback.print_exc()
+                    self.last_failure_error = str(e)
+                    if self.report_session:
+                        self.report_session.stop_attempt()
+                        self.report_session.record_attempt_end("launch_error", previous_pid, None, error=str(e))
                     self._cleanup_all()
                     if not self._handle_restart_with_retry():
                         break
 
             # Handle maximum restarts reached
-            if self.restart_count >= self.max_restarts:
+            if final_status != "success" and self._has_exhausted_restarts():
                 _mon.print_error_message("MAX_RESTARTS", f"Maximum restarts reached: {self.max_restarts}")
                 self.email_manager.report_final_failure(
                     self.process_title,
                     self.restart_count,
                     f"Maximum restart attempts ({self.max_restarts}) reached",
                 )
+                self.last_failure_error = f"Maximum restart attempts ({self.max_restarts}) reached"
 
         except KeyboardInterrupt:
             _mon.print_process_status("Interrupted by user, cleaning up resources")
             self.running = False
+            final_status = "interrupted"
         except Exception as e:
             _mon.print_error_message("FATAL", str(e))
+            self.last_failure_error = str(e)
             self.email_manager.report_final_failure(
                 self.process_title, self.restart_count, f"Fatal error: {str(e)}"
             )
@@ -301,6 +365,13 @@ class FlagBasedRestartManager:
             self._cleanup_converted_file()
             self._cleanup_monitored_file()
             total_runtime = time.time() - self.start_time if self.start_time else None
+            if self.report_session:
+                self.report_session.finalize(
+                    final_status=final_status,
+                    total_runtime_seconds=total_runtime,
+                    total_restarts=self.restart_count,
+                    final_error=self.last_failure_error,
+                )
             print_completion_summary(self.restart_count, total_runtime)
 
     def _handle_restart_with_retry(self) -> bool:
@@ -309,15 +380,30 @@ class FlagBasedRestartManager:
         Returns:
             bool: True if should continue restart attempts, False if should stop
         """
+        previous_pid = self.last_completed_pid
+        previous_runtime = self.last_completed_runtime
+        if previous_runtime is None and self.last_process_start_time is not None:
+            previous_runtime = time.time() - self.last_process_start_time
         self.restart_count += 1
 
         # Check if should attempt restart using consolidated email manager
         if not self.email_manager.should_attempt_restart(
             self.process_title, self.restart_count, self.max_restarts
         ):
+            self.pending_restart_old_pid = None
+            self.pending_restart_runtime = None
+            self.pending_restart_error = None
+            if self.report_session:
+                self.report_session.record_restart(
+                    old_pid=previous_pid,
+                    new_pid=None,
+                    restart_count=self.restart_count,
+                    runtime_seconds=previous_runtime,
+                    error=self.last_failure_error,
+                )
             return False
 
-        if self.restart_count < self.max_restarts:
+        if self.restart_count <= self.max_restarts:
             # Protect current target process if still running
             exclude_pids = []
             if self.current_target_pid and psutil.pid_exists(self.current_target_pid):
@@ -335,10 +421,45 @@ class FlagBasedRestartManager:
             # Exponential backoff with cap at 30 seconds
             delay = min(self.restart_delay * (1.2 ** (self.restart_count - 1)), 30.0)
             _mon.print_restart_info(self.restart_count, self.max_restarts, delay)
+            self.pending_restart_old_pid = previous_pid
+            self.pending_restart_runtime = previous_runtime
+            self.pending_restart_error = self.last_failure_error
             self._sleep(delay)
             return True
 
         return False
+
+    def _should_start_attempt(self) -> bool:
+        """Return whether another launch attempt is allowed.
+
+        Returns:
+            bool: ``True`` for the initial launch regardless of
+                ``max_restarts`` and for later attempts only while the number
+                of already-consumed restarts does not exceed
+                ``max_restarts``. A value of ``0`` therefore allows one launch
+                attempt and no automatic retries.
+
+        Raises:
+            RuntimeError: Not raised by this helper.
+        """
+        if self.current_target_pid is None and self.restart_count == 0:
+            return True
+        return self.restart_count <= self.max_restarts
+
+    def _has_exhausted_restarts(self) -> bool:
+        """Return whether the configured restart budget has been exhausted.
+
+        Returns:
+            bool: ``True`` when at least one restart was attempted and the
+                count reached or exceeded ``max_restarts``. ``False`` for the
+                initial launch with ``max_restarts=0`` so the monitor does not
+                incorrectly report "maximum restarts reached" before any retry
+                happened.
+
+        Raises:
+            RuntimeError: Not raised by this helper.
+        """
+        return self.restart_count > 0 and self.restart_count >= self.max_restarts
 
     def _launch_process(
         self,

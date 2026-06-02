@@ -147,28 +147,58 @@ def _prompt_max_restarts(default_max_restarts: int = _DEFAULT_MAX_RESTARTS) -> i
 
     Args:
         default_max_restarts (int): Default restart count used when the user
-            presses Enter. This value must be a positive integer. If a different
-            default is supplied in the future, blank input will adopt that
-            value, while any typed value must still be a positive integer.
+            presses Enter. This value must be a non-negative integer. If a
+            different default is supplied in the future, blank input will
+            adopt that value, while any typed value must still be a
+            non-negative integer. A value of ``0`` disables automatic
+            restarts after the initial launch attempt.
 
     Returns:
-        int: Positive maximum restart count chosen by the user or the provided
-        default when Enter is pressed.
+        int: Non-negative maximum restart count chosen by the user or the
+            provided default when Enter is pressed. ``0`` means "do not
+            restart".
 
     Raises:
-        ValueError: If ``default_max_restarts`` is not strictly positive.
+        ValueError: If ``default_max_restarts`` is negative.
     """
-    if default_max_restarts <= 0:
-        raise ValueError("default_max_restarts must be > 0")
+    if default_max_restarts < 0:
+        raise ValueError("default_max_restarts must be >= 0")
 
     while True:
         response = input(f"Max restarts [default: {default_max_restarts}]: ").strip()
         if not response:
             return default_max_restarts
-        if response.isdigit() and int(response) > 0:
+        if response.isdigit():
             return int(response)
         vp.printf(
-            "Max restarts must be a positive integer.",
+            "Max restarts must be a non-negative integer.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+
+def _prompt_report_logs() -> bool:
+    """Prompt the user whether detailed monitor artifacts should be written.
+
+    Returns:
+        bool: ``True`` when the user presses Enter or explicitly enables
+            report logging with a yes-style answer such as ``"y"`` or
+            ``"yes"``. ``False`` when the user enters a no-style answer such
+            as ``"n"`` or ``"no"``.
+
+    Raises:
+        RuntimeError: Not raised by this helper.
+    """
+    while True:
+        response = input("Report logs (Y/n) [default: Y]: ").strip().lower()
+        if not response:
+            return True
+        if response in {"y", "yes"}:
+            return True
+        if response in {"n", "no"}:
+            return False
+        vp.printf(
+            "Please answer y or n.",
             color="yellow",
             tag="[ARARAS WARNING] ",
         )
@@ -331,7 +361,7 @@ def _resolve_json_file_paths(
     )
 
 
-def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str], int, str, str]:
+def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str], int, str, str, bool]:
     """Collect the shared prompt-driven monitor configuration once per launch.
 
     Args:
@@ -340,10 +370,10 @@ def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str]
             custom paths for option ``"3"``.
 
     Returns:
-        Tuple[Optional[str], int, str, str]: Shared launch configuration in the
-            order ``(title, max_restarts, recipients_file, credentials_file)``.
-            ``title`` is ``None`` when the user keeps the per-file default
-            behavior.
+        Tuple[Optional[str], int, str, str, bool]: Shared launch
+            configuration in the order ``(title, max_restarts,
+            recipients_file, credentials_file, report_logs)``. ``title`` is
+            ``None`` when the user keeps the per-file default behavior.
     """
     print()
     title = _prompt_title()
@@ -355,8 +385,9 @@ def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str]
         custom_directory=custom_directory,
     )
     max_restarts = _prompt_max_restarts()
+    report_logs = _prompt_report_logs()
     print()
-    return title, max_restarts, recipients_file, credentials_file
+    return title, max_restarts, recipients_file, credentials_file, report_logs
 
 
 def main(argv: Optional[List[str]] = None) -> None:
@@ -393,7 +424,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     launch_directory = Path.cwd()
 
     _print_monitor_banner()
-    title, max_restarts, recipients_file, credentials_file = _collect_launch_configuration(
+    title, max_restarts, recipients_file, credentials_file, report_logs = _collect_launch_configuration(
         launch_directory
     )
 
@@ -404,6 +435,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             max_restarts=max_restarts,
             recipients_file=recipients_file,
             credentials_file=credentials_file,
+            report_logs=report_logs,
         )
 
 

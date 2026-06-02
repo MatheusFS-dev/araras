@@ -40,24 +40,27 @@ pip install git+https://github.com/MatheusFS-dev/araras.git
 After installing **araras** via `pip`, you can execute a script with
 automatic restarts using the built-in command-line interface.
 
-1. Ensure your target script writes a *success flag* file when it
-   finishes successfully. The monitoring process watches for this file
-   to stop restarting the script.
-2. Invoke the CLI with the path to your script and the location of the
-   flag file. When the ``-s`` option is omitted the monitor will now place the
-   flag in a uniquely named file under the system temporary directory, which
-   prevents concurrent monitors from observing each other's completion signals:
+The current `monitor` command is prompt-driven and accepts only positional
+target file paths:
 
 ```bash
-python -m araras.runtime.monitoring path/to/script.py another.ipynb -s /tmp/done.flag
+monitor path/to/script.py another.ipynb
 ```
 
-Additional options allow controlling restart behavior, for example:
+The launcher asks once per invocation for these shared settings:
 
-```bash
-python -m araras.runtime.monitoring path/to/script.py another.ipynb -s /tmp/done.flag \
-    -m 5 -d 3 -f 3600
-```
+- `Monitor title`: Blank input keeps each file stem as the display title.
+- `Choose JSON folder`: Selects the email configuration directory.
+- `Max restarts`: Blank input keeps the default `10`. Enter `0` to disable automatic restarts after the initial launch attempt.
+- `Report logs`: Enabled by default. The monitor writes a report bundle under `runs/monitor_logs/<target-name>-<timestamp>/` unless you explicitly answer `n`.
 
-Run with `--help` to see all available arguments.
+When `Report logs` is enabled, each monitored file gets:
 
+- A `<target-name>.log` event log.
+- `samples.jsonl` with timestamped CPU, memory, and GPU samples over time.
+- `restarts.json`, `summary.json`, and `summary.txt`.
+- `cpu.png`, `memory.png`, `gpu_utilization.png`, `gpu_memory.png`, and `gpu_temperature.png`.
+
+CPU and memory values are measured for the monitored process tree rather than
+only the root PID. GPU values reflect host GPU telemetry from `nvidia-smi`
+when it is available.

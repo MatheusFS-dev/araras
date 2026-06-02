@@ -236,35 +236,57 @@ def _cleanup_stale_monitor_files():
 
 
 def get_process_resource_usage(pid: int) -> Tuple[float, float, float]:
-    """Return memory percentage, memory in GB and CPU percentage for a process.
+    """Return process-tree memory percentage, memory in GB and CPU percentage.
 
-    This helper queries ``psutil`` for the resource consumption of a single
-    process.  The CPU value reflects the sum across all available CPU cores and
-    therefore may exceed ``100`` when the process utilises more than one core.
+    This helper queries ``psutil`` for the resource consumption of the process
+    tree rooted at ``pid``. The CPU value reflects the sum across all
+    available CPU cores and therefore may exceed ``100`` when the monitored job
+    utilises more than one core across multiple child processes. Measuring the
+    full process tree prevents wrapper shells or helper children from making
+    the displayed values look artificially close to zero.
 
     Args:
-        pid (int): Process ID of the process to query.
+        pid (int): Root process ID of the monitored job tree to query.
 
     Returns:
         Tuple[float, float, float]:
             The memory usage percentage, memory usage in gigabytes and CPU
-            percentage for the given process.
+            percentage for the given process tree.
 
     Raises:
         psutil.NoSuchProcess: If the PID does not exist.
     """
     proc = psutil.Process(pid)
 
-    # First call to initialize CPU measurement (returns 0.0)
-    proc.cpu_percent()
+    # Sampling the full process tree keeps resource numbers attached to the
+    # monitored workload instead of whichever wrapper shell happened to be
+    # launched by the terminal helper.
+    try:
+        processes = [proc] + proc.children(recursive=True)
+    except (psutil.NoSuchProcess, psutil.Error, OSError):
+        processes = [proc]
 
-    # Wait and take actual measurement
-    time.sleep(1.0)  # Longer interval for accurate measurement
+    for process in processes:
+        try:
+            process.cpu_percent(interval=None)
+        except (psutil.NoSuchProcess, psutil.Error, OSError):
+            continue
 
-    with proc.oneshot():
-        mem_percent = proc.memory_percent()
-        mem_gb = proc.memory_info().rss / (1024**3)
-        cpu_percent = proc.cpu_percent()  # Non-blocking call after initialization
+    time.sleep(1.0)
+
+    total_rss_bytes = 0
+    cpu_percent = 0.0
+    for process in processes:
+        try:
+            with process.oneshot():
+                total_rss_bytes += process.memory_info().rss
+                cpu_percent += process.cpu_percent(interval=None)
+        except (psutil.NoSuchProcess, psutil.Error, OSError):
+            continue
+
+    memory_total = psutil.virtual_memory().total
+    mem_percent = (total_rss_bytes / memory_total) * 100.0 if memory_total else 0.0
+    mem_gb = total_rss_bytes / (1024**3)
 
     # Write usage information to a log file if configured
     if RESOURCE_USAGE_LOG_FILE:
@@ -470,6 +492,7 @@ def run_auto_restart(
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
     restart_email_warning: bool = True,
+    report_logs: bool = False,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -490,6 +513,9 @@ def run_auto_restart(
         supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
         resource_usage_log_file (Optional[str]): Path to write process resource usage logs. If None, logging is disabled.
         restart_email_warning (bool): Enable or disable email warnings for restart events
+        report_logs (bool): When ``True``, write monitor report artifacts under
+            ``runs/monitor_logs`` for each monitored target. If ``False``, the
+            runtime preserves the previous no-report behavior.
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -519,6 +545,7 @@ def run_auto_restart(
             credentials_file=credentials_file,
             retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
             restart_email_warning=restart_email_warning,
+            report_logs=report_logs,
         )
 
         if force_restart is not None and force_restart > 0:

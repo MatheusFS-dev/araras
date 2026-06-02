@@ -2172,7 +2172,8 @@ asks for the shared launch configuration once per invocation:
 |------|------|-------------|
 | `Monitor title` | file stem | Blank input keeps the previous behavior where each target uses its own stem as the displayed process title. |
 | `Choose JSON folder` | `1` | Selects the email configuration directory. Option `1` uses `$HOME/.araras/json`, option `2` uses `./json` relative to where `monitor` was launched, and option `3` accepts a custom directory. |
-| `Max restarts` | `10` | Blank input keeps the default restart limit. |
+| `Max restarts` | `10` | Blank input keeps the default restart limit. Enter `0` to disable automatic restarts after the initial launch attempt. |
+| `Report logs` | `Yes` | Enabled by default. The monitor writes a report bundle for each monitored target under `runs/monitor_logs/<target-name>-<timestamp>/` unless you explicitly answer `n`. |
 
 When option `1` is selected and `$HOME/.araras/json` does not exist, the
 launcher creates that directory and writes template `recipients.json` and
@@ -2186,10 +2187,25 @@ placeholder values in those templates are replaced with real settings.
 > console script before `run_auto_restart()` is called.
 
 > [!NOTE]
+> Live CPU and memory output now tracks the monitored process tree instead of
+> only the root PID. This keeps wrapper shells or child-worker processes from
+> making the displayed values look artificially close to zero. GPU metrics in
+> the optional report logs reflect host GPU telemetry from `nvidia-smi` when
+> it is available.
+
+> [!NOTE]
 > On Linux, monitored target jobs still open in a terminal window when a GUI
 > terminal is available. In SSH or other headless sessions, the target job runs
 > inline in the current shell instead. The helper crash-monitor process now
 > runs invisibly in the background and does not open a second terminal.
+
+When `Report logs` is enabled, the report directory contains:
+
+- `<target-name>.log` with lifecycle events and sampled values
+- `samples.jsonl` with timestamped CPU, memory, and GPU samples
+- `restarts.json` with restart history
+- `summary.json` and `summary.txt` with final status, PID history, and aggregate statistics
+- `cpu.png`, `memory.png`, `gpu_utilization.png`, `gpu_memory.png`, and `gpu_temperature.png`
 
 > [!CAUTION]
 > Run the `monitor` command from the **same directory** as the file being monitored so that relative paths resolve correctly.
