@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import json
 import math
+import platform
 import subprocess
 import threading
 import time
@@ -277,6 +278,9 @@ class MonitorReportSession:
             "source_path": str(self.source_path),
             "title": self.title,
             "output_directory": str(self.output_directory),
+            "cpu_name": self._get_cpu_name(),
+            "system_memory_total_bytes": self._get_total_memory_bytes(),
+            "system_memory_total_gb": self._get_total_memory_gb(),
             "final_status": final_status,
             "final_error": final_error,
             "total_runtime_seconds": total_runtime_seconds,
@@ -365,6 +369,7 @@ class MonitorReportSession:
             "utilization_percent": None,
             "memory_used_mb": None,
             "memory_total_mb": None,
+            "device_names": {},
             "temperatures_celsius": {},
             "utilization_by_device_percent": {},
             "memory_used_by_device_mb": {},
@@ -430,6 +435,7 @@ class MonitorReportSession:
             "gpu_utilization_percent": gpu_metrics["utilization_percent"],
             "gpu_memory_used_mb": gpu_metrics["memory_used_mb"],
             "gpu_memory_total_mb": gpu_metrics["memory_total_mb"],
+            "gpu_device_names": gpu_metrics["device_names"],
             "gpu_temperatures_celsius": gpu_metrics["temperatures_celsius"],
             "gpu_utilization_by_device_percent": gpu_metrics["utilization_by_device_percent"],
             "gpu_memory_used_by_device_mb": gpu_metrics["memory_used_by_device_mb"],
@@ -557,6 +563,51 @@ class MonitorReportSession:
         except (AttributeError, psutil.Error, OSError):
             return None
 
+    def _get_total_memory_gb(self) -> Optional[float]:
+        """Return total system memory in gibibytes when available.
+
+        Returns:
+            Optional[float]: Total physical memory in GiB, or ``None`` when
+                the host memory size cannot be determined through ``psutil``.
+        """
+        total_memory_bytes = self._get_total_memory_bytes()
+        if total_memory_bytes is None:
+            return None
+        return total_memory_bytes / float(1024**3)
+
+    def _get_cpu_name(self) -> str:
+        """Return a human-readable CPU model name for the current host.
+
+        Returns:
+            str: CPU model string gathered from the operating system when
+                possible. On Linux, ``/proc/cpuinfo`` is preferred because it
+                usually exposes the full model name. If that source is
+                unavailable, the method falls back to ``platform.processor()``,
+                then ``platform.machine()``.
+        """
+        cpu_info_path = Path("/proc/cpuinfo")
+        if cpu_info_path.exists():
+            try:
+                for raw_line in cpu_info_path.read_text().splitlines():
+                    if raw_line.lower().startswith("model name"):
+                        parts = raw_line.split(":", 1)
+                        if len(parts) == 2:
+                            cpu_name = parts[1].strip()
+                            if cpu_name:
+                                return cpu_name
+            except OSError:
+                pass
+
+        cpu_name = platform.processor().strip()
+        if cpu_name:
+            return cpu_name
+
+        machine_name = platform.machine().strip()
+        if machine_name:
+            return machine_name
+
+        return "Unknown CPU"
+
     def _query_gpu_metrics(self) -> Dict[str, Any]:
         """Return aggregate host GPU metrics using ``nvidia-smi``.
 
@@ -567,9 +618,9 @@ class MonitorReportSession:
 
         Returns:
             Dict[str, Any]: Dictionary containing ``utilization_percent``,
-                ``memory_used_mb``, ``memory_total_mb``, and
-                ``temperatures_celsius``. Aggregate values are ``None`` and
-                the temperature mapping is empty when GPU telemetry is
+                ``memory_used_mb``, ``memory_total_mb``, ``device_names``,
+                and per-device metric mappings. Aggregate values are ``None``
+                and nested mappings are empty when GPU telemetry is
                 unavailable. Individual GPU temperatures may be ``None`` when
                 a specific device omits temperature data for a sample.
         """
@@ -577,7 +628,7 @@ class MonitorReportSession:
             result = subprocess.run(
                 [
                     "nvidia-smi",
-                    "--query-gpu=index,utilization.gpu,memory.used,memory.total,temperature.gpu",
+                    "--query-gpu=index,name,utilization.gpu,memory.used,memory.total,temperature.gpu",
                     "--format=csv,noheader,nounits",
                 ],
                 capture_output=True,
@@ -593,6 +644,7 @@ class MonitorReportSession:
         utilization_values: List[float] = []
         memory_used_values: List[float] = []
         memory_total_values: List[float] = []
+        device_names: Dict[str, str] = {}
         temperatures_celsius: Dict[str, Optional[float]] = {}
         utilization_by_device_percent: Dict[str, float] = {}
         memory_used_by_device_mb: Dict[str, float] = {}
@@ -603,19 +655,20 @@ class MonitorReportSession:
             if not line:
                 continue
             parts = [part.strip() for part in line.split(",")]
-            if len(parts) != 5:
+            if len(parts) != 6:
                 continue
 
             try:
                 gpu_index = int(parts[0])
-                utilization_value = float(parts[1])
-                memory_used_value = float(parts[2])
-                memory_total_value = float(parts[3])
+                gpu_display_name = parts[1]
+                utilization_value = float(parts[2])
+                memory_used_value = float(parts[3])
+                memory_total_value = float(parts[4])
             except ValueError:
                 continue
 
             try:
-                gpu_temperature = float(parts[4])
+                gpu_temperature = float(parts[5])
             except ValueError:
                 gpu_temperature = None
 
@@ -623,6 +676,7 @@ class MonitorReportSession:
             utilization_values.append(utilization_value)
             memory_used_values.append(memory_used_value)
             memory_total_values.append(memory_total_value)
+            device_names[gpu_name] = gpu_display_name
             temperatures_celsius[gpu_name] = gpu_temperature
             utilization_by_device_percent[gpu_name] = utilization_value
             memory_used_by_device_mb[gpu_name] = memory_used_value
@@ -635,6 +689,7 @@ class MonitorReportSession:
             "utilization_percent": max(utilization_values),
             "memory_used_mb": sum(memory_used_values),
             "memory_total_mb": sum(memory_total_values),
+            "device_names": device_names,
             "temperatures_celsius": temperatures_celsius,
             "utilization_by_device_percent": utilization_by_device_percent,
             "memory_used_by_device_mb": memory_used_by_device_mb,
@@ -702,6 +757,8 @@ class MonitorReportSession:
         lines = [
             f"Source file: {summary['source_path']}",
             f"Title: {summary['title']}",
+            f"CPU: {summary['cpu_name']}",
+            f"System RAM total (GB): {summary['system_memory_total_gb']}",
             f"Final status: {summary['final_status']}",
             f"Final error: {summary['final_error']}",
             f"Total runtime (s): {summary['total_runtime_seconds']}",
@@ -720,8 +777,9 @@ class MonitorReportSession:
             lines.append("  GPU temperatures C avg/max by device:")
             for gpu_name in sorted(gpu_temperature_summary):
                 device_summary = gpu_temperature_summary[gpu_name]
+                device_label = self._format_gpu_display_name(gpu_name)
                 lines.append(
-                    f"    {gpu_name}: {device_summary['average']} / {device_summary['max']}"
+                    f"    {device_label}: {device_summary['average']} / {device_summary['max']}"
                 )
         with open(self.summary_text_file, "w") as file_pointer:
             file_pointer.write("\n".join(lines) + "\n")
@@ -975,7 +1033,7 @@ class MonitorReportSession:
 
             self._style_plot_axes(
                 axis,
-                f"{self._format_gpu_title(gpu_name)} {title_suffix}",
+                f"{self._format_gpu_display_name(gpu_name)} {title_suffix}",
                 ylabel,
             )
             if legend_handles:
@@ -1263,6 +1321,7 @@ class MonitorReportSession:
                 "memory_gb": None,
                 "gpu_utilization_percent": None,
                 "gpu_memory_used_mb": None,
+                "gpu_device_names": {},
                 "gpu_temperatures_celsius": {},
                 "gpu_utilization_by_device_percent": {},
                 "gpu_memory_used_by_device_mb": {},
@@ -1306,6 +1365,7 @@ class MonitorReportSession:
                 "memory_gb": None,
                 "gpu_utilization_percent": None,
                 "gpu_memory_used_mb": None,
+                "gpu_device_names": {},
                 "gpu_temperatures_celsius": {},
                 "gpu_utilization_by_device_percent": {},
                 "gpu_memory_used_by_device_mb": {},
@@ -1382,6 +1442,9 @@ class MonitorReportSession:
         """
         cloned_sample = dict(sample)
         cloned_sample["elapsed_seconds"] = elapsed_seconds
+        device_names = sample.get("gpu_device_names")
+        if isinstance(device_names, dict):
+            cloned_sample["gpu_device_names"] = dict(device_names)
         temperatures = sample.get("gpu_temperatures_celsius")
         if isinstance(temperatures, dict):
             cloned_sample["gpu_temperatures_celsius"] = dict(temperatures)
@@ -1447,6 +1510,14 @@ class MonitorReportSession:
             )
             if previous_mapping:
                 boundary_sample[metric_key] = previous_mapping
+        device_names = boundary_sample.get("gpu_device_names")
+        if not isinstance(device_names, dict) or not device_names:
+            previous_device_names = self._find_last_non_empty_mapping_for_attempt(
+                attempt_index,
+                "gpu_device_names",
+            )
+            if previous_device_names:
+                boundary_sample["gpu_device_names"] = previous_device_names
         return boundary_sample
 
     def _find_last_non_null_metric_value_for_attempt(
@@ -1529,15 +1600,34 @@ class MonitorReportSession:
         """
         return gpu_name.replace("_", "")
 
-    def _format_gpu_title(self, gpu_name: str) -> str:
-        """Return the display label used in per-GPU graph titles.
+    def _format_gpu_display_name(self, gpu_name: str) -> str:
+        """Return the display label used in per-GPU graphs and summaries.
 
         Args:
             gpu_name (str): Internal GPU key such as ``"gpu_0"``.
 
         Returns:
-            str: Human-readable title prefix such as ``"GPU 0"``.
+            str: Sampled GPU device name when available. If the monitor has
+                not yet recorded a device name for this GPU, the method falls
+                back to a generic ``GPU 0`` style label.
         """
+        for sample in reversed(self._samples):
+            device_names = sample.get("gpu_device_names")
+            if not isinstance(device_names, dict):
+                continue
+            device_name = device_names.get(gpu_name)
+            if isinstance(device_name, str) and device_name:
+                return device_name
+        for event in reversed(self._restart_events):
+            crash_sample = event.get("crash_sample")
+            if not isinstance(crash_sample, dict):
+                continue
+            device_names = crash_sample.get("gpu_device_names")
+            if not isinstance(device_names, dict):
+                continue
+            device_name = device_names.get(gpu_name)
+            if isinstance(device_name, str) and device_name:
+                return device_name
         return gpu_name.replace("gpu_", "GPU ")
 
     def _select_time_axis_scale(self) -> Tuple[str, float]:
