@@ -1,10 +1,12 @@
 from typing import List
 
+import json
 import os
 import platform
 import shlex
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
@@ -120,6 +122,57 @@ class SimpleTerminalLauncher:
 
         return command_text
 
+    def _build_zellij_command(self, command: List[str], pid_file: str) -> List[str]:
+        """Build the direct zellij pane command with PID capture.
+
+        The zellij path should preserve the active interpreter and CUDA
+        environment from the current session, so it must not insert an extra
+        Bash process into the pane. A tiny Python wrapper writes its own PID to
+        ``pid_file`` and then ``exec`` replaces itself with the monitored
+        target, keeping the recorded PID aligned with the real process after
+        the handoff.
+
+        Args:
+            command (List[str]): Target command arguments in execution order.
+                The first element is the executable and the remaining elements
+                are passed through unchanged. An empty list is invalid and
+                causes ``ValueError``.
+            pid_file (str): Filesystem path where the wrapper must write the
+                process ID before the ``exec`` handoff. The path must be a
+                non-empty string. If the file cannot be written at runtime, the
+                wrapper process will raise an ``OSError`` and the pane command
+                will fail immediately.
+
+        Returns:
+            List[str]: Command list suitable for ``zellij run -- <COMMAND>...``.
+                The list starts with ``sys.executable`` so the wrapper uses the
+                same Python interpreter as the active monitor session. The
+                command also embeds a JSON snapshot of the current process
+                environment so the zellij pane can restore CUDA, virtualenv,
+                and PATH state before executing the target.
+
+        Raises:
+            ValueError: If ``command`` is empty or ``pid_file`` is empty.
+        """
+        if not command:
+            raise ValueError("command must not be empty")
+        if not pid_file:
+            raise ValueError("pid_file must not be empty")
+
+        wrapper_code = (
+            "import json, os, sys; "
+            "pid_path = sys.argv[1]; "
+            "environment_snapshot = json.loads(sys.argv[2]); "
+            "target = sys.argv[3:]; "
+            "os.environ.update(environment_snapshot); "
+            "file_pointer = open(pid_path, 'w', encoding='utf-8'); "
+            "file_pointer.write(str(os.getpid())); "
+            "file_pointer.close(); "
+            "os.execvp(target[0], target)"
+        )
+        environment_snapshot = json.dumps(dict(os.environ))
+        return [sys.executable, "-c", wrapper_code, pid_file, environment_snapshot, *command]
+
     def launch(self, command: List[str], working_dir: str) -> subprocess.Popen:
         """Launch a command in a GUI terminal or inline shell session.
 
@@ -166,7 +219,7 @@ class SimpleTerminalLauncher:
             if self._has_zellij_session():
                 fd, pid_file = tempfile.mkstemp(suffix=".pid")
                 os.close(fd)
-                full_cmd = f"echo $$ > {shlex.quote(pid_file)}; exec {command_text}"
+                zellij_command = self._build_zellij_command(command, pid_file)
                 terminal_cmd = [
                     "zellij",
                     "run",
@@ -175,9 +228,7 @@ class SimpleTerminalLauncher:
                     "--name",
                     "araras monitor",
                     "--",
-                    "bash",
-                    "-c",
-                    full_cmd,
+                    *zellij_command,
                 ]
                 process = subprocess.Popen(
                     terminal_cmd,
