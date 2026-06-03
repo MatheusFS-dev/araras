@@ -108,7 +108,7 @@ class SimpleTerminalLauncher:
                 paths with spaces remain valid in shell mode.
 
         Returns:
-            str: A shell command string ready for ``bash -lc``.
+            str: A shell command string ready for ``bash -c``.
         """
         command_text = shlex.join(command)
 
@@ -176,7 +176,7 @@ class SimpleTerminalLauncher:
                     "araras monitor",
                     "--",
                     "bash",
-                    "-lc",
+                    "-c",
                     full_cmd,
                 ]
                 process = subprocess.Popen(
@@ -201,7 +201,7 @@ class SimpleTerminalLauncher:
                 full_cmd = (
                     f"({command_text}) & echo $! > {shlex.quote(pid_file)}; wait"
                 )
-                terminal_cmd = ["gnome-terminal", "--", "bash", "-lc", full_cmd]
+                terminal_cmd = ["gnome-terminal", "--", "bash", "-c", full_cmd]
                 process = subprocess.Popen(
                     terminal_cmd,
                     cwd=working_dir,
@@ -216,7 +216,7 @@ class SimpleTerminalLauncher:
                 return process
 
             process = subprocess.Popen(
-                ["bash", "-lc", f"exec {command_text}"],
+                ["bash", "-c", f"exec {command_text}"],
                 cwd=working_dir,
                 start_new_session=False,
                 stdin=None,
