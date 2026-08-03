@@ -2069,6 +2069,7 @@ send_email(
     text_type,
     smtp_server,
     smtp_port,
+    inline_png,
 )
 ```
 Send a notification message to every configured recipient. The helper reads
@@ -2085,6 +2086,7 @@ raising it.
 | text_type | `str`, optional | MIME subtype for the message body. Defaults to ``"plain"``. |
 | smtp_server | `str`, optional | SMTP server hostname. Defaults to ``"smtp.gmail.com"``. |
 | smtp_port | `int`, optional | SMTP port. Defaults to ``587``. |
+| inline_png | `bytes`, optional | PNG bytes embedded with Content-ID ``monitor-graph`` for HTML messages. Defaults to ``None``. |
 
 **Examples**
 ```python
@@ -2115,6 +2117,9 @@ run_auto_restart(
     supress_tf_warnings,
     resource_usage_log_file,
     restart_email_warning,
+    report_logs,
+    detect_memory_leaks,
+    memory_leak_warmup_seconds,
 )
 ```
 Main function with notebook conversion, file cleanup, and consolidated email notification support.
@@ -2138,11 +2143,14 @@ monitoring resources are created and raises ``FileNotFoundError`` if not.
 | restart_delay | `float` | Delay between restarts in seconds |
 | recipients_file | `Any` | Path to recipients JSON file (defaults to ./json/recipients.json) |
 | credentials_file | `Any` | Path to credentials JSON file (defaults to ./json/credentials.json) |
-| force_restart | `Any` | Force a restart after a delay in seconds regardless of status |
+| force_restart | `Optional[float]` | Positive fixed interval in seconds for intentional scheduled restarts. `None` disables the schedule. |
 | retry_attempts | `int` | Number of retry attempts before sending failure email |
 | supress_tf_warnings | `bool` | Suppress TensorFlow `ptxas` register spill warnings (default: False) |
 | resource_usage_log_file | `Any` | Path to write process resource usage logs. If None, logging is disabled. |
 | restart_email_warning | `bool` | Enable or disable email warnings for restart events. |
+| report_logs | `bool` | Write detailed monitor reports when enabled. |
+| detect_memory_leaks | `bool` | Enable conservative process-tree RSS trend warnings. Defaults to `False`. |
+| memory_leak_warmup_seconds | `float` | Positive initial no-check duration in seconds for each launched PID. Defaults to `300.0`. |
 
 **Returns**
 ` None`
@@ -2173,7 +2181,29 @@ asks for the shared launch configuration once per invocation:
 | `Monitor title` | file stem | Blank input keeps the previous behavior where each target uses its own stem as the displayed process title. |
 | `Choose JSON folder` | `1` | Selects the email configuration directory. Option `1` uses `$HOME/.araras/json`, option `2` uses `./json` relative to where `monitor` was launched, and option `3` accepts a custom directory. |
 | `Max restarts` | `10` | Blank input keeps the default restart limit. Enter `0` to disable automatic restarts after the initial launch attempt. |
+| `Force periodic restart` | `Yes` | Press Enter or answer `y`, then provide a positive fixed interval in minutes. Decimal values such as `0.5` are accepted. Answer `n` to disable scheduled restarts. |
+| `Detect possible memory leak` | `Yes` | Press Enter or answer `y` to monitor process-tree RSS, then enter a positive warm-up in minutes. Blank warm-up input keeps the five-minute default. Answer `n` to disable detection. |
 | `Report logs` | `Yes` | Enabled by default. The monitor writes a report bundle for each monitored target under `runs/monitor_logs/<target-name>-<timestamp>/` unless you explicitly answer `n`. |
+
+Scheduled restarts do not consume or reset the genuine crash/failure restart
+count controlled by `Max restarts`. After a replacement PID is running and its
+crash monitor has started, configured email recipients receive a distinct
+`Scheduled Restart Successful` confirmation that does not describe the event
+as a crash. The confirmation embeds the previous PID's process-tree RAM usage
+from launch until the scheduled restart. This graph is collected whenever
+scheduled restart email delivery is enabled and does not require memory leak
+detection.
+
+Memory leak detection runs independently of report logging. After the warm-up,
+it evaluates a rolling 10-minute process-tree RSS window once per minute. A
+warning requires at least 100 MiB net growth, a fitted slope of at least
+10 MiB/min, and growth of at least 10 MiB in three of the four transitions
+between five consecutive two-minute median blocks. R-squared remains visible in
+the warning as diagnostic information but is not a detection gate. The monitor
+takes a final sample and evaluates it immediately before a scheduled restart.
+Each target attempts only one warning email across all replacement PIDs; the
+message embeds a RAM graph and does not change process lifecycle behavior. RSS
+growth is evidence of a possible leak, not proof of one.
 
 When option `1` is selected and `$HOME/.araras/json` does not exist, the
 launcher creates that directory and writes template `recipients.json` and
@@ -2203,8 +2233,8 @@ When `Report logs` is enabled, the report directory contains:
 
 - `<target-name>.log` with lifecycle events and sampled values
 - `samples.jsonl` with timestamped CPU, memory, and GPU samples
-- `restarts.json` with restart history
-- `summary.json` and `summary.txt` with final status, PID history, and aggregate statistics
+- `restarts.json` with restart history and an explicit scheduled or crash-recovery type
+- `summary.json` and `summary.txt` with final status, separate scheduled and crash/failure restart counts, PID history, and aggregate statistics
 - `cpu.png`, `memory.png`, `gpu_utilization.png`, `gpu_memory.png`, and `gpu_temperature.png`
 
 > [!CAUTION]

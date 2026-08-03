@@ -208,6 +208,8 @@ class MonitorReportSession:
         restart_count: int,
         runtime_seconds: Optional[float],
         error: Optional[str] = None,
+        restart_type: str = "crash_recovery",
+        scheduled_restart_count: int = 0,
     ) -> None:
         """Record one restart transition.
 
@@ -222,6 +224,13 @@ class MonitorReportSession:
             runtime_seconds (Optional[float]): Runtime of the previous attempt
                 in seconds. ``None`` is allowed when no attempt runtime is
                 available.
+            restart_type (str): Explicit transition classification. Use
+                ``"crash_recovery"`` for genuine failure recovery and
+                ``"scheduled"`` for an intentional timed restart. Defaults
+                to ``"crash_recovery"`` for existing failure-restart callers.
+            scheduled_restart_count (int): Number of successful scheduled
+                restarts after this transition. This count is independent of
+                ``restart_count`` and defaults to ``0``.
             error (Optional[str]): Optional failure description that triggered
                 the restart decision. When omitted, the session records only
                 the PID transition and restart count.
@@ -231,6 +240,8 @@ class MonitorReportSession:
         """
         event = {
             "restart_count": restart_count,
+            "scheduled_restart_count": scheduled_restart_count,
+            "restart_type": restart_type,
             "old_pid": old_pid,
             "new_pid": new_pid,
             "runtime_seconds": runtime_seconds,
@@ -243,10 +254,10 @@ class MonitorReportSession:
         self._restart_events.append(event)
         if error:
             self._write_event(
-                f"restart {restart_count}: pid {old_pid} -> {new_pid}, error: {error}"
+                f"{restart_type} restart: pid {old_pid} -> {new_pid}, error: {error}"
             )
         else:
-            self._write_event(f"restart {restart_count}: pid {old_pid} -> {new_pid}")
+            self._write_event(f"{restart_type} restart: pid {old_pid} -> {new_pid}")
 
     def finalize(
         self,
@@ -273,6 +284,9 @@ class MonitorReportSession:
         """
         self.stop_attempt()
         self._write_event(f"final status: {final_status}")
+        scheduled_restarts = sum(
+            1 for event in self._restart_events if event.get("restart_type") == "scheduled"
+        )
 
         summary = {
             "source_path": str(self.source_path),
@@ -285,6 +299,8 @@ class MonitorReportSession:
             "final_error": final_error,
             "total_runtime_seconds": total_runtime_seconds,
             "total_restarts": total_restarts,
+            "crash_restarts": total_restarts - scheduled_restarts,
+            "scheduled_restarts": scheduled_restarts,
             "pid_history": self._pid_history,
             "attempt_events": self._attempt_events,
             "restart_events": self._restart_events,
@@ -763,6 +779,8 @@ class MonitorReportSession:
             f"Final error: {summary['final_error']}",
             f"Total runtime (s): {summary['total_runtime_seconds']}",
             f"Total restarts: {summary['total_restarts']}",
+            f"Crash/failure restarts: {summary['crash_restarts']}",
+            f"Scheduled restarts: {summary['scheduled_restarts']}",
             f"PID history: {summary['pid_history']}",
             f"Attempt events: {len(summary['attempt_events'])}",
             f"Restart events: {len(summary['restart_events'])}",

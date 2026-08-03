@@ -1,7 +1,10 @@
+from typing import Optional
+
 import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 
 from araras.utils.verbose_printer import VerbosePrinter
 
@@ -70,6 +73,7 @@ def send_email(
     text_type: str = "plain",
     smtp_server: str = "smtp.gmail.com",
     smtp_port: int = 587,
+    inline_png: Optional[bytes] = None,
 ) -> None:
     """Send an email notification to every configured recipient.
 
@@ -84,6 +88,17 @@ def send_email(
             ``"html"``).
         smtp_server (str): Hostname or IP address of the SMTP server.
         smtp_port (int): Port used to connect to the SMTP server.
+        inline_png (Optional[bytes]): Optional PNG bytes embedded with Content-ID
+            ``monitor-graph``. When provided, HTML may display the image with
+            ``<img src="cid:monitor-graph">``. Defaults to ``None``. Embedding
+            adds the image bytes to the email but does not write a file.
+
+    Returns:
+        None: The function attempts delivery and logs its outcome.
+
+    Raises:
+        RuntimeError: Not raised. Configuration, MIME, authentication, and SMTP
+            errors are caught and logged.
 
     Notes:
         Exceptions raised while loading files or sending the message are
@@ -104,11 +119,23 @@ def send_email(
         recipient_emails = get_recipient_emails(recipients_file)
 
         # Create a multipart email message object
-        message = MIMEMultipart()
+        if inline_png is not None and (not isinstance(inline_png, bytes) or not inline_png):
+            raise ValueError("inline_png must contain non-empty PNG bytes")
+
+        message = MIMEMultipart("related") if inline_png is not None else MIMEMultipart()
         message["From"] = sender_email
         message["To"] = ", ".join(recipient_emails)
         message["Subject"] = subject
         message.attach(MIMEText(body, text_type))
+        if inline_png is not None:
+            inline_image = MIMEImage(inline_png, _subtype="png")
+            inline_image.add_header("Content-ID", "<monitor-graph>")
+            inline_image.add_header(
+                "Content-Disposition",
+                "inline",
+                filename="memory-leak.png",
+            )
+            message.attach(inline_image)
     except Exception as e:
         vp.logf(vp.color(f"{e}", "red"), log_level="ERROR", tag=vp.gen_tag("fileline"))
         return

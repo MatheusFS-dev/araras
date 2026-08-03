@@ -180,24 +180,34 @@ class ConsolidatedEmailManager:
 
         Args:
             status_type (str): Type of status message to send. Supported values are
-                ``"restart_success"``, ``"restart_failed"`` and
-                ``"task_complete"``.
+                ``"restart_success"``, ``"scheduled_restart_success"``,
+                ``"restart_failed"``, ``"task_complete"`` and
+                ``"memory_leak_warning"``.
             process_data (Dict[str, Any]): Dictionary with details about the process.  The
                 expected keys vary depending on ``status_type``.
 
+        Returns:
+            None: A supported enabled notification is attempted; unsupported
+            or disabled notifications return without delivery.
+
         Raises:
-            Exception: Propagates any exception raised by the underlying email
-                sending routine after logging a warning.
+            RuntimeError: Not raised. Message construction and delivery errors
+                are caught and reported.
         """
         if not self.email_enabled:
             return
 
-        if not self.restart_email_warning and status_type in {"restart_success", "restart_failed"}:
+        if not self.restart_email_warning and status_type in {
+            "restart_success",
+            "scheduled_restart_success",
+            "restart_failed",
+        }:
             return
 
         try:
             timestamp = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
             title = process_data.get("title", "Unknown Process")
+            inline_png = None
 
             if status_type == "restart_success":
                 subject = f"{title} crashed - Restart Successful"
@@ -210,6 +220,19 @@ class ConsolidatedEmailManager:
                     restart_count=process_data.get("restart_count", 0),
                     runtime=process_data.get("runtime", 0.0),
                 )
+            elif status_type == "scheduled_restart_success":
+                subject = f"{title} - Scheduled Restart Successful"
+                color = "#28a745"
+                status_title = "Scheduled Restart Successful"
+                status_description = "Process reached its configured interval and restarted successfully"
+                details_section = _mon.SCHEDULED_RESTART_DETAILS_TEMPLATE.format(
+                    old_pid=process_data["old_pid"],
+                    new_pid=process_data["new_pid"],
+                    scheduled_restart_count=process_data["scheduled_restart_count"],
+                    interval_minutes=process_data["interval_seconds"] / 60.0,
+                    runtime=process_data["runtime"],
+                )
+                inline_png = process_data["graph_png"]
             elif status_type == "restart_failed":
                 failed_attempts = process_data.get("failed_attempts", 0)
                 remaining = process_data.get("remaining_attempts", 0)
@@ -238,8 +261,28 @@ class ConsolidatedEmailManager:
                 status_description = "Process completed all tasks successfully"
                 details_section = _mon.COMPLETION_DETAILS_TEMPLATE.format(
                     restart_count=process_data.get("restart_count", 0),
+                    scheduled_restart_count=process_data.get("scheduled_restart_count", 0),
+                    total_restarts=process_data.get("restart_count", 0)
+                    + process_data.get("scheduled_restart_count", 0),
                     total_runtime=process_data.get("total_runtime", 0.0),
                 )
+            elif status_type == "memory_leak_warning":
+                subject = f"Possible Memory Leak Detected: {title}"
+                color = "#b54708"
+                status_title = "Possible Memory Leak Detected"
+                status_description = (
+                    "Sustained process-tree RSS growth matched the conservative warning rule"
+                )
+                details_section = _mon.MEMORY_LEAK_DETAILS_TEMPLATE.format(
+                    pid=process_data["pid"],
+                    current_rss_mib=process_data["current_rss_mib"],
+                    net_growth_mib=process_data["net_growth_mib"],
+                    slope_mib_per_minute=process_data["slope_mib_per_minute"],
+                    r_squared=process_data["r_squared"],
+                    warmup_minutes=process_data["warmup_seconds"] / 60.0,
+                    window_minutes=process_data["window_seconds"] / 60.0,
+                )
+                inline_png = process_data["graph_png"]
             else:
                 return
 
@@ -252,13 +295,23 @@ class ConsolidatedEmailManager:
                 details_section=details_section,
             )
 
-            send_email(
-                subject,
-                html_content,
-                self.recipients_file,
-                self.credentials_file,
-                "html",
-            )
+            if inline_png is None:
+                send_email(
+                    subject,
+                    html_content,
+                    self.recipients_file,
+                    self.credentials_file,
+                    "html",
+                )
+            else:
+                send_email(
+                    subject,
+                    html_content,
+                    self.recipients_file,
+                    self.credentials_file,
+                    "html",
+                    inline_png=inline_png,
+                )
             self.last_notification_time = time.time()
         except Exception as e:
             _mon.print_error_message("EMAIL", f"Failed to send consolidated status email: {e}")
@@ -300,7 +353,7 @@ class ConsolidatedEmailManager:
     def report_successful_restart(
         self,
         title: str,
-        old_pid: Optional[int],
+        old_pid: int,
         new_pid: int,
         restart_count: int,
         runtime: float,
@@ -318,13 +371,82 @@ class ConsolidatedEmailManager:
             },
         )
 
-    def report_task_completion(self, title: str, restart_count: int, total_runtime: float) -> None:
-        """Report that the monitored task finished successfully."""
+    def report_successful_scheduled_restart(
+        self,
+        title: str,
+        old_pid: Optional[int],
+        new_pid: int,
+        scheduled_restart_count: int,
+        runtime: float,
+        interval_seconds: float,
+        graph_png: bytes,
+    ) -> None:
+        """Report that an intentional scheduled restart succeeded.
+
+        Args:
+            title (str): Human-readable monitored process title.
+            old_pid (int): PID intentionally stopped at the end of the
+                interval.
+            new_pid (int): Replacement PID that is running and monitored.
+            scheduled_restart_count (int): Number of successful scheduled
+                restarts including this transition.
+            runtime (float): Runtime of the stopped process in seconds.
+            interval_seconds (float): Positive configured scheduled interval
+                in seconds.
+            graph_png (bytes): Non-empty process-tree RSS graph PNG captured
+                from the stopped PID and embedded in the confirmation email.
+
+        Returns:
+            None: The method sends the configured email when alerts are
+            enabled and otherwise performs no delivery.
+
+        Raises:
+            RuntimeError: Not raised by this wrapper. Delivery errors are
+            reported by :meth:`send_consolidated_status_email`.
+        """
+        self.send_consolidated_status_email(
+            "scheduled_restart_success",
+            {
+                "title": title,
+                "old_pid": old_pid,
+                "new_pid": new_pid,
+                "scheduled_restart_count": scheduled_restart_count,
+                "runtime": runtime,
+                "interval_seconds": interval_seconds,
+                "graph_png": graph_png,
+            },
+        )
+
+    def report_task_completion(
+        self,
+        title: str,
+        restart_count: int,
+        total_runtime: float,
+        scheduled_restart_count: int = 0,
+    ) -> None:
+        """Report that the monitored task finished successfully.
+
+        Args:
+            title (str): Human-readable monitored process title.
+            restart_count (int): Number of genuine crash or failure restarts.
+            total_runtime (float): Total monitored runtime in seconds.
+            scheduled_restart_count (int): Number of successful scheduled
+                restarts. Defaults to ``0``.
+
+        Returns:
+            None: The method sends the configured completion email when alerts
+            are enabled.
+
+        Raises:
+            RuntimeError: Not raised by this wrapper. Delivery errors are
+            reported by :meth:`send_consolidated_status_email`.
+        """
         self.send_consolidated_status_email(
             "task_complete",
             {
                 "title": title,
                 "restart_count": restart_count,
+                "scheduled_restart_count": scheduled_restart_count,
                 "total_runtime": total_runtime,
             },
         )
@@ -339,5 +461,55 @@ class ConsolidatedEmailManager:
                 "remaining_attempts": 0,
                 "restart_count": restart_count,
                 "error": error,
+            },
+        )
+
+    def report_possible_memory_leak(
+        self,
+        title: str,
+        pid: int,
+        current_rss_mib: float,
+        net_growth_mib: float,
+        slope_mib_per_minute: float,
+        r_squared: float,
+        warmup_seconds: float,
+        window_seconds: float,
+        graph_png: bytes,
+    ) -> None:
+        """Send one possible memory leak warning with an inline RAM graph.
+
+        Args:
+            title (str): Human-readable monitored process title.
+            pid (int): Root PID whose process-tree RSS triggered detection.
+            current_rss_mib (float): Most recent process-tree RSS in MiB.
+            net_growth_mib (float): Median RSS increase across the analysis
+                window in MiB.
+            slope_mib_per_minute (float): Fitted RSS trend slope in MiB/min.
+            r_squared (float): Coefficient of determination for the fitted
+                linear trend.
+            warmup_seconds (float): Initial no-check duration in seconds.
+            window_seconds (float): Qualified trend-window duration in seconds.
+            graph_png (bytes): Non-empty PNG bytes embedded in the warning.
+
+        Returns:
+            None: The method delegates to the consolidated email sender when
+            email alerts are enabled.
+
+        Raises:
+            RuntimeError: Not raised by this wrapper. Rendering and delivery
+            failures are reported by the consolidated sender.
+        """
+        self.send_consolidated_status_email(
+            "memory_leak_warning",
+            {
+                "title": title,
+                "pid": pid,
+                "current_rss_mib": current_rss_mib,
+                "net_growth_mib": net_growth_mib,
+                "slope_mib_per_minute": slope_mib_per_minute,
+                "r_squared": r_squared,
+                "warmup_seconds": warmup_seconds,
+                "window_seconds": window_seconds,
+                "graph_png": graph_png,
             },
         )

@@ -12,8 +12,6 @@ from pathlib import Path
 
 import psutil
 
-from threading import Event, Thread
-
 # Local imports
 from .file_handler import FileTypeHandler
 
@@ -31,9 +29,13 @@ CONSOLIDATED_STATUS_TEMPLATE = """<html><body style="font-family:Arial,sans-seri
 
 RESTART_DETAILS_TEMPLATE = """<div style="background:#fff3cd;padding:15px;margin:15px 0;border-left:4px solid #ffc107"><h3>Restart Information</h3><p><strong>Previous PID:</strong> {old_pid}</p><p><strong>New PID:</strong> {new_pid}</p><p><strong>Total Restarts:</strong> {restart_count}</p><p><strong>Runtime Before Restart:</strong> {runtime:.1f}s</p></div>"""
 
+SCHEDULED_RESTART_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Scheduled Restart Information</h3><p><strong>Previous PID:</strong> {old_pid}</p><p><strong>New PID:</strong> {new_pid}</p><p><strong>Scheduled Restart Count:</strong> {scheduled_restart_count}</p><p><strong>Configured Interval:</strong> {interval_minutes:g} minutes</p><p><strong>Runtime Before Restart:</strong> {runtime:.1f}s</p><img src="cid:monitor-graph" alt="Previous process-tree RAM over time" style="max-width:100%;height:auto" /></div>"""
+
 FAILURE_DETAILS_TEMPLATE = """<div style="background:#f8d7da;padding:15px;margin:15px 0;border-left:4px solid #dc3545"><h3>Failure Details</h3><p><strong>Failed Attempts:</strong> {failed_attempts}</p><p><strong>Remaining Attempts:</strong> {remaining_attempts}</p><p><strong>Total Restart Count:</strong> {restart_count}</p><p><strong>Error:</strong> {error}</p></div>"""
 
-COMPLETION_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Completion Summary</h3><p><strong>Total Restarts:</strong> {restart_count}</p><p><strong>Total Runtime:</strong> {total_runtime:.1f}s</p><p><strong>Final Status:</strong> Successfully completed</p></div>"""
+COMPLETION_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Completion Summary</h3><p><strong>Total Restarts:</strong> {total_restarts}</p><p><strong>Crash/Failure Restarts:</strong> {restart_count}</p><p><strong>Scheduled Restarts:</strong> {scheduled_restart_count}</p><p><strong>Total Runtime:</strong> {total_runtime:.1f}s</p><p><strong>Final Status:</strong> Successfully completed</p></div>"""
+
+MEMORY_LEAK_DETAILS_TEMPLATE = """<div style="background:#fff3cd;padding:15px;margin:15px 0;border-left:4px solid #b54708"><h3>Memory Trend Evidence</h3><p><strong>PID:</strong> {pid}</p><p><strong>Current Process-Tree RSS:</strong> {current_rss_mib:.1f} MiB</p><p><strong>Net Growth:</strong> {net_growth_mib:.1f} MiB</p><p><strong>Growth Slope:</strong> {slope_mib_per_minute:.1f} MiB/min</p><p><strong>R-squared (diagnostic only):</strong> {r_squared:.3f}</p><p><strong>Warm-up:</strong> {warmup_minutes:g} minutes</p><p><strong>Analysis Window:</strong> {window_minutes:g} minutes</p><p>This trend may indicate a memory leak, but RSS growth alone cannot prove one.</p><img src="cid:monitor-graph" alt="Process-tree RAM over time" style="max-width:100%;height:auto" /></div>"""
 
 # Updated monitoring script with consolidated email capabilities
 MONITOR_SCRIPT = """import os,sys,time,psutil,json
@@ -133,6 +135,8 @@ def print_monitoring_config_summary(
     email_enabled: bool,
     title: str,
     restart_after_delay: Optional[float] = None,
+    detect_memory_leaks: bool = False,
+    memory_leak_warmup_seconds: float = 300.0,
 ) -> None:
     """Print a summary of monitoring configuration only once.
 
@@ -147,6 +151,11 @@ def print_monitoring_config_summary(
         email_enabled (bool): Whether email notifications are enabled.
         title (str): Title shown for the monitored process.
         restart_after_delay (Optional[float]): Optional forced restart delay in seconds.
+        detect_memory_leaks (bool): Whether conservative process-tree RSS trend
+            detection is enabled. Defaults to ``False``.
+        memory_leak_warmup_seconds (float): Initial no-check duration in
+            seconds. Displayed only when detection is enabled. Defaults to
+            ``300.0``.
 
     Notes:
         This function only prints configuration information and does not alter
@@ -171,7 +180,19 @@ def print_monitoring_config_summary(
         print("Email Alerts: " + vp.color("Disabled", "red"))
     print("Max Restarts: " + vp.color(f"{max_restarts}", "yellow"))
     if restart_after_delay is not None:
-        print("Run will force restart after: " + vp.color(f"{restart_after_delay} seconds", "yellow"))
+        interval_minutes = restart_after_delay / 60.0
+        print(
+            "Scheduled Restart Interval: "
+            + vp.color(f"{interval_minutes:g} minutes", "yellow")
+        )
+    if detect_memory_leaks:
+        print("Memory Leak Detection: " + vp.color("Enabled", "green"))
+        print(
+            "Memory Leak Warm-up: "
+            + vp.color(f"{memory_leak_warmup_seconds / 60.0:g} minutes", "yellow")
+        )
+    else:
+        print("Memory Leak Detection: " + vp.color("Disabled", "red"))
     print("=" * 80)
     print()
 
@@ -192,12 +213,36 @@ def print_restart_info(restart_count: int, max_restarts: int, delay: float) -> N
     print_process_status(f"Restarting in {delay:.1f}s \033[33m({restart_count}/{max_restarts})\033[0m")
 
 
-def print_completion_summary(restart_count: int, total_runtime: Optional[float] = None) -> None:
-    """Print final completion summary."""
+def print_completion_summary(
+    restart_count: int,
+    total_runtime: Optional[float] = None,
+    scheduled_restart_count: int = 0,
+) -> None:
+    """Print the final restart counts for a monitored process.
+
+    Args:
+        restart_count (int): Number of genuine crash or failure restarts.
+        total_runtime (Optional[float]): Total monitored runtime in seconds.
+            The current compact summary does not display this value.
+        scheduled_restart_count (int): Number of successful scheduled
+            restarts. These restarts are displayed separately and are not part
+            of ``restart_count``. Defaults to ``0``.
+
+    Returns:
+        None: The function prints the summary to stdout.
+
+    Raises:
+        RuntimeError: Not raised by this helper.
+    """
     # print("\n" + "=" * 50)
     print("\n" + vp.color("Process Completed", "green"))
     # print("=" * 50)
-    print("Total Restarts: " + vp.color(f"{restart_count}", "orange"))
+    print(
+        "Total Restarts: "
+        + vp.color(f"{restart_count + scheduled_restart_count}", "orange")
+    )
+    print("Crash/Failure Restarts: " + vp.color(f"{restart_count}", "orange"))
+    print("Scheduled Restarts: " + vp.color(f"{scheduled_restart_count}", "orange"))
     # if total_runtime is not None:
     #     print(f"Total Runtime:  {total_runtime:.1f}s")
     # print("=" * 50)
@@ -493,6 +538,8 @@ def run_auto_restart(
     resource_usage_log_file: Optional[str] = None,
     restart_email_warning: bool = True,
     report_logs: bool = False,
+    detect_memory_leaks: bool = False,
+    memory_leak_warmup_seconds: float = 300.0,
 ) -> None:
     """Main function with notebook conversion, file cleanup, and consolidated email notification support.
 
@@ -508,7 +555,9 @@ def run_auto_restart(
         restart_delay (float): Delay between restarts in seconds
         recipients_file (Optional[str]): Path to recipients JSON file (defaults to ./json/recipients.json)
         credentials_file (Optional[str]): Path to credentials JSON file (defaults to ./json/credentials.json)
-        force_restart (Optional[float]): restart the run after a delay in seconds
+        force_restart (Optional[float]): Positive fixed interval in seconds for
+            scheduled restarts. ``None`` disables scheduled restarts. Scheduled
+            restarts do not consume the genuine-crash restart budget.
         retry_attempts (int): Number of retry attempts before sending failure email
         supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
         resource_usage_log_file (Optional[str]): Path to write process resource usage logs. If None, logging is disabled.
@@ -516,6 +565,12 @@ def run_auto_restart(
         report_logs (bool): When ``True``, write monitor report artifacts under
             ``runs/monitor_logs`` for each monitored target. If ``False``, the
             runtime preserves the previous no-report behavior.
+        detect_memory_leaks (bool): When ``True``, monitor process-tree RSS for
+            a conservative possible-leak trend. Detection only warns and does
+            not stop or restart the target. Defaults to ``False``.
+        memory_leak_warmup_seconds (float): Positive finite initial duration in
+            seconds excluded from memory leak analysis. Samples from this
+            period remain visible in the warning graph. Defaults to ``300.0``.
 
     Raises:
         FileNotFoundError: If file doesn't exist
@@ -546,79 +601,17 @@ def run_auto_restart(
             retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
             restart_email_warning=restart_email_warning,
             report_logs=report_logs,
+            detect_memory_leaks=detect_memory_leaks,
+            memory_leak_warmup_seconds=memory_leak_warmup_seconds,
         )
 
-        if force_restart is not None and force_restart > 0:
-            # Wrapping logic for forced restart not counting as crash/max_restarts
-            # This will run in a loop, restarting after each interval, until success_flag is found.
-
-            stop_event = Event()
-
-            def restart_loop():
-                try:
-                    while not stop_event.is_set():
-                        manager.restart_count = 0  # Never increment max_restarts for forced restart
-                        # Ensure no leftover processes remain running
-                        manager._cleanup_stale_pids()
-                        finished = [False]
-
-                        def run_and_flag():
-                            try:
-                                manager.run_file_with_restart(
-                                    file_path=file_path,
-                                    success_flag_file=resolved_success_flag,
-                                    title=title,
-                                    restart_after_delay=force_restart,
-                                    supress_tf_warnings=supress_tf_warnings,
-                                )
-                                finished[0] = True
-                            except Exception:
-                                finished[0] = True  # On error, still allow restart
-
-                        thread = Thread(target=run_and_flag)
-                        thread.start()
-                        thread.join(timeout=force_restart)
-                        if thread.is_alive():
-                            print_process_status(
-                                f"Forcing restart after {force_restart} seconds (not a crash)"
-                            )
-                            manager.force_stop()
-                            # Ensure the worker thread finishes cleanly before continuing
-                            thread.join(5)
-                            # clear()
-
-                        else:
-                            # If finished (success or crash), check if success
-                            if Path(resolved_success_flag).exists():
-                                stop_event.set()
-                            else:
-                                print_process_status(
-                                    "Process ended before restart_after_delay, restarting..."
-                                )
-                except KeyboardInterrupt:
-                    # Handle CTRL+C in the restart loop
-                    stop_event.set()
-                    print("\n")
-                    print_process_status(
-                        "Restart loop interrupted by user, cleaning up." + vp.color(" Please wait...", "orange")
-                    )
-                    manager.force_stop()
-                    manager._cleanup_converted_file()
-                    manager._cleanup_monitored_file()
-                # Ensure the worker thread has completely finished before returning
-                thread.join()
-                print("\n" + vp.color("Process done!", "green"))
-
-            restart_loop()
-
-        else:
-            # Regular auto-restart logic
-            manager.run_file_with_restart(
-                file_path=file_path,
-                success_flag_file=resolved_success_flag,
-                title=title,
-                supress_tf_warnings=supress_tf_warnings,
-            )
+        manager.run_file_with_restart(
+            file_path=file_path,
+            success_flag_file=resolved_success_flag,
+            title=title,
+            restart_after_delay=force_restart,
+            supress_tf_warnings=supress_tf_warnings,
+        )
 
     except (FileNotFoundError, ValueError, ImportError) as e:
         print_error_message("CONFIG", str(e))

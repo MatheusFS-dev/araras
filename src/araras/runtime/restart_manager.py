@@ -1,5 +1,6 @@
 from typing import Optional, List, Dict, Any
 
+import math
 import os
 import psutil
 import subprocess
@@ -12,6 +13,12 @@ from .terminal import SimpleTerminalLauncher
 from araras.utils.misc import NotebookConverter
 from .email_manager import ConsolidatedEmailManager
 from .file_handler import FileTypeHandler
+from .memory_leak import (
+    MemoryLeakEvidence,
+    ProcessMemoryLeakDetector,
+    render_memory_leak_graph,
+    render_scheduled_restart_graph,
+)
 from .reporting import MonitorReportSession
 from . import monitoring as _mon
 from .monitoring import (
@@ -27,6 +34,7 @@ class FlagBasedRestartManager:
         "max_restarts",
         "restart_delay",
         "restart_count",
+        "scheduled_restart_count",
         "running",
         "current_terminal_process",
         "current_target_pid",
@@ -45,10 +53,17 @@ class FlagBasedRestartManager:
         "pid_history",
         "report_logs",
         "report_session",
+        "detect_memory_leaks",
+        "memory_leak_warmup_seconds",
+        "memory_leak_warning_attempted",
+        "memory_leak_detector",
         "last_failure_error",
         "pending_restart_old_pid",
         "pending_restart_runtime",
         "pending_restart_error",
+        "pending_scheduled_restart_old_pid",
+        "pending_scheduled_restart_runtime",
+        "pending_scheduled_restart_graph_png",
         "last_completed_pid",
         "last_completed_runtime",
     )
@@ -62,7 +77,9 @@ class FlagBasedRestartManager:
         retry_attempts: int = 2,
         restart_email_warning: bool = True,
         report_logs: bool = False,
-    ):
+        detect_memory_leaks: bool = False,
+        memory_leak_warmup_seconds: float = 300.0,
+    ) -> None:
         """Initialize restart manager with consolidated email notification support.
 
         Args:
@@ -76,19 +93,44 @@ class FlagBasedRestartManager:
                 under ``runs/monitor_logs`` for each monitored source file. If
                 ``False``, the runtime keeps the previous behavior and does not
                 create report files.
+            detect_memory_leaks (bool): When ``True``, sample process-tree RSS
+                and warn once when the conservative growth rule qualifies.
+                Defaults to ``False`` and does not affect report logging.
+            memory_leak_warmup_seconds (float): Positive finite no-check period
+                in seconds applied separately to each launched PID. Defaults
+                to ``300.0``.
+
+        Returns:
+            None: The constructor initializes manager state without launching
+            a target process.
+
+        Raises:
+            ValueError: If ``memory_leak_warmup_seconds`` is not positive and
+                finite.
         """
+        if not math.isfinite(memory_leak_warmup_seconds) or memory_leak_warmup_seconds <= 0:
+            raise ValueError("memory_leak_warmup_seconds must be a positive finite number")
+
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
         self.restart_count = 0
+        self.scheduled_restart_count = 0
         self.running = False
         self.start_time = None
         self.last_process_start_time = None
         self.report_logs = report_logs
         self.report_session: Optional[MonitorReportSession] = None
+        self.detect_memory_leaks = detect_memory_leaks
+        self.memory_leak_warmup_seconds = memory_leak_warmup_seconds
+        self.memory_leak_warning_attempted = False
+        self.memory_leak_detector: Optional[ProcessMemoryLeakDetector] = None
         self.last_failure_error: Optional[str] = None
         self.pending_restart_old_pid: Optional[int] = None
         self.pending_restart_runtime: Optional[float] = None
         self.pending_restart_error: Optional[str] = None
+        self.pending_scheduled_restart_old_pid: Optional[int] = None
+        self.pending_scheduled_restart_runtime: Optional[float] = None
+        self.pending_scheduled_restart_graph_png: Optional[bytes] = None
         self.last_completed_pid: Optional[int] = None
         self.last_completed_runtime: Optional[float] = None
 
@@ -145,7 +187,9 @@ class FlagBasedRestartManager:
             title (Optional[str]): Optional custom title displayed in status messages. If not
                 provided, the original file name is used for display purposes.
             restart_after_delay (Optional[float]): Optional delay in seconds that forces a restart
-                even if the process is still running.
+                even if the process is still running. The value must be finite
+                and strictly positive. Scheduled restarts do not consume or
+                reset the genuine-crash restart budget.
             supress_tf_warnings (bool): When ``True``, TensorFlow warnings emitted by
                 the target script are filtered out in the terminal.
 
@@ -156,12 +200,25 @@ class FlagBasedRestartManager:
         Raises:
             FileNotFoundError: If ``file_path`` does not exist.
             ValueError: If ``file_path`` has an unsupported extension.
+            ValueError: If ``restart_after_delay`` is not finite and strictly
+                positive when provided.
         """
+        if restart_after_delay is not None and (
+            not math.isfinite(restart_after_delay) or restart_after_delay <= 0
+        ):
+            raise ValueError("restart_after_delay must be a positive finite number of seconds")
+
         self.start_time = time.time()
+        self.scheduled_restart_count = 0
+        self.memory_leak_warning_attempted = False
+        self._stop_memory_leak_detector()
         self.last_failure_error = None
         self.pending_restart_old_pid = None
         self.pending_restart_runtime = None
         self.pending_restart_error = None
+        self.pending_scheduled_restart_old_pid = None
+        self.pending_scheduled_restart_runtime = None
+        self.pending_scheduled_restart_graph_png = None
         self.last_completed_pid = None
         self.last_completed_runtime = None
 
@@ -204,6 +261,8 @@ class FlagBasedRestartManager:
             email_enabled=self.email_manager.email_enabled,
             title=display_title,
             restart_after_delay=restart_after_delay,
+            detect_memory_leaks=self.detect_memory_leaks,
+            memory_leak_warmup_seconds=self.memory_leak_warmup_seconds,
         )
 
         self.running = True
@@ -261,6 +320,8 @@ class FlagBasedRestartManager:
                                 new_pid=target_pid,
                                 restart_count=self.restart_count,
                                 runtime_seconds=self.pending_restart_runtime,
+                                restart_type="crash_recovery",
+                                scheduled_restart_count=self.scheduled_restart_count,
                                 error=self.pending_restart_error,
                             )
                         self.pending_restart_old_pid = None
@@ -275,8 +336,58 @@ class FlagBasedRestartManager:
                     )
                     self._last_restart_file = self.monitor_info["restart_file"]
 
+                    # A scheduled restart is confirmed only after the new PID
+                    # is both running and covered by the crash monitor.
+                    if self.pending_scheduled_restart_old_pid is not None:
+                        if self.pending_scheduled_restart_runtime is None:
+                            raise RuntimeError(
+                                "Scheduled restart runtime is missing for the replacement PID"
+                            )
+                        if restart_after_delay is None:
+                            raise RuntimeError(
+                                "Scheduled restart interval is missing for the replacement PID"
+                            )
+                        self.scheduled_restart_count += 1
+                        if self.pending_scheduled_restart_graph_png is not None:
+                            self.email_manager.report_successful_scheduled_restart(
+                                self.process_title,
+                                self.pending_scheduled_restart_old_pid,
+                                target_pid,
+                                self.scheduled_restart_count,
+                                self.pending_scheduled_restart_runtime,
+                                restart_after_delay,
+                                self.pending_scheduled_restart_graph_png,
+                            )
+                        if self.report_session:
+                            self.report_session.record_restart(
+                                old_pid=self.pending_scheduled_restart_old_pid,
+                                new_pid=target_pid,
+                                restart_count=self.restart_count,
+                                runtime_seconds=self.pending_scheduled_restart_runtime,
+                                restart_type="scheduled",
+                                scheduled_restart_count=self.scheduled_restart_count,
+                            )
+                        _mon.print_process_status(
+                            f"Scheduled restart successful ({self.scheduled_restart_count})",
+                            target_pid,
+                        )
+                        self.pending_scheduled_restart_old_pid = None
+                        self.pending_scheduled_restart_runtime = None
+                        self.pending_scheduled_restart_graph_png = None
+
+                    self._start_memory_leak_detector(
+                        target_pid,
+                        collect_for_scheduled_restart=(
+                            restart_after_delay is not None
+                            and self.email_manager.email_enabled
+                        ),
+                    )
+
                     # Wait for completion or crash with optimized polling
-                    completion_reason = self._wait_for_completion(flag_path)
+                    completion_reason = self._wait_for_completion(
+                        flag_path,
+                        restart_after_delay=restart_after_delay,
+                    )
                     runtime = time.time() - self.last_process_start_time
 
                     _mon.print_process_status(f"Process finished: {completion_reason}", target_pid, runtime)
@@ -289,6 +400,15 @@ class FlagBasedRestartManager:
                     # Store PID for next restart notification
                     previous_pid = target_pid
 
+                    scheduled_restart_graph_png = None
+                    if (
+                        completion_reason == "scheduled_restart"
+                        and self.email_manager.email_enabled
+                    ):
+                        scheduled_restart_graph_png = (
+                            self._capture_scheduled_restart_graph()
+                        )
+
                     # Immediate cleanup for memory efficiency
                     self._cleanup_all()
 
@@ -297,10 +417,22 @@ class FlagBasedRestartManager:
                         print_success_message("Process completed successfully")
                         total_runtime = time.time() - self.start_time
                         self.email_manager.report_task_completion(
-                            self.process_title, self.restart_count, total_runtime
+                            self.process_title,
+                            self.restart_count,
+                            total_runtime,
+                            scheduled_restart_count=self.scheduled_restart_count,
                         )
                         final_status = "success"
                         break
+                    elif completion_reason == "scheduled_restart":
+                        _mon.print_process_status(
+                            "Scheduled restart interval reached; restarting without recording a crash"
+                        )
+                        self.pending_scheduled_restart_old_pid = target_pid
+                        self.pending_scheduled_restart_runtime = runtime
+                        self.pending_scheduled_restart_graph_png = (
+                            scheduled_restart_graph_png
+                        )
                     elif completion_reason == "crashed":
                         _mon.print_process_status("Process crashed, checking restart policy")
                         self.last_failure_error = "Process crashed"
@@ -328,6 +460,11 @@ class FlagBasedRestartManager:
                     _mon.print_error_message("LAUNCH", str(e))
                     traceback.print_exc()
                     self.last_failure_error = str(e)
+                    # A replacement that did not become monitored is not a
+                    # successful scheduled restart and must not be confirmed.
+                    self.pending_scheduled_restart_old_pid = None
+                    self.pending_scheduled_restart_runtime = None
+                    self.pending_scheduled_restart_graph_png = None
                     if self.report_session:
                         self.report_session.stop_attempt()
                         self.report_session.record_attempt_end("launch_error", previous_pid, None, error=str(e))
@@ -369,10 +506,14 @@ class FlagBasedRestartManager:
                 self.report_session.finalize(
                     final_status=final_status,
                     total_runtime_seconds=total_runtime,
-                    total_restarts=self.restart_count,
+                    total_restarts=self.restart_count + self.scheduled_restart_count,
                     final_error=self.last_failure_error,
                 )
-            print_completion_summary(self.restart_count, total_runtime)
+            print_completion_summary(
+                self.restart_count,
+                total_runtime,
+                scheduled_restart_count=self.scheduled_restart_count,
+            )
 
     def _handle_restart_with_retry(self) -> bool:
         """Handle restart with retry logic and consolidated email notifications.
@@ -399,6 +540,8 @@ class FlagBasedRestartManager:
                     new_pid=None,
                     restart_count=self.restart_count,
                     runtime_seconds=previous_runtime,
+                    restart_type="crash_recovery",
+                    scheduled_restart_count=self.scheduled_restart_count,
                     error=self.last_failure_error,
                 )
             return False
@@ -556,16 +699,33 @@ class FlagBasedRestartManager:
 
         return None
 
-    def _wait_for_completion(self, flag_path: Path) -> str:
-        """Wait for process completion with optimized polling strategy.
+    def _wait_for_completion(
+        self,
+        flag_path: Path,
+        restart_after_delay: Optional[float] = None,
+    ) -> str:
+        """Wait for process completion, failure, or a scheduled restart.
 
         Args:
-            flag_path (Path): Path to success flag file
+            flag_path (Path): Path to the success flag file. Its presence takes
+                priority over crash detection and the scheduled deadline.
+            restart_after_delay (Optional[float]): Positive forced-restart
+                interval in seconds. ``None`` disables the deadline. The value
+                is validated by :meth:`run_file_with_restart` before this
+                method is called.
 
         Returns:
-            str: Completion reason string
+            str: One of ``"success_flag"``, ``"crashed"``,
+            ``"process_died"``, ``"scheduled_restart"``, ``"interrupted"``,
+            or ``"stopped"``.
+
+        Raises:
+            RuntimeError: Not raised by this helper.
         """
         check_count = 0
+        restart_deadline = (
+            None if restart_after_delay is None else time.monotonic() + restart_after_delay
+        )
 
         while self.running:
             check_count += 1
@@ -588,7 +748,21 @@ class FlagBasedRestartManager:
                         return "process_died"
                     _mon.print_process_resource_usage(self.current_target_pid)
 
-                time.sleep(0.5)
+                if restart_deadline is not None:
+                    remaining = restart_deadline - time.monotonic()
+                    if remaining <= 0:
+                        # Recheck failure signals at the boundary so a genuine
+                        # crash is never mislabeled as an intentional restart.
+                        if self.monitor_info and _mon.check_crash_signal(self.monitor_info):
+                            return "crashed"
+                        if self.current_target_pid and not psutil.pid_exists(
+                            self.current_target_pid
+                        ):
+                            return "process_died"
+                        return "scheduled_restart"
+                    time.sleep(min(0.5, remaining))
+                else:
+                    time.sleep(0.5)
             except KeyboardInterrupt:
                 # Handle CTRL+C by cleaning up the current monitored process
                 _mon.print_process_status("CTRL+C detected, shutting down monitored process")
@@ -598,8 +772,154 @@ class FlagBasedRestartManager:
 
         return "stopped"
 
+    def _start_memory_leak_detector(
+        self,
+        pid: int,
+        collect_for_scheduled_restart: bool = False,
+    ) -> None:
+        """Start RSS collection for leak checks or a scheduled-restart graph.
+
+        Args:
+            pid (int): Positive root PID whose process-tree RSS should be
+                sampled.
+            collect_for_scheduled_restart (bool): When ``True``, retain RSS
+                history for the scheduled-restart email even if leak detection
+                is disabled or already warned. Defaults to ``False``. This
+                adds one process-tree RSS query per sampling interval.
+
+        Returns:
+            None: A sampler is started when either requested use is active.
+            Leak analysis is disabled when its warning was already attempted.
+
+        Raises:
+            RuntimeError: If a detector is unexpectedly still active when a
+                replacement PID starts.
+            ValueError: If detector configuration or ``pid`` is invalid.
+        """
+        should_detect_leak = (
+            self.detect_memory_leaks and not self.memory_leak_warning_attempted
+        )
+        if not should_detect_leak and not collect_for_scheduled_restart:
+            return
+        if self.memory_leak_detector is not None:
+            raise RuntimeError("previous memory leak detector is still active")
+
+        self.memory_leak_detector = ProcessMemoryLeakDetector(
+            pid=pid,
+            warmup_seconds=self.memory_leak_warmup_seconds,
+            warning_callback=(
+                self._handle_memory_leak_warning if should_detect_leak else None
+            ),
+        )
+        self.memory_leak_detector.start()
+
+    def _capture_scheduled_restart_graph(self) -> Optional[bytes]:
+        """Stop RSS collection and render the stopped PID's usage graph.
+
+        Returns:
+            Optional[bytes]: PNG bytes for the successful scheduled-restart
+            email, or ``None`` after an explicitly reported capture or render
+            failure. A failed graph suppresses that email instead of sending a
+            confirmation without the requested attachment.
+
+        Raises:
+            RuntimeError: Not raised. Missing samples and Matplotlib failures
+                are reported through the monitor error output.
+        """
+        detector = self.memory_leak_detector
+        if detector is None:
+            _mon.print_error_message(
+                "SCHEDULED_RESTART_GRAPH",
+                "Process memory sampler is not active",
+            )
+            return None
+
+        detector.stop()
+        self.memory_leak_detector = None
+        try:
+            # The restart deadline can coincide with the detector's first
+            # eligible window. Take one final live sample and bypass only the
+            # minute cadence before the old PID is terminated.
+            detector.evaluate_current_sample()
+            return render_scheduled_restart_graph(detector.get_graph_points())
+        except (
+            ImportError,
+            OSError,
+            psutil.NoSuchProcess,
+            RuntimeError,
+            ValueError,
+        ) as error:
+            _mon.print_error_message("SCHEDULED_RESTART_GRAPH", str(error))
+            return None
+
+    def _stop_memory_leak_detector(self) -> None:
+        """Stop and clear the detector for the current target PID.
+
+        Returns:
+            None: The active detector is stopped and its reference is cleared.
+
+        Raises:
+            RuntimeError: Not raised when no detector is active.
+        """
+        if self.memory_leak_detector is None:
+            return
+        self.memory_leak_detector.stop()
+        self.memory_leak_detector = None
+
+    def _handle_memory_leak_warning(self, evidence: MemoryLeakEvidence) -> None:
+        """Print and attempt the single possible-leak warning for this target.
+
+        Args:
+            evidence (MemoryLeakEvidence): Qualified RSS trend evidence from
+                the active target detector.
+
+        Returns:
+            None: Terminal output is emitted and, when configured, one email
+            attempt is made with an inline graph.
+
+        Raises:
+            RuntimeError: Not raised. Graph-generation errors are reported
+                explicitly and suppress the required graph email.
+        """
+        if self.memory_leak_warning_attempted:
+            return
+        self.memory_leak_warning_attempted = True
+        _mon.print_warning_message(
+            "Possible memory leak detected for "
+            f"{self.process_title} (PID {evidence.pid}): "
+            f"RSS grew {evidence.net_growth_mib:.1f} MiB at "
+            f"{evidence.slope_mib_per_minute:.1f} MiB/min "
+            f"(R-squared {evidence.r_squared:.3f})"
+        )
+
+        if not self.email_manager.email_enabled:
+            _mon.print_warning_message(
+                "Memory leak warning email was not sent because email alerts are disabled"
+            )
+            return
+
+        try:
+            graph_png = render_memory_leak_graph(evidence)
+        except (ImportError, OSError, RuntimeError, ValueError) as error:
+            _mon.print_error_message("MEMORY_LEAK_GRAPH", str(error))
+            return
+
+        self.email_manager.report_possible_memory_leak(
+            title=self.process_title,
+            pid=evidence.pid,
+            current_rss_mib=evidence.current_rss_mib,
+            net_growth_mib=evidence.net_growth_mib,
+            slope_mib_per_minute=evidence.slope_mib_per_minute,
+            r_squared=evidence.r_squared,
+            warmup_seconds=evidence.warmup_seconds,
+            window_seconds=evidence.window_seconds,
+            graph_png=graph_png,
+        )
+
     def _cleanup_all(self) -> None:
         """Cleanup all resources with optimized order for reliability."""
+        self._stop_memory_leak_detector()
+
         # Stop monitor first (most critical for clean shutdown)
         if self.monitor_info:
             _mon.stop_monitor(self.monitor_info)

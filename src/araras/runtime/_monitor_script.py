@@ -9,6 +9,7 @@ still needed at launch time.
 from typing import List, Optional, Tuple
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from araras.utils.verbose_printer import VerbosePrinter
 vp = VerbosePrinter()
 
 _DEFAULT_MAX_RESTARTS = 10
+_DEFAULT_MEMORY_LEAK_WARMUP_MINUTES = 5.0
 _DEFAULT_JSON_CHOICE = "1"
 _RECIPIENTS_FILE_NAME = "recipients.json"
 _CREDENTIALS_FILE_NAME = "credentials.json"
@@ -204,6 +206,113 @@ def _prompt_report_logs() -> bool:
         )
 
 
+def _prompt_force_restart_interval() -> Optional[float]:
+    """Prompt for an optional fixed forced-restart interval.
+
+    The user-facing value is expressed in minutes, while the runtime monitor
+    consumes seconds. Blank input at the enable prompt enables scheduled
+    restarts and continues to the required interval prompt.
+
+    Returns:
+        Optional[float]: Positive restart interval in seconds when enabled, or
+        ``None`` when scheduled restarts are disabled.
+
+    Raises:
+        RuntimeError: Not raised by this helper. Invalid responses are reported
+        and requested again.
+
+    Examples:
+        Entering ``y`` followed by ``120`` returns ``7200.0`` seconds.
+    """
+    while True:
+        response = input("Force periodic restart? (Y/n) [default: Y]: ").strip().lower()
+        if response in {"n", "no"}:
+            return None
+        if not response or response in {"y", "yes"}:
+            break
+        vp.printf(
+            "Please answer y or n.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+    while True:
+        response = input("Forced restart interval in minutes: ").strip()
+        try:
+            interval_minutes = float(response)
+        except ValueError:
+            vp.printf(
+                "Forced restart interval must be a positive finite number of minutes.",
+                color="yellow",
+                tag="[ARARAS WARNING] ",
+            )
+            continue
+
+        if math.isfinite(interval_minutes) and interval_minutes > 0:
+            return interval_minutes * 60.0
+
+        vp.printf(
+            "Forced restart interval must be a positive finite number of minutes.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+
+def _prompt_memory_leak_configuration() -> Tuple[bool, float]:
+    """Prompt for optional memory leak detection and its warm-up period.
+
+    The user enters warm-up time in minutes while the runtime detector consumes
+    seconds. Blank input enables detection and continues to the warm-up prompt.
+
+    Returns:
+        Tuple[bool, float]: Detection-enabled flag and positive warm-up duration
+        in seconds. Disabled detection returns the default warm-up value because
+        the runtime interface always carries an explicit duration.
+
+    Raises:
+        RuntimeError: Not raised by this helper. Invalid responses are reported
+        and requested again.
+
+    Examples:
+        Entering ``y`` followed by ``10`` returns ``(True, 600.0)``.
+    """
+    while True:
+        response = input("Detect possible memory leak? (Y/n) [default: Y]: ").strip().lower()
+        if response in {"n", "no"}:
+            return False, _DEFAULT_MEMORY_LEAK_WARMUP_MINUTES * 60.0
+        if not response or response in {"y", "yes"}:
+            break
+        vp.printf(
+            "Please answer y or n.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+    while True:
+        response = input(
+            "Memory leak detection warm-up in minutes "
+            f"[default: {_DEFAULT_MEMORY_LEAK_WARMUP_MINUTES:g}]: "
+        ).strip()
+        if not response:
+            return True, _DEFAULT_MEMORY_LEAK_WARMUP_MINUTES * 60.0
+        try:
+            warmup_minutes = float(response)
+        except ValueError:
+            vp.printf(
+                "Memory leak warm-up must be a positive finite number of minutes.",
+                color="yellow",
+                tag="[ARARAS WARNING] ",
+            )
+            continue
+        if math.isfinite(warmup_minutes) and warmup_minutes > 0:
+            return True, warmup_minutes * 60.0
+        vp.printf(
+            "Memory leak warm-up must be a positive finite number of minutes.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+
 def _create_json_templates(destination_directory: Path) -> bool:
     """Create default JSON template files directly in the destination directory.
 
@@ -361,7 +470,9 @@ def _resolve_json_file_paths(
     )
 
 
-def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str], int, str, str, bool]:
+def _collect_launch_configuration(
+    launch_directory: Path,
+) -> Tuple[Optional[str], int, str, str, Optional[float], bool, float, bool]:
     """Collect the shared prompt-driven monitor configuration once per launch.
 
     Args:
@@ -370,10 +481,12 @@ def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str]
             custom paths for option ``"3"``.
 
     Returns:
-        Tuple[Optional[str], int, str, str, bool]: Shared launch
-            configuration in the order ``(title, max_restarts,
-            recipients_file, credentials_file, report_logs)``. ``title`` is
-            ``None`` when the user keeps the per-file default behavior.
+        Tuple[Optional[str], int, str, str, Optional[float], bool, float, bool]:
+            Shared launch configuration in the order ``(title, max_restarts,
+            recipients_file, credentials_file, force_restart,
+            detect_memory_leaks, memory_leak_warmup_seconds, report_logs)``.
+            ``title`` is ``None`` when the user keeps the per-file default.
+            ``force_restart`` is a positive interval in seconds or ``None``.
     """
     print()
     title = _prompt_title()
@@ -385,9 +498,20 @@ def _collect_launch_configuration(launch_directory: Path) -> Tuple[Optional[str]
         custom_directory=custom_directory,
     )
     max_restarts = _prompt_max_restarts()
+    force_restart = _prompt_force_restart_interval()
+    detect_memory_leaks, memory_leak_warmup_seconds = _prompt_memory_leak_configuration()
     report_logs = _prompt_report_logs()
     print()
-    return title, max_restarts, recipients_file, credentials_file, report_logs
+    return (
+        title,
+        max_restarts,
+        recipients_file,
+        credentials_file,
+        force_restart,
+        detect_memory_leaks,
+        memory_leak_warmup_seconds,
+        report_logs,
+    )
 
 
 def main(argv: Optional[List[str]] = None) -> None:
@@ -424,9 +548,16 @@ def main(argv: Optional[List[str]] = None) -> None:
     launch_directory = Path.cwd()
 
     _print_monitor_banner()
-    title, max_restarts, recipients_file, credentials_file, report_logs = _collect_launch_configuration(
-        launch_directory
-    )
+    (
+        title,
+        max_restarts,
+        recipients_file,
+        credentials_file,
+        force_restart,
+        detect_memory_leaks,
+        memory_leak_warmup_seconds,
+        report_logs,
+    ) = _collect_launch_configuration(launch_directory)
 
     for target in file_paths:
         run_auto_restart(
@@ -435,6 +566,9 @@ def main(argv: Optional[List[str]] = None) -> None:
             max_restarts=max_restarts,
             recipients_file=recipients_file,
             credentials_file=credentials_file,
+            force_restart=force_restart,
+            detect_memory_leaks=detect_memory_leaks,
+            memory_leak_warmup_seconds=memory_leak_warmup_seconds,
             report_logs=report_logs,
         )
 
