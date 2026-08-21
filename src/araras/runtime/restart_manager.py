@@ -16,6 +16,7 @@ from .file_handler import FileTypeHandler
 from .memory_leak import (
     MemoryLeakEvidence,
     ProcessMemoryLeakDetector,
+    _get_process_tree_rss_bytes,
     render_memory_leak_graph,
     render_scheduled_restart_graph,
 )
@@ -53,6 +54,8 @@ class FlagBasedRestartManager:
         "pid_history",
         "report_logs",
         "report_session",
+        "scheduled_restart_memory_threshold_bytes",
+        "scheduled_restart_poll_interval_seconds",
         "detect_memory_leaks",
         "memory_leak_warmup_seconds",
         "memory_leak_warning_attempted",
@@ -64,6 +67,7 @@ class FlagBasedRestartManager:
         "pending_scheduled_restart_old_pid",
         "pending_scheduled_restart_runtime",
         "pending_scheduled_restart_graph_png",
+        "pending_scheduled_restart_current_rss_bytes",
         "last_completed_pid",
         "last_completed_runtime",
     )
@@ -77,6 +81,8 @@ class FlagBasedRestartManager:
         retry_attempts: int = 2,
         restart_email_warning: bool = True,
         report_logs: bool = False,
+        scheduled_restart_memory_threshold_bytes: Optional[float] = None,
+        scheduled_restart_poll_interval_seconds: Optional[float] = None,
         detect_memory_leaks: bool = False,
         memory_leak_warmup_seconds: float = 300.0,
     ) -> None:
@@ -93,6 +99,15 @@ class FlagBasedRestartManager:
                 under ``runs/monitor_logs`` for each monitored source file. If
                 ``False``, the runtime keeps the previous behavior and does not
                 create report files.
+            scheduled_restart_memory_threshold_bytes (Optional[float]):
+                Positive target-process-tree RSS threshold in bytes. When set
+                with ``scheduled_restart_poll_interval_seconds``, RSS is
+                checked at the polling interval and restarts when it reaches
+                this value. ``None`` preserves fixed scheduled restarts.
+            scheduled_restart_poll_interval_seconds (Optional[float]):
+                Positive delay in seconds between smart-restart RSS checks. It
+                must be set together with
+                ``scheduled_restart_memory_threshold_bytes``.
             detect_memory_leaks (bool): When ``True``, sample process-tree RSS
                 and warn once when the conservative growth rule qualifies.
                 Defaults to ``False`` and does not affect report logging.
@@ -106,10 +121,33 @@ class FlagBasedRestartManager:
 
         Raises:
             ValueError: If ``memory_leak_warmup_seconds`` is not positive and
-                finite.
+                finite, or smart scheduled-restart values are incomplete or
+                not positive and finite.
         """
         if not math.isfinite(memory_leak_warmup_seconds) or memory_leak_warmup_seconds <= 0:
             raise ValueError("memory_leak_warmup_seconds must be a positive finite number")
+        if (
+            scheduled_restart_memory_threshold_bytes is None
+        ) != (
+            scheduled_restart_poll_interval_seconds is None
+        ):
+            raise ValueError(
+                "scheduled restart memory threshold and polling interval must be provided together"
+            )
+        if scheduled_restart_memory_threshold_bytes is not None and (
+            not math.isfinite(scheduled_restart_memory_threshold_bytes)
+            or scheduled_restart_memory_threshold_bytes <= 0
+        ):
+            raise ValueError(
+                "scheduled_restart_memory_threshold_bytes must be a positive finite number"
+            )
+        if scheduled_restart_poll_interval_seconds is not None and (
+            not math.isfinite(scheduled_restart_poll_interval_seconds)
+            or scheduled_restart_poll_interval_seconds <= 0
+        ):
+            raise ValueError(
+                "scheduled_restart_poll_interval_seconds must be a positive finite number"
+            )
 
         self.max_restarts = max_restarts
         self.restart_delay = restart_delay
@@ -120,6 +158,12 @@ class FlagBasedRestartManager:
         self.last_process_start_time = None
         self.report_logs = report_logs
         self.report_session: Optional[MonitorReportSession] = None
+        self.scheduled_restart_memory_threshold_bytes = (
+            scheduled_restart_memory_threshold_bytes
+        )
+        self.scheduled_restart_poll_interval_seconds = (
+            scheduled_restart_poll_interval_seconds
+        )
         self.detect_memory_leaks = detect_memory_leaks
         self.memory_leak_warmup_seconds = memory_leak_warmup_seconds
         self.memory_leak_warning_attempted = False
@@ -131,6 +175,7 @@ class FlagBasedRestartManager:
         self.pending_scheduled_restart_old_pid: Optional[int] = None
         self.pending_scheduled_restart_runtime: Optional[float] = None
         self.pending_scheduled_restart_graph_png: Optional[bytes] = None
+        self.pending_scheduled_restart_current_rss_bytes: Optional[float] = None
         self.last_completed_pid: Optional[int] = None
         self.last_completed_runtime: Optional[float] = None
 
@@ -189,7 +234,9 @@ class FlagBasedRestartManager:
             restart_after_delay (Optional[float]): Optional delay in seconds that forces a restart
                 even if the process is still running. The value must be finite
                 and strictly positive. Scheduled restarts do not consume or
-                reset the genuine-crash restart budget.
+                reset the genuine-crash restart budget. ``None`` disables the
+                fixed restart policy; it does not disable an independently
+                configured smart scheduled-restart policy.
             supress_tf_warnings (bool): When ``True``, TensorFlow warnings emitted by
                 the target script are filtered out in the terminal.
 
@@ -207,7 +254,6 @@ class FlagBasedRestartManager:
             not math.isfinite(restart_after_delay) or restart_after_delay <= 0
         ):
             raise ValueError("restart_after_delay must be a positive finite number of seconds")
-
         self.start_time = time.time()
         self.scheduled_restart_count = 0
         self.memory_leak_warning_attempted = False
@@ -219,6 +265,7 @@ class FlagBasedRestartManager:
         self.pending_scheduled_restart_old_pid = None
         self.pending_scheduled_restart_runtime = None
         self.pending_scheduled_restart_graph_png = None
+        self.pending_scheduled_restart_current_rss_bytes = None
         self.last_completed_pid = None
         self.last_completed_runtime = None
 
@@ -261,6 +308,12 @@ class FlagBasedRestartManager:
             email_enabled=self.email_manager.email_enabled,
             title=display_title,
             restart_after_delay=restart_after_delay,
+            scheduled_restart_memory_threshold_bytes=(
+                self.scheduled_restart_memory_threshold_bytes
+            ),
+            scheduled_restart_poll_interval_seconds=(
+                self.scheduled_restart_poll_interval_seconds
+            ),
             detect_memory_leaks=self.detect_memory_leaks,
             memory_leak_warmup_seconds=self.memory_leak_warmup_seconds,
         )
@@ -343,19 +396,44 @@ class FlagBasedRestartManager:
                             raise RuntimeError(
                                 "Scheduled restart runtime is missing for the replacement PID"
                             )
-                        if restart_after_delay is None:
+                        scheduled_restart_interval = (
+                            restart_after_delay
+                            if restart_after_delay is not None
+                            else self.scheduled_restart_poll_interval_seconds
+                        )
+                        if scheduled_restart_interval is None:
                             raise RuntimeError(
                                 "Scheduled restart interval is missing for the replacement PID"
                             )
                         self.scheduled_restart_count += 1
-                        if self.pending_scheduled_restart_graph_png is not None:
+                        if self.pending_scheduled_restart_current_rss_bytes is not None:
+                            if self.scheduled_restart_memory_threshold_bytes is None:
+                                raise RuntimeError(
+                                    "memory-aware scheduled restart threshold is missing"
+                                )
+                            if self.scheduled_restart_poll_interval_seconds is None:
+                                raise RuntimeError(
+                                    "memory-aware scheduled restart polling interval is missing"
+                                )
+                            self.email_manager.report_successful_memory_aware_scheduled_restart(
+                                self.process_title,
+                                self.pending_scheduled_restart_old_pid,
+                                target_pid,
+                                self.scheduled_restart_count,
+                                self.pending_scheduled_restart_runtime,
+                                self.pending_scheduled_restart_current_rss_bytes,
+                                self.scheduled_restart_memory_threshold_bytes,
+                                self.scheduled_restart_poll_interval_seconds,
+                                self.pending_scheduled_restart_graph_png,
+                            )
+                        elif self.pending_scheduled_restart_graph_png is not None:
                             self.email_manager.report_successful_scheduled_restart(
                                 self.process_title,
                                 self.pending_scheduled_restart_old_pid,
                                 target_pid,
                                 self.scheduled_restart_count,
                                 self.pending_scheduled_restart_runtime,
-                                restart_after_delay,
+                                scheduled_restart_interval,
                                 self.pending_scheduled_restart_graph_png,
                             )
                         if self.report_session:
@@ -374,11 +452,15 @@ class FlagBasedRestartManager:
                         self.pending_scheduled_restart_old_pid = None
                         self.pending_scheduled_restart_runtime = None
                         self.pending_scheduled_restart_graph_png = None
+                        self.pending_scheduled_restart_current_rss_bytes = None
 
                     self._start_memory_leak_detector(
                         target_pid,
                         collect_for_scheduled_restart=(
-                            restart_after_delay is not None
+                            (
+                                restart_after_delay is not None
+                                or self.scheduled_restart_memory_threshold_bytes is not None
+                            )
                             and self.email_manager.email_enabled
                         ),
                     )
@@ -426,7 +508,7 @@ class FlagBasedRestartManager:
                         break
                     elif completion_reason == "scheduled_restart":
                         _mon.print_process_status(
-                            "Scheduled restart interval reached; restarting without recording a crash"
+                            "Scheduled restart condition met; restarting without recording a crash"
                         )
                         self.pending_scheduled_restart_old_pid = target_pid
                         self.pending_scheduled_restart_runtime = runtime
@@ -465,6 +547,7 @@ class FlagBasedRestartManager:
                     self.pending_scheduled_restart_old_pid = None
                     self.pending_scheduled_restart_runtime = None
                     self.pending_scheduled_restart_graph_png = None
+                    self.pending_scheduled_restart_current_rss_bytes = None
                     if self.report_session:
                         self.report_session.stop_attempt()
                         self.report_session.record_attempt_end("launch_error", previous_pid, None, error=str(e))
@@ -709,10 +792,10 @@ class FlagBasedRestartManager:
         Args:
             flag_path (Path): Path to the success flag file. Its presence takes
                 priority over crash detection and the scheduled deadline.
-            restart_after_delay (Optional[float]): Positive forced-restart
-                interval in seconds. ``None`` disables the deadline. The value
-                is validated by :meth:`run_file_with_restart` before this
-                method is called.
+            restart_after_delay (Optional[float]): Positive fixed-restart
+                interval in seconds. ``None`` disables only the fixed policy.
+                When smart restart settings are configured, their polling
+                interval schedules the RSS checks instead.
 
         Returns:
             str: One of ``"success_flag"``, ``"crashed"``,
@@ -723,9 +806,12 @@ class FlagBasedRestartManager:
             RuntimeError: Not raised by this helper.
         """
         check_count = 0
-        restart_deadline = (
-            None if restart_after_delay is None else time.monotonic() + restart_after_delay
-        )
+        if restart_after_delay is not None:
+            restart_deadline = time.monotonic() + restart_after_delay
+        elif self.scheduled_restart_poll_interval_seconds is not None:
+            restart_deadline = time.monotonic() + self.scheduled_restart_poll_interval_seconds
+        else:
+            restart_deadline = None
 
         while self.running:
             check_count += 1
@@ -759,6 +845,40 @@ class FlagBasedRestartManager:
                             self.current_target_pid
                         ):
                             return "process_died"
+                        if self.scheduled_restart_memory_threshold_bytes is not None:
+                            if self.current_target_pid is None:
+                                return "process_died"
+                            try:
+                                current_rss_bytes = _get_process_tree_rss_bytes(
+                                    self.current_target_pid
+                                )
+                            except psutil.NoSuchProcess:
+                                return "process_died"
+                            if current_rss_bytes < self.scheduled_restart_memory_threshold_bytes:
+                                poll_interval_seconds = (
+                                    self.scheduled_restart_poll_interval_seconds
+                                )
+                                if poll_interval_seconds is None:
+                                    raise RuntimeError(
+                                        "smart scheduled restart polling interval is missing"
+                                    )
+                                current_rss_gib = current_rss_bytes / float(1024**3)
+                                threshold_gib = (
+                                    self.scheduled_restart_memory_threshold_bytes
+                                    / float(1024**3)
+                                )
+                                _mon.print_process_status(
+                                    "Scheduled restart deferred: process-tree RSS "
+                                    f"{current_rss_gib:.2f} GiB is below threshold "
+                                    f"{threshold_gib:.2f} GiB; rechecking in "
+                                    f"{poll_interval_seconds / 60.0:g} minutes",
+                                    self.current_target_pid,
+                                )
+                                restart_deadline = (
+                                    time.monotonic() + poll_interval_seconds
+                                )
+                                continue
+                            self.pending_scheduled_restart_current_rss_bytes = current_rss_bytes
                         return "scheduled_restart"
                     time.sleep(min(0.5, remaining))
                 else:

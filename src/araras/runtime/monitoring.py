@@ -31,6 +31,8 @@ RESTART_DETAILS_TEMPLATE = """<div style="background:#fff3cd;padding:15px;margin
 
 SCHEDULED_RESTART_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Scheduled Restart Information</h3><p><strong>Previous PID:</strong> {old_pid}</p><p><strong>New PID:</strong> {new_pid}</p><p><strong>Scheduled Restart Count:</strong> {scheduled_restart_count}</p><p><strong>Configured Interval:</strong> {interval_minutes:g} minutes</p><p><strong>Runtime Before Restart:</strong> {runtime:.1f}s</p><img src="cid:monitor-graph" alt="Previous process-tree RAM over time" style="max-width:100%;height:auto" /></div>"""
 
+MEMORY_AWARE_SCHEDULED_RESTART_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Memory-Aware Restart Information</h3><p><strong>Previous PID:</strong> {old_pid}</p><p><strong>New PID:</strong> {new_pid}</p><p><strong>Scheduled Restart Count:</strong> {scheduled_restart_count}</p><p><strong>Triggering Process-Tree RSS:</strong> {current_rss_gib:.2f} GiB</p><p><strong>Configured RSS Threshold:</strong> {threshold_gib:.2f} GiB</p><p><strong>Polling Interval:</strong> {poll_minutes:g} minutes</p><p><strong>Runtime Before Restart:</strong> {runtime:.1f}s</p>{graph_section}</div>"""
+
 FAILURE_DETAILS_TEMPLATE = """<div style="background:#f8d7da;padding:15px;margin:15px 0;border-left:4px solid #dc3545"><h3>Failure Details</h3><p><strong>Failed Attempts:</strong> {failed_attempts}</p><p><strong>Remaining Attempts:</strong> {remaining_attempts}</p><p><strong>Total Restart Count:</strong> {restart_count}</p><p><strong>Error:</strong> {error}</p></div>"""
 
 COMPLETION_DETAILS_TEMPLATE = """<div style="background:#d4edda;padding:15px;margin:15px 0;border-left:4px solid #28a745"><h3>Completion Summary</h3><p><strong>Total Restarts:</strong> {total_restarts}</p><p><strong>Crash/Failure Restarts:</strong> {restart_count}</p><p><strong>Scheduled Restarts:</strong> {scheduled_restart_count}</p><p><strong>Total Runtime:</strong> {total_runtime:.1f}s</p><p><strong>Final Status:</strong> Successfully completed</p></div>"""
@@ -135,6 +137,8 @@ def print_monitoring_config_summary(
     email_enabled: bool,
     title: str,
     restart_after_delay: Optional[float] = None,
+    scheduled_restart_memory_threshold_bytes: Optional[float] = None,
+    scheduled_restart_poll_interval_seconds: Optional[float] = None,
     detect_memory_leaks: bool = False,
     memory_leak_warmup_seconds: float = 300.0,
 ) -> None:
@@ -151,6 +155,14 @@ def print_monitoring_config_summary(
         email_enabled (bool): Whether email notifications are enabled.
         title (str): Title shown for the monitored process.
         restart_after_delay (Optional[float]): Optional forced restart delay in seconds.
+        scheduled_restart_memory_threshold_bytes (Optional[float]): Optional
+            target-process-tree RSS threshold in bytes. When provided with
+            ``scheduled_restart_poll_interval_seconds``, scheduled restarts
+            are deferred until the threshold is reached.
+        scheduled_restart_poll_interval_seconds (Optional[float]): Optional
+            delay in seconds between deferred smart-restart RSS checks. It
+            must be provided with
+            ``scheduled_restart_memory_threshold_bytes``.
         detect_memory_leaks (bool): Whether conservative process-tree RSS trend
             detection is enabled. Defaults to ``False``.
         memory_leak_warmup_seconds (float): Initial no-check duration in
@@ -160,7 +172,19 @@ def print_monitoring_config_summary(
     Notes:
         This function only prints configuration information and does not alter
         monitoring behavior.
+
+    Raises:
+        ValueError: If only one smart scheduled-restart setting is supplied.
     """
+    if (
+        scheduled_restart_memory_threshold_bytes is None
+    ) != (
+        scheduled_restart_poll_interval_seconds is None
+    ):
+        raise ValueError(
+            "scheduled restart memory threshold and polling interval must be provided together"
+        )
+
     global ONCE_PRINT
     if ONCE_PRINT:
         return
@@ -184,6 +208,17 @@ def print_monitoring_config_summary(
         print(
             "Scheduled Restart Interval: "
             + vp.color(f"{interval_minutes:g} minutes", "yellow")
+        )
+    if scheduled_restart_memory_threshold_bytes is not None:
+        threshold_gib = scheduled_restart_memory_threshold_bytes / float(1024**3)
+        poll_minutes = scheduled_restart_poll_interval_seconds / 60.0
+        print(
+            "Memory-Aware Scheduled Restart Threshold: "
+            + vp.color(f"{threshold_gib:g} GiB", "yellow")
+        )
+        print(
+            "Memory-Aware Scheduled Restart Polling: "
+            + vp.color(f"{poll_minutes:g} minutes", "yellow")
         )
     if detect_memory_leaks:
         print("Memory Leak Detection: " + vp.color("Enabled", "green"))
@@ -533,6 +568,8 @@ def run_auto_restart(
     recipients_file: Optional[str] = None,
     credentials_file: Optional[str] = None,
     force_restart: Optional[float] = None,
+    scheduled_restart_memory_threshold_bytes: Optional[float] = None,
+    scheduled_restart_poll_interval_seconds: Optional[float] = None,
     retry_attempts: int = None,
     supress_tf_warnings: bool = False,
     resource_usage_log_file: Optional[str] = None,
@@ -556,8 +593,18 @@ def run_auto_restart(
         recipients_file (Optional[str]): Path to recipients JSON file (defaults to ./json/recipients.json)
         credentials_file (Optional[str]): Path to credentials JSON file (defaults to ./json/credentials.json)
         force_restart (Optional[float]): Positive fixed interval in seconds for
-            scheduled restarts. ``None`` disables scheduled restarts. Scheduled
+            scheduled restarts. ``None`` disables the fixed policy. Scheduled
             restarts do not consume the genuine-crash restart budget.
+        scheduled_restart_memory_threshold_bytes (Optional[float]): Positive
+            process-tree RSS threshold in bytes for smart scheduled restarts.
+            When set with ``scheduled_restart_poll_interval_seconds``, the
+            monitor checks RSS at the polling interval and restarts when RSS
+            reaches this threshold. ``None`` preserves fixed scheduled
+            restarts.
+        scheduled_restart_poll_interval_seconds (Optional[float]): Positive
+            interval in seconds between smart scheduled-restart RSS checks.
+            It must be set together with
+            ``scheduled_restart_memory_threshold_bytes``.
         retry_attempts (int): Number of retry attempts before sending failure email
         supress_tf_warnings (bool): Suppress TensorFlow warnings (default: False)
         resource_usage_log_file (Optional[str]): Path to write process resource usage logs. If None, logging is disabled.
@@ -574,7 +621,8 @@ def run_auto_restart(
 
     Raises:
         FileNotFoundError: If file doesn't exist
-        ValueError: If file type is unsupported
+        ValueError: If file type is unsupported or smart scheduled-restart
+            configuration is incomplete or invalid.
         ImportError: If notebook dependencies missing for .ipynb files
     """
 
@@ -601,6 +649,8 @@ def run_auto_restart(
             retry_attempts=max_restarts if retry_attempts is None else retry_attempts,
             restart_email_warning=restart_email_warning,
             report_logs=report_logs,
+            scheduled_restart_memory_threshold_bytes=scheduled_restart_memory_threshold_bytes,
+            scheduled_restart_poll_interval_seconds=scheduled_restart_poll_interval_seconds,
             detect_memory_leaks=detect_memory_leaks,
             memory_leak_warmup_seconds=memory_leak_warmup_seconds,
         )

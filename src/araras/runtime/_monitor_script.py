@@ -13,6 +13,8 @@ import math
 import sys
 from pathlib import Path
 
+import psutil
+
 from araras.runtime.monitoring import run_auto_restart
 from araras.utils.verbose_printer import VerbosePrinter
 
@@ -206,36 +208,48 @@ def _prompt_report_logs() -> bool:
         )
 
 
-def _prompt_force_restart_interval() -> Optional[float]:
-    """Prompt for an optional fixed forced-restart interval.
-
-    The user-facing value is expressed in minutes, while the runtime monitor
-    consumes seconds. Blank input at the enable prompt enables scheduled
-    restarts and continues to the required interval prompt.
+def _prompt_force_periodic_restart() -> bool:
+    """Prompt whether either scheduled-restart policy should be enabled.
 
     Returns:
-        Optional[float]: Positive restart interval in seconds when enabled, or
-        ``None`` when scheduled restarts are disabled.
+        bool: ``True`` when the user presses Enter or explicitly enables
+        scheduled restarts with ``"y"`` or ``"yes"``. ``False`` when the
+        user enters ``"n"`` or ``"no"``.
 
     Raises:
         RuntimeError: Not raised by this helper. Invalid responses are reported
         and requested again.
-
-    Examples:
-        Entering ``y`` followed by ``120`` returns ``7200.0`` seconds.
     """
     while True:
         response = input("Force periodic restart? (Y/n) [default: Y]: ").strip().lower()
-        if response in {"n", "no"}:
-            return None
         if not response or response in {"y", "yes"}:
-            break
+            return True
+        if response in {"n", "no"}:
+            return False
         vp.printf(
             "Please answer y or n.",
             color="yellow",
             tag="[ARARAS WARNING] ",
         )
 
+
+def _prompt_force_restart_interval() -> float:
+    """Prompt for the fixed scheduled-restart interval.
+
+    This prompt is used only when scheduled restarts are enabled and the user
+    declines the memory-aware policy. The user-facing value is expressed in
+    minutes, while the runtime monitor consumes seconds.
+
+    Returns:
+        float: Positive fixed restart interval in seconds.
+
+    Raises:
+        RuntimeError: Not raised by this helper. Invalid responses are reported
+        and requested again.
+
+    Examples:
+        Entering ``120`` returns ``7200.0`` seconds.
+    """
     while True:
         response = input("Forced restart interval in minutes: ").strip()
         try:
@@ -253,6 +267,85 @@ def _prompt_force_restart_interval() -> Optional[float]:
 
         vp.printf(
             "Forced restart interval must be a positive finite number of minutes.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+
+def _prompt_smart_scheduled_restart_configuration() -> Tuple[Optional[float], Optional[float]]:
+    """Prompt for optional memory-aware scheduled-restart settings.
+
+    Smart mode is an alternative to fixed periodic restarts. It checks current
+    target-process-tree RSS at the selected polling interval and restarts only
+    when RSS reaches the selected limit.
+
+    Returns:
+        Tuple[Optional[float], Optional[float]]: Process-tree RSS threshold in
+        bytes and polling interval in seconds when smart mode is enabled. Both
+        values are ``None`` when the user declines smart mode.
+
+    Raises:
+        RuntimeError: Not raised by this helper. Invalid responses are reported
+        and requested again.
+
+    Examples:
+        Pressing Enter, then entering ``2.5`` and ``15``, returns a 2.5 GiB byte threshold
+        and a 900-second polling interval.
+    """
+    while True:
+        response = input("Use memory-aware scheduled restarts? (Y/n) [default: Y]: ").strip().lower()
+        if response in {"n", "no"}:
+            return None, None
+        if not response or response in {"y", "yes"}:
+            break
+        vp.printf(
+            "Please answer y or n.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+    total_memory_gib = psutil.virtual_memory().total / float(1024**3)
+    print(f"Current computer RAM: {total_memory_gib:g} GiB")
+
+    while True:
+        response = input("Restart when process-tree RSS reaches GiB: ").strip()
+        try:
+            threshold_gib = float(response)
+        except ValueError:
+            vp.printf(
+                "Process-tree RSS threshold must be a positive finite number of GiB.",
+                color="yellow",
+                tag="[ARARAS WARNING] ",
+            )
+            continue
+
+        if math.isfinite(threshold_gib) and threshold_gib > 0:
+            threshold_bytes = threshold_gib * (1024**3)
+            break
+
+        vp.printf(
+            "Process-tree RSS threshold must be a positive finite number of GiB.",
+            color="yellow",
+            tag="[ARARAS WARNING] ",
+        )
+
+    while True:
+        response = input("Retry memory check every how many minutes: ").strip()
+        try:
+            poll_minutes = float(response)
+        except ValueError:
+            vp.printf(
+                "Memory check interval must be a positive finite number of minutes.",
+                color="yellow",
+                tag="[ARARAS WARNING] ",
+            )
+            continue
+
+        if math.isfinite(poll_minutes) and poll_minutes > 0:
+            return threshold_bytes, poll_minutes * 60.0
+
+        vp.printf(
+            "Memory check interval must be a positive finite number of minutes.",
             color="yellow",
             tag="[ARARAS WARNING] ",
         )
@@ -472,7 +565,18 @@ def _resolve_json_file_paths(
 
 def _collect_launch_configuration(
     launch_directory: Path,
-) -> Tuple[Optional[str], int, str, str, Optional[float], bool, float, bool]:
+) -> Tuple[
+    Optional[str],
+    int,
+    str,
+    str,
+    Optional[float],
+    Optional[float],
+    Optional[float],
+    bool,
+    float,
+    bool,
+]:
     """Collect the shared prompt-driven monitor configuration once per launch.
 
     Args:
@@ -481,12 +585,16 @@ def _collect_launch_configuration(
             custom paths for option ``"3"``.
 
     Returns:
-        Tuple[Optional[str], int, str, str, Optional[float], bool, float, bool]:
-            Shared launch configuration in the order ``(title, max_restarts,
-            recipients_file, credentials_file, force_restart,
-            detect_memory_leaks, memory_leak_warmup_seconds, report_logs)``.
-            ``title`` is ``None`` when the user keeps the per-file default.
-            ``force_restart`` is a positive interval in seconds or ``None``.
+        Tuple[Optional[str], int, str, str, Optional[float], Optional[float],
+        Optional[float], bool, float, bool]: Shared launch configuration in the
+            order ``(title, max_restarts, recipients_file, credentials_file,
+            force_restart, scheduled_restart_memory_threshold_bytes,
+            scheduled_restart_poll_interval_seconds, detect_memory_leaks,
+            memory_leak_warmup_seconds, report_logs)``. ``title`` is ``None``
+            when the user keeps the per-file default. ``force_restart`` is a
+            positive fixed interval in seconds or ``None``. Smart
+            scheduled-restart values are both ``None`` when the user selects
+            fixed restarts or disables scheduled restarts.
     """
     print()
     title = _prompt_title()
@@ -498,7 +606,16 @@ def _collect_launch_configuration(
         custom_directory=custom_directory,
     )
     max_restarts = _prompt_max_restarts()
-    force_restart = _prompt_force_restart_interval()
+    force_restart = None
+    scheduled_restart_memory_threshold_bytes = None
+    scheduled_restart_poll_interval_seconds = None
+    if _prompt_force_periodic_restart():
+        (
+            scheduled_restart_memory_threshold_bytes,
+            scheduled_restart_poll_interval_seconds,
+        ) = _prompt_smart_scheduled_restart_configuration()
+        if scheduled_restart_memory_threshold_bytes is None:
+            force_restart = _prompt_force_restart_interval()
     detect_memory_leaks, memory_leak_warmup_seconds = _prompt_memory_leak_configuration()
     report_logs = _prompt_report_logs()
     print()
@@ -508,6 +625,8 @@ def _collect_launch_configuration(
         recipients_file,
         credentials_file,
         force_restart,
+        scheduled_restart_memory_threshold_bytes,
+        scheduled_restart_poll_interval_seconds,
         detect_memory_leaks,
         memory_leak_warmup_seconds,
         report_logs,
@@ -554,6 +673,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         recipients_file,
         credentials_file,
         force_restart,
+        scheduled_restart_memory_threshold_bytes,
+        scheduled_restart_poll_interval_seconds,
         detect_memory_leaks,
         memory_leak_warmup_seconds,
         report_logs,
@@ -567,6 +688,8 @@ def main(argv: Optional[List[str]] = None) -> None:
             recipients_file=recipients_file,
             credentials_file=credentials_file,
             force_restart=force_restart,
+            scheduled_restart_memory_threshold_bytes=scheduled_restart_memory_threshold_bytes,
+            scheduled_restart_poll_interval_seconds=scheduled_restart_poll_interval_seconds,
             detect_memory_leaks=detect_memory_leaks,
             memory_leak_warmup_seconds=memory_leak_warmup_seconds,
             report_logs=report_logs,

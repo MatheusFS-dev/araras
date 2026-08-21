@@ -181,6 +181,7 @@ class ConsolidatedEmailManager:
         Args:
             status_type (str): Type of status message to send. Supported values are
                 ``"restart_success"``, ``"scheduled_restart_success"``,
+                ``"memory_aware_scheduled_restart_success"``,
                 ``"restart_failed"``, ``"task_complete"`` and
                 ``"memory_leak_warning"``.
             process_data (Dict[str, Any]): Dictionary with details about the process.  The
@@ -200,6 +201,7 @@ class ConsolidatedEmailManager:
         if not self.restart_email_warning and status_type in {
             "restart_success",
             "scheduled_restart_success",
+            "memory_aware_scheduled_restart_success",
             "restart_failed",
         }:
             return
@@ -233,6 +235,30 @@ class ConsolidatedEmailManager:
                     runtime=process_data["runtime"],
                 )
                 inline_png = process_data["graph_png"]
+            elif status_type == "memory_aware_scheduled_restart_success":
+                subject = f"{title} - Memory-Aware Restart Successful"
+                color = "#28a745"
+                status_title = "Memory-Aware Restart Successful"
+                status_description = (
+                    "Process-tree RSS reached its configured threshold and the process restarted successfully"
+                )
+                inline_png = process_data.get("graph_png")
+                graph_section = (
+                    '<img src="cid:monitor-graph" alt="Previous process-tree RAM over time" '
+                    'style="max-width:100%;height:auto" />'
+                    if inline_png is not None
+                    else ""
+                )
+                details_section = _mon.MEMORY_AWARE_SCHEDULED_RESTART_DETAILS_TEMPLATE.format(
+                    old_pid=process_data["old_pid"],
+                    new_pid=process_data["new_pid"],
+                    scheduled_restart_count=process_data["scheduled_restart_count"],
+                    current_rss_gib=process_data["current_rss_bytes"] / float(1024**3),
+                    threshold_gib=process_data["threshold_bytes"] / float(1024**3),
+                    poll_minutes=process_data["poll_interval_seconds"] / 60.0,
+                    runtime=process_data["runtime"],
+                    graph_section=graph_section,
+                )
             elif status_type == "restart_failed":
                 failed_attempts = process_data.get("failed_attempts", 0)
                 remaining = process_data.get("remaining_attempts", 0)
@@ -413,6 +439,62 @@ class ConsolidatedEmailManager:
                 "scheduled_restart_count": scheduled_restart_count,
                 "runtime": runtime,
                 "interval_seconds": interval_seconds,
+                "graph_png": graph_png,
+            },
+        )
+
+    def report_successful_memory_aware_scheduled_restart(
+        self,
+        title: str,
+        old_pid: Optional[int],
+        new_pid: int,
+        scheduled_restart_count: int,
+        runtime: float,
+        current_rss_bytes: float,
+        threshold_bytes: float,
+        poll_interval_seconds: float,
+        graph_png: Optional[bytes],
+    ) -> None:
+        """Report a successful restart caused by process-tree RSS threshold.
+
+        Args:
+            title (str): Human-readable monitored process title.
+            old_pid (Optional[int]): PID intentionally stopped after its
+                process-tree RSS met the configured threshold. ``None`` is
+                displayed as unavailable when the PID was not recorded.
+            new_pid (int): Replacement PID that is running and monitored.
+            scheduled_restart_count (int): Number of successful scheduled
+                restarts including this transition.
+            runtime (float): Runtime of the stopped process in seconds.
+            current_rss_bytes (float): Process-tree RSS sample in bytes that
+                met or exceeded ``threshold_bytes``.
+            threshold_bytes (float): Positive configured process-tree RSS
+                threshold in bytes.
+            poll_interval_seconds (float): Positive interval in seconds used
+                to check process-tree RSS.
+            graph_png (Optional[bytes]): Process-tree RSS graph PNG captured
+                from the stopped PID. ``None`` sends the confirmation without
+                an inline graph after graph capture failed.
+
+        Returns:
+            None: The method sends the configured email when alerts are
+            enabled and otherwise performs no delivery.
+
+        Raises:
+            RuntimeError: Not raised by this wrapper. Delivery errors are
+            reported by :meth:`send_consolidated_status_email`.
+        """
+        self.send_consolidated_status_email(
+            "memory_aware_scheduled_restart_success",
+            {
+                "title": title,
+                "old_pid": old_pid,
+                "new_pid": new_pid,
+                "scheduled_restart_count": scheduled_restart_count,
+                "runtime": runtime,
+                "current_rss_bytes": current_rss_bytes,
+                "threshold_bytes": threshold_bytes,
+                "poll_interval_seconds": poll_interval_seconds,
                 "graph_png": graph_png,
             },
         )
